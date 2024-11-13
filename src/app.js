@@ -1,34 +1,41 @@
+// src/app.js
 const express = require('express');
+require('dotenv').config();
 const cors = require('cors');
 const helmet = require('helmet');
+const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
+
+require('events').EventEmitter.defaultMaxListeners = 15;
+
+const connectDB = require('./config/database');
+const routes = require('./routes/index.routes');
+const errorHandler = require('./middleware/error.middleware');
 
 const app = express();
 
+// Connect to MongoDB
+connectDB();
+
 // Middleware
 app.use(helmet());
+app.use(morgan('dev'));
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100 // limit each IP to 100 requests per windowMs
 });
-app.use(limiter);
+app.use('/api', limiter);
 
 // Routes
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/patients', require('./routes/patientRoutes'));
-app.use('/api/doctors', require('./routes/doctorRoutes'));
-app.use('/api/appointments', require('./routes/appointmentRoutes'));
-app.use('/api/medical-records', require('./routes/medicalRecordRoutes'));
-app.use('/api/inventory', require('./routes/inventoryRoutes'));
-app.use('/api/billing', require('./routes/billingRoutes'));
+app.use('/', routes); // Landing page
+app.use('/api', routes); // API routes
 
-// Error handling middleware
-app.use(require('./middleware/errorHandler'));
+// Error handling
+app.use(errorHandler);
 
 module.exports = app;
