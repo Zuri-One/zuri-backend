@@ -9,7 +9,7 @@ const seedUsers = async () => {
     // Create doctor by letting the model handle password hashing
     const doctor = new User({
       name: 'Dr. John Doe',
-      email: 'doctor@zurihealth.com',
+      email: 'kgicha@gmail.com',
       password: 'Doctor@123', // Plain password - let model hash it
       role: 'doctor',
       isEmailVerified: true
@@ -25,6 +25,15 @@ const seedUsers = async () => {
       isEmailVerified: true
     });
     await admin.save();
+
+    const patient = new User({
+      name: 'System Admin',
+      email: 'wambiriisaac@gmail.com',
+      password: 'Admin@123', // Plain password - let model hash it
+      role: 'patient',
+      isEmailVerified: true
+    });
+    await patient.save();
 
     console.log('\n✅ Users seeded successfully');
     console.log('\nTest credentials:');

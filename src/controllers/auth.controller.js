@@ -7,11 +7,18 @@ const speakeasy = require('speakeasy');
 const { 
   generateVerificationEmail, 
   generateResetPasswordEmail, 
-  generate2FAEmail 
+  generate2FAEmail,
+  generatePasswordResetEmail,
+  generatePasswordChangeConfirmationEmail
 } = require('../utils/email-templates.util');
 
 
+
 const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+const generateResetCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
@@ -261,70 +268,83 @@ exports.resendVerification = async (req, res, next) => {
 exports.forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
+    console.log('Password reset requested for:', email);
 
-    const user = await User.findOne({ email });
+    // Find user
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    // We'll still send a success message even if user not found (security best practice)
     if (!user) {
-      return res.status(404).json({
-        message: 'No account found with this email'
+      console.log('No user found with email:', email);
+      return res.status(200).json({
+        message: 'If this email exists, you will receive a password reset code'
       });
     }
 
-    // Generate reset token
-    const resetToken = user.generateResetToken();
+    console.log('User found:', { userId: user._id, email: user.email });
+
+    // Generate reset code
+    const resetCode = generateResetCode();
+    console.log('Generated reset code for user:', resetCode);
+
+    // Hash reset code
+    const hashedResetCode = crypto
+      .createHash('sha256')
+      .update(resetCode)
+      .digest('hex');
+
+    // Update user with reset code
+    user.resetPasswordToken = hashedResetCode;
+    user.resetPasswordExpires = Date.now() + 30 * 60 * 1000; // 30 minutes
     await user.save();
 
-    // Generate reset URL
-    const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password?token=${resetToken}`;
+    // Send email using the template from utils
+    await sendEmail({
+      to: user.email,
+      subject: 'Password Reset Code - Zuri Health',
+      html: generatePasswordResetEmail(user.name, resetCode)
+    });
 
-    try {
-      await sendEmail({
-        to: user.email,
-        subject: 'Password Reset Request',
-        html: `
-          <h1>You have requested a password reset</h1>
-          <p>Please click the link below to reset your password:</p>
-          <a href="${resetUrl}">Reset Password</a>
-          <p>This link is valid for 1 hour.</p>
-          <p>If you did not request this, please ignore this email.</p>
-        `
-      });
+    console.log('Reset code email sent successfully to:', email);
 
-      res.json({
-        message: 'Password reset email sent'
-      });
-    } catch (error) {
-      user.resetPasswordToken = undefined;
-      user.resetPasswordExpires = undefined;
-      await user.save();
+    res.status(200).json({
+      message: 'If this email exists, you will receive a password reset code'
+    });
 
-      return res.status(500).json({
-        message: 'Error sending email'
-      });
-    }
   } catch (error) {
-    next(error);
+    console.error('Password reset error:', error);
+    res.status(500).json({
+      message: 'An error occurred while processing your request'
+    });
   }
 };
 
 exports.resetPassword = async (req, res, next) => {
   try {
-    const { token } = req.params;
-    const { password } = req.body;
+    const { code, password } = req.body;
 
-    // Hash token
-    const resetPasswordToken = crypto
+    // Hash the provided code for comparison
+    const hashedCode = crypto
       .createHash('sha256')
-      .update(token)
+      .update(code)
       .digest('hex');
 
+    // Find user with valid reset code
     const user = await User.findOne({
-      resetPasswordToken,
+      resetPasswordToken: hashedCode,
       resetPasswordExpires: { $gt: Date.now() }
     });
 
     if (!user) {
       return res.status(400).json({
-        message: 'Invalid or expired reset token'
+        message: 'Invalid or expired reset code'
+      });
+    }
+
+    // Validate new password
+    if (password.length < 8) {
+      return res.status(400).json({
+        message: 'Password must be at least 8 characters long'
       });
     }
 
@@ -334,13 +354,22 @@ exports.resetPassword = async (req, res, next) => {
     user.resetPasswordExpires = undefined;
     await user.save();
 
+    // Send password change confirmation email
+    await sendEmail({
+      to: user.email,
+      subject: 'Password Changed Successfully - Zuri Health',
+      html: generatePasswordChangeConfirmationEmail(user.name)
+    });
+
     res.json({
       message: 'Password reset successful'
     });
   } catch (error) {
+    console.error('Password reset error:', error);
     next(error);
   }
 };
+
 
 exports.enable2FA = async (req, res, next) => {
   try {

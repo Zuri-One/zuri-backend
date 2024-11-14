@@ -12,6 +12,7 @@ const {
   
 } = require('../../controllers/auth.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
+const { validatePasswordReset } = require('../../middleware/validation.middleware');
 
 router.post('/register', register);
 router.post('/verify-email-code', verifyEmailWithCode);
@@ -19,7 +20,7 @@ router.post('/login', login);
 router.get('/verify-email/:token', verifyEmail);
 router.post('/resend-verification', resendVerification);
 router.post('/forgot-password', forgotPassword);
-router.post('/reset-password/:token', resetPassword);
+router.post('/reset-password', validatePasswordReset, resetPassword);
 router.post('/enable-2fa', authenticate, enable2FA);
 router.post('/verify-2fa', verify2FA);
 
@@ -34,6 +35,22 @@ if (process.env.NODE_ENV === 'development') {
     }
   });
 }
+
+if (process.env.NODE_ENV !== 'production') {
+  router.get('/debug-user/:email', async (req, res) => {
+    const user = await User.findOne({ email: req.params.email });
+    res.json({
+      exists: !!user,
+      user: user ? {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isEmailVerified
+      } : null
+    });
+  });
+}
+
 
 if (process.env.NODE_ENV === 'development') {
   router.get('/debug-user/:email', async (req, res) => {

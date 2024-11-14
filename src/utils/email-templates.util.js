@@ -138,6 +138,120 @@ exports.generateVerificationEmail = (name, verificationUrl, verificationCode) =>
       </html>
     `;
   };
+
+  exports.generatePasswordResetEmail = (name, resetCode) => {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          .code-container {
+            background-color: #f5f5f5;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px;
+            margin: 20px 0;
+          }
+          .reset-code {
+            font-size: 32px;
+            font-weight: bold;
+            letter-spacing: 5px;
+            color: #333;
+          }
+          .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Password Reset Code</h1>
+          </div>
+          
+          <p>Hello ${name},</p>
+          <p>We received a request to reset your password. Use the following code to complete your password reset:</p>
+          
+          <div class="code-container">
+            <div class="reset-code">${resetCode}</div>
+          </div>
+          
+          <p>This code will expire in 30 minutes for security reasons.</p>
+          
+          <p><strong>Important:</strong> If you didn't request this password reset, please ignore this email or contact support if you're concerned about your account's security.</p>
+          
+          <div class="footer">
+            <p>This is an automated message, please do not reply.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+  
+  exports.generatePasswordChangeConfirmationEmail = (name) => {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          .success-icon {
+            font-size: 48px;
+            text-align: center;
+            margin: 20px 0;
+          }
+          .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Password Changed Successfully</h1>
+          </div>
+          
+          <div class="success-icon">✅</div>
+          
+          <p>Hello ${name},</p>
+          <p>Your password has been successfully changed.</p>
+          
+          <p>If you did not make this change, please contact our support team immediately.</p>
+          
+          <div class="footer">
+            <p>This is a security notification. Please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  };
   
   exports.generate2FAEmail = (name, code) => {
     return `
