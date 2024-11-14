@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const User = require('../models/user.model');
 const sendEmail = require('../utils/email.util');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const { 
@@ -122,67 +123,49 @@ exports.register = async (req, res, next) => {
 
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
+    console.log('\nLogin attempt:', { email, role });
 
-    // Check if user exists
-    const user = await User.findOne({ email }).select('+password');
+    // Explicitly select password and check role
+    const user = await User.findOne({ 
+      email: email.toLowerCase(),
+      role 
+    }).select('+password');
+
+    console.log('User found:', user ? {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+      hasPassword: !!user.password,
+      passwordHash: user.password
+    } : 'No user found');
+
     if (!user) {
       return res.status(401).json({
         message: 'Invalid credentials'
       });
     }
 
-    // Check if account is locked
-    if (user.lockUntil && user.lockUntil > Date.now()) {
-      return res.status(403).json({
-        message: 'Account is locked. Please try again later'
-      });
-    }
+    // Test password directly with bcrypt
+    const isMatch = await bcrypt.compare(password, user.password);
+    console.log('Password verification:', {
+      providedPassword: password,
+      correctHash: user.password,
+      isMatch: isMatch
+    });
 
-    // Verify password
-    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      // Increment login attempts
-      user.loginAttempts += 1;
-      if (user.loginAttempts >= 5) {
-        user.lockUntil = Date.now() + 15 * 60 * 1000; // Lock for 15 minutes
-      }
-      await user.save();
-
       return res.status(401).json({
         message: 'Invalid credentials'
       });
     }
 
-    // Reset login attempts on successful login
-    user.loginAttempts = 0;
-    user.lockUntil = undefined;
-    user.lastLogin = Date.now();
-    await user.save();
-
-    // Check if email is verified
-    if (!user.isEmailVerified) {
-      return res.status(401).json({
-        message: 'Please verify your email first'
-      });
-    }
-
-    // Check if 2FA is enabled
-    if (user.twoFactorEnabled) {
-      const tempToken = jwt.sign(
-        { id: user._id, require2FA: true },
-        process.env.JWT_SECRET,
-        { expiresIn: '5m' }
-      );
-
-      return res.json({
-        require2FA: true,
-        tempToken
-      });
-    }
-
-    // Generate token
-    const token = user.generateAuthToken();
+    // Generate token and complete login
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
     res.json({
       token,
@@ -193,7 +176,9 @@ exports.login = async (req, res, next) => {
         role: user.role
       }
     });
+
   } catch (error) {
+    console.error('Login error:', error);
     next(error);
   }
 };

@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "fix-doctor": "node src/scripts/verify-doctor-credentials.js"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +16,7 @@
     "@sendgrid/mail": "^8.1.4",
     "axios": "^1.7.7",
     "bcryptjs": "^2.4.3",
+    "chalk": "^5.3.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",

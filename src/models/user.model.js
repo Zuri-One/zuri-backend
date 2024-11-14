@@ -88,13 +88,22 @@ userSchema.pre('save', async function(next) {
  }
 });
 
-// Compare password method
 userSchema.methods.comparePassword = async function(candidatePassword) {
- try {
-   return await bcrypt.compare(candidatePassword, this.password);
- } catch (error) {
-   throw error;
- }
+  try {
+    console.log('Password comparison debug:', {
+      candidatePasswordLength: candidatePassword.length,
+      storedPasswordLength: this.password.length,
+      candidatePassword: candidatePassword,
+      storedPassword: this.password // In development only
+    });
+    
+    const isMatch = await bcrypt.compare(candidatePassword, this.password);
+    console.log('bcrypt.compare result:', isMatch);
+    return isMatch;
+  } catch (error) {
+    console.error('Password comparison error:', error);
+    throw error;
+  }
 };
 
 // Generate JWT token
