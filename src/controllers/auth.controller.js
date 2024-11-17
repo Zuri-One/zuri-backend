@@ -1,9 +1,11 @@
+// src/controllers/auth.controller.js
 const crypto = require('crypto');
-const User = require('../models/user.model');
+const { User } = require('../models');
 const sendEmail = require('../utils/email.util');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
+const { Op } = require('sequelize');
 const { 
   generateVerificationEmail, 
   generateResetPasswordEmail, 
@@ -11,8 +13,6 @@ const {
   generatePasswordResetEmail,
   generatePasswordChangeConfirmationEmail
 } = require('../utils/email-templates.util');
-
-
 
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -28,42 +28,33 @@ exports.verifyEmailWithCode = async (req, res, next) => {
 
     console.log('Verification attempt:', { email, code });
 
-    // Include emailVerificationCode in the query using select
-    const user = await User.findOne({ email }).select('+emailVerificationCode');
+    const user = await User.findOne({
+      where: {
+        email,
+        emailVerificationCode: code,
+        emailVerificationExpires: {
+          [Op.gt]: new Date()
+        }
+      }
+    });
     
     if (!user) {
-      console.log('User not found');
-      return res.status(400).json({
-        message: 'Invalid or expired verification code'
-      });
-    }
-
-    console.log('Stored verification code:', user.emailVerificationCode);
-    console.log('Received code:', code);
-    console.log('Verification expires:', user.emailVerificationExpires);
-    console.log('Current time:', new Date());
-
-    // Check if code matches and is not expired
-    if (
-      user.emailVerificationCode !== code || 
-      user.emailVerificationExpires < Date.now()
-    ) {
-      console.log('Code mismatch or expired');
+      console.log('User not found or code invalid/expired');
       return res.status(400).json({
         message: 'Invalid or expired verification code'
       });
     }
 
     user.isEmailVerified = true;
-    user.emailVerificationCode = undefined;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationExpires = undefined;
+    user.emailVerificationCode = null;
+    user.emailVerificationToken = null;
+    user.emailVerificationExpires = null;
     await user.save();
 
     res.json({
       message: 'Email verified successfully',
       user: {
-        id: user._id,
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role
@@ -80,7 +71,10 @@ exports.register = async (req, res, next) => {
     const { name, email, password } = req.body;
 
     // Check if user exists
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ 
+      where: { email: email.toLowerCase() }
+    });
+    
     if (user) {
       return res.status(400).json({
         message: 'Email already registered'
@@ -93,26 +87,23 @@ exports.register = async (req, res, next) => {
 
     console.log('Generated verification code:', verificationCode);
 
-    // Create new user document
-    const newUser = new User({
+    // Create new user
+    user = await User.create({
       name,
-      email,
+      email: email.toLowerCase(),
       password,
-      emailVerificationCode: verificationCode, // Save the verification code
+      emailVerificationCode: verificationCode,
       emailVerificationToken: crypto
         .createHash('sha256')
         .update(verificationToken)
         .digest('hex'),
-      emailVerificationExpires: Date.now() + 24 * 60 * 60 * 1000
+      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000)
     });
-
-    // Save the user
-    user = await newUser.save();
 
     // Generate verification URL
     const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
 
-    // Send verification email with both link and code
+    // Send verification email
     await sendEmail({
       to: user.email,
       subject: 'Verify your email',
@@ -121,7 +112,7 @@ exports.register = async (req, res, next) => {
 
     res.status(201).json({
       message: 'Registration successful. Please verify your email.',
-      userId: user._id
+      userId: user.id
     });
   } catch (error) {
     next(error);
@@ -133,18 +124,18 @@ exports.login = async (req, res, next) => {
     const { email, password, role } = req.body;
     console.log('\nLogin attempt:', { email, role });
 
-    // Explicitly select password and check role
     const user = await User.findOne({ 
-      email: email.toLowerCase(),
-      role 
-    }).select('+password');
+      where: { 
+        email: email.toLowerCase(),
+        role 
+      }
+    });
 
     console.log('User found:', user ? {
-      id: user._id,
+      id: user.id,
       email: user.email,
       role: user.role,
-      hasPassword: !!user.password,
-      passwordHash: user.password
+      hasPassword: !!user.password
     } : 'No user found');
 
     if (!user) {
@@ -153,11 +144,9 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Test password directly with bcrypt
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await user.comparePassword(password);
     console.log('Password verification:', {
       providedPassword: password,
-      correctHash: user.password,
       isMatch: isMatch
     });
 
@@ -167,17 +156,16 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Generate token and complete login
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+    const token = user.generateAuthToken();
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
 
     res.json({
       token,
       user: {
-        id: user._id,
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role
@@ -194,16 +182,18 @@ exports.verifyEmail = async (req, res, next) => {
   try {
     const { token } = req.params;
 
-    // Hash token
-    const emailVerificationToken = crypto
+    const hashedToken = crypto
       .createHash('sha256')
       .update(token)
       .digest('hex');
 
-    // Find user with token
     const user = await User.findOne({
-      emailVerificationToken,
-      emailVerificationExpires: { $gt: Date.now() }
+      where: {
+        emailVerificationToken: hashedToken,
+        emailVerificationExpires: {
+          [Op.gt]: new Date()
+        }
+      }
     });
 
     if (!user) {
@@ -212,10 +202,9 @@ exports.verifyEmail = async (req, res, next) => {
       });
     }
 
-    // Update user
     user.isEmailVerified = true;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationExpires = undefined;
+    user.emailVerificationToken = null;
+    user.emailVerificationExpires = null;
     await user.save();
 
     res.json({
@@ -230,7 +219,10 @@ exports.resendVerification = async (req, res, next) => {
   try {
     const { email } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ 
+      where: { email: email.toLowerCase() }
+    });
+
     if (!user) {
       return res.status(404).json({
         message: 'User not found'
@@ -243,18 +235,26 @@ exports.resendVerification = async (req, res, next) => {
       });
     }
 
-    // Generate new verification token
-    const verificationToken = user.generateVerificationToken();
+    // Generate new verification token and code
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationCode = generateVerificationCode();
+
+    user.emailVerificationToken = crypto
+      .createHash('sha256')
+      .update(verificationToken)
+      .digest('hex');
+    user.emailVerificationCode = verificationCode;
+    user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await user.save();
 
     // Generate verification URL
-    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+    const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
 
     // Send verification email
     await sendEmail({
       to: user.email,
       subject: 'Email Verification',
-      html: generateVerificationEmail(user.name, verificationUrl)
+      html: generateVerificationEmail(user.name, verificationUrl, verificationCode)
     });
 
     res.json({
@@ -270,10 +270,11 @@ exports.forgotPassword = async (req, res, next) => {
     const { email } = req.body;
     console.log('Password reset requested for:', email);
 
-    // Find user
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ 
+      where: { email: email.toLowerCase() }
+    });
     
-    // We'll still send a success message even if user not found (security best practice)
+    // Security best practice: same response whether user exists or not
     if (!user) {
       console.log('No user found with email:', email);
       return res.status(200).json({
@@ -281,7 +282,7 @@ exports.forgotPassword = async (req, res, next) => {
       });
     }
 
-    console.log('User found:', { userId: user._id, email: user.email });
+    console.log('User found:', { userId: user.id, email: user.email });
 
     // Generate reset code
     const resetCode = generateResetCode();
@@ -295,10 +296,9 @@ exports.forgotPassword = async (req, res, next) => {
 
     // Update user with reset code
     user.resetPasswordToken = hashedResetCode;
-    user.resetPasswordExpires = Date.now() + 30 * 60 * 1000; // 30 minutes
+    user.resetPasswordExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
     await user.save();
 
-    // Send email using the template from utils
     await sendEmail({
       to: user.email,
       subject: 'Password Reset Code - Zuri Health',
@@ -323,16 +323,18 @@ exports.resetPassword = async (req, res, next) => {
   try {
     const { code, password } = req.body;
 
-    // Hash the provided code for comparison
     const hashedCode = crypto
       .createHash('sha256')
       .update(code)
       .digest('hex');
 
-    // Find user with valid reset code
     const user = await User.findOne({
-      resetPasswordToken: hashedCode,
-      resetPasswordExpires: { $gt: Date.now() }
+      where: {
+        resetPasswordToken: hashedCode,
+        resetPasswordExpires: {
+          [Op.gt]: new Date()
+        }
+      }
     });
 
     if (!user) {
@@ -350,8 +352,8 @@ exports.resetPassword = async (req, res, next) => {
 
     // Update password
     user.password = password;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
     await user.save();
 
     // Send password change confirmation email
@@ -370,7 +372,6 @@ exports.resetPassword = async (req, res, next) => {
   }
 };
 
-
 exports.enable2FA = async (req, res, next) => {
   try {
     const { id } = req.user;
@@ -379,7 +380,13 @@ exports.enable2FA = async (req, res, next) => {
       name: `HMS:${req.user.email}`
     });
 
-    const user = await User.findById(id);
+    const user = await User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({
+        message: 'User not found'
+      });
+    }
+
     user.twoFactorSecret = secret.base32;
     user.twoFactorEnabled = true;
     await user.save();
@@ -388,11 +395,7 @@ exports.enable2FA = async (req, res, next) => {
     await sendEmail({
       to: user.email,
       subject: '2FA Enabled',
-      html: `
-        <h1>Two-Factor Authentication Enabled</h1>
-        <p>2FA has been successfully enabled for your account.</p>
-        <p>If you did not enable this, please contact support immediately.</p>
-      `
+      html: generate2FAEmail(user.name)
     });
 
     res.json({
@@ -414,7 +417,7 @@ exports.verify2FA = async (req, res, next) => {
       });
     }
 
-    const user = await User.findById(decoded.id);
+    const user = await User.findByPk(decoded.id);
     if (!user) {
       return res.status(404).json({
         message: 'User not found'
@@ -441,7 +444,7 @@ exports.verify2FA = async (req, res, next) => {
     res.json({
       token,
       user: {
-        id: user._id,
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role
@@ -451,3 +454,5 @@ exports.verify2FA = async (req, res, next) => {
     next(error);
   }
 };
+
+module.exports = exports;

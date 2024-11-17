@@ -1,37 +1,49 @@
 // src/config/database.js
-const mongoose = require('mongoose');
+const { Sequelize } = require('sequelize');
+
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+  dialect: 'postgres',
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false
+    }
+  },
+  logging: process.env.NODE_ENV === 'development' ? console.log : false
+});
 
 const connectDB = async () => {
   try {
-    if (!process.env.MONGODB_URI) {
-      throw new Error('MONGODB_URI is not defined in environment variables');
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL is not defined in environment variables');
     }
 
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    // Test the connection
+    await sequelize.authenticate();
+    console.log('PostgreSQL Connected');
+
+    // Sync models with database in development
+    if (process.env.NODE_ENV === 'development') {
+      await sequelize.sync({ alter: true });
+      console.log('Database synced');
+    }
+
   } catch (error) {
-    console.error('MongoDB connection error:', error.message);
+    console.error('PostgreSQL connection error:', error.message);
     process.exit(1);
   }
 };
 
-mongoose.connection.on('disconnected', () => {
-  console.log('MongoDB disconnected');
-});
-
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection error:', err);
-});
-
+// Handle graceful shutdown
 process.on('SIGINT', async () => {
   try {
-    await mongoose.connection.close();
-    console.log('MongoDB connection closed through app termination');
+    await sequelize.close();
+    console.log('PostgreSQL connection closed through app termination');
     process.exit(0);
   } catch (err) {
-    console.error('Error during MongoDB disconnection:', err);
+    console.error('Error during PostgreSQL disconnection:', err);
     process.exit(1);
   }
 });
 
-module.exports = connectDB;
+module.exports = { connectDB, sequelize };

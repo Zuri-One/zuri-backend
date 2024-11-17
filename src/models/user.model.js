@@ -1,146 +1,114 @@
 // src/models/user.model.js
-const mongoose = require('mongoose');
+const { Model, DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
-const userSchema = new mongoose.Schema({
- name: {
-   type: String,
-   required: [true, 'Please provide your name'],
-   trim: true
- },
- email: {
-   type: String,
-   required: [true, 'Please provide your email'],
-   unique: true,
-   trim: true,
-   lowercase: true,
-   match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email']
- },
- password: {
-   type: String,
-   required: [true, 'Please provide a password'],
-   minlength: [8, 'Password must be at least 8 characters'],
-   select: false
- },
- role: {
-   type: String,
-   enum: ['patient', 'doctor', 'admin', 'staff'],
-   default: 'patient'
- },
- isEmailVerified: {
-   type: Boolean,
-   default: false
- },
- emailVerificationToken: {
-   type: String,
-   select: false
- },
- emailVerificationCode: {
-   type: String,
-   select: false
- },
- emailVerificationExpires: {
-   type: Date,
-   select: false
- },
- resetPasswordToken: {
-   type: String,
-   select: false
- },
- resetPasswordExpires: {
-   type: Date,
-   select: false
- },
- twoFactorSecret: {
-   type: String,
-   select: false
- },
- twoFactorEnabled: {
-   type: Boolean,
-   default: false
- },
- lastLogin: Date,
- isActive: {
-   type: Boolean,
-   default: true
- },
- loginAttempts: {
-   type: Number,
-   default: 0
- },
- lockUntil: Date
-}, {
- timestamps: true
-});
+class User extends Model {
+  static schema = {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      validate: {
+        notEmpty: true
+      }
+    },
+    email: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+      validate: {
+        isEmail: true,
+        notEmpty: true
+      }
+    },
+    password: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      validate: {
+        len: [8, 100]
+      }
+    },
+    role: {
+      type: DataTypes.ENUM('patient', 'doctor', 'admin', 'staff'),
+      defaultValue: 'patient'
+    },
+    isEmailVerified: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    emailVerificationToken: DataTypes.STRING,
+    emailVerificationCode: DataTypes.STRING,
+    emailVerificationExpires: DataTypes.DATE,
+    resetPasswordToken: DataTypes.STRING,
+    resetPasswordExpires: DataTypes.DATE,
+    twoFactorSecret: DataTypes.STRING,
+    twoFactorEnabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    lastLogin: DataTypes.DATE,
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
+    loginAttempts: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
+    },
+    lockUntil: DataTypes.DATE
+  };
 
-// Hash password before saving
-userSchema.pre('save', async function(next) {
- if (!this.isModified('password')) return next();
+  async comparePassword(candidatePassword) {
+    return await bcrypt.compare(candidatePassword, this.password);
+  }
 
- try {
-   const salt = await bcrypt.genSalt(10);
-   this.password = await bcrypt.hash(this.password, salt);
-   next();
- } catch (error) {
-   next(error);
- }
-});
+  generateAuthToken() {
+    return jwt.sign(
+      { id: this.id, role: this.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRE || '24h' }
+    );
+  }
 
-userSchema.methods.comparePassword = async function(candidatePassword) {
-  try {
-    console.log('Password comparison debug:', {
-      candidatePasswordLength: candidatePassword.length,
-      storedPasswordLength: this.password.length,
-      candidatePassword: candidatePassword,
-      storedPassword: this.password // In development only
+  generateVerificationToken() {
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    this.emailVerificationToken = crypto
+      .createHash('sha256')
+      .update(verificationToken)
+      .digest('hex');
+    this.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    return verificationToken;
+  }
+
+  static associate(models) {
+    this.hasMany(models.Appointment, { 
+      as: 'patientAppointments',
+      foreignKey: 'patientId'
     });
-    
-    const isMatch = await bcrypt.compare(candidatePassword, this.password);
-    console.log('bcrypt.compare result:', isMatch);
-    return isMatch;
-  } catch (error) {
-    console.error('Password comparison error:', error);
-    throw error;
+    this.hasMany(models.Appointment, { 
+      as: 'doctorAppointments',
+      foreignKey: 'doctorId'
+    });
+    this.hasOne(models.DoctorAvailability, {
+      foreignKey: 'doctorId'
+    });
+  }
+}
+
+// Hooks are defined during initialization
+const hooks = {
+  beforeSave: async (user) => {
+    if (user.changed('password')) {
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(user.password, salt);
+    }
   }
 };
 
-// Generate JWT token
-userSchema.methods.generateAuthToken = function() {
- return jwt.sign(
-   { id: this._id, role: this.role },
-   process.env.JWT_SECRET,
-   { expiresIn: process.env.JWT_EXPIRE }
- );
-};
-
-// Generate verification token
-userSchema.methods.generateVerificationToken = function() {
- const verificationToken = crypto.randomBytes(32).toString('hex');
- 
- this.emailVerificationToken = crypto
-   .createHash('sha256')
-   .update(verificationToken)
-   .digest('hex');
-   
- this.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
- 
- return verificationToken;
-};
-
-// Generate password reset token
-userSchema.methods.generateResetToken = function() {
- const resetToken = crypto.randomBytes(32).toString('hex');
- 
- this.resetPasswordToken = crypto
-   .createHash('sha256')
-   .update(resetToken)
-   .digest('hex');
-   
- this.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour
- 
- return resetToken;
-};
-
-module.exports = mongoose.model('User', userSchema);
+module.exports = User;
