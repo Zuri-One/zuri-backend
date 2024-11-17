@@ -3,53 +3,17 @@ const router = express.Router();
 const { authenticate } = require('../../middleware/auth.middleware');
 const appointmentController = require('../../controllers/appointment.controller');
 
-// Create appointment
-router.post(
-  '/', 
-  authenticate, 
-  appointmentController.createAppointment
-);
+// All routes require authentication
+router.use(authenticate);
 
-// Get all appointments
-router.get(
-  '/', 
-  authenticate, 
-  appointmentController.getAppointments
-);
+router.post('/', appointmentController.validateAppointmentCreation, appointmentController.createAppointment);
+router.get('/', appointmentController.getAppointments);
+router.get('/:id', appointmentController.getAppointmentById);
+router.patch('/:id/status', appointmentController.updateAppointmentStatus);
+router.patch('/:id/reschedule', appointmentController.rescheduleAppointment);
+router.patch('/:id/notes', appointmentController.addAppointmentNotes);
 
-// Get specific appointment
-router.get(
-  '/:id', 
-  authenticate, 
-  appointmentController.getAppointmentById
-);
-
-// Update appointment status
-router.patch(
-  '/:id/status', 
-  authenticate, 
-  appointmentController.updateAppointmentStatus
-);
-
-// Reschedule appointment
-router.patch(
-  '/:id/reschedule', 
-  authenticate, 
-  appointmentController.rescheduleAppointment
-);
-
-// Add notes to appointment
-router.patch(
-  '/:id/notes', 
-  authenticate, 
-  appointmentController.addAppointmentNotes
-);
-
-// Get doctor availability
-router.get(
-  '/doctor/:doctorId/availability', 
-  authenticate, 
-  appointmentController.getDoctorAvailability
-);
+// Remove the duplicate availability route
+// router.get('/doctor/:doctorId/availability', appointmentController.getDoctorAvailability);
 
 module.exports = router;

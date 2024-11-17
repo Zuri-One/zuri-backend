@@ -9,111 +9,111 @@ const {
   generateAppointmentUpdateEmail 
 } = require('../utils/email-templates.util');
 
-exports.createAppointment = async (req, res, next) => {
-  try {
-    const { doctorId, dateTime, type, reason } = req.body;
-    const patientId = req.user.id;
+// exports.createAppointment = async (req, res, next) => {
+//   try {
+//     const { doctorId, dateTime, type, reason } = req.body;
+//     const patientId = req.user.id;
 
-    // Validate doctor exists and is active
-    const doctor = await User.findOne({ 
-      where: { 
-        id: doctorId, 
-        role: 'doctor', 
-        isActive: true 
-      }
-    });
+//     // Validate doctor exists and is active
+//     const doctor = await User.findOne({ 
+//       where: { 
+//         id: doctorId, 
+//         role: 'doctor', 
+//         isActive: true 
+//       }
+//     });
 
-    if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
-    }
+//     if (!doctor) {
+//       return res.status(404).json({ message: 'Doctor not found' });
+//     }
 
-    // Check doctor availability
-    const availability = await DoctorAvailability.findOne({ 
-      where: { doctorId }
-    });
+//     // Check doctor availability
+//     const availability = await DoctorAvailability.findOne({ 
+//       where: { doctorId }
+//     });
 
-    if (!availability) {
-      return res.status(400).json({ message: 'Doctor has no available slots' });
-    }
+//     if (!availability) {
+//       return res.status(400).json({ message: 'Doctor has no available slots' });
+//     }
 
-    // Validate the slot is available
-    const requestedDate = moment(dateTime);
-    const dayOfWeek = requestedDate.format('dddd').toLowerCase();
-    const timeStr = requestedDate.format('HH:mm');
+//     // Validate the slot is available
+//     const requestedDate = moment(dateTime);
+//     const dayOfWeek = requestedDate.format('dddd').toLowerCase();
+//     const timeStr = requestedDate.format('HH:mm');
 
-    const availableSlot = availability.slots.find(slot => 
-      slot.day === dayOfWeek &&
-      timeStr >= slot.startTime &&
-      timeStr <= slot.endTime &&
-      slot.isAvailable
-    );
+//     const availableSlot = availability.slots.find(slot => 
+//       slot.day === dayOfWeek &&
+//       timeStr >= slot.startTime &&
+//       timeStr <= slot.endTime &&
+//       slot.isAvailable
+//     );
 
-    if (!availableSlot) {
-      return res.status(400).json({ message: 'Selected time slot is not available' });
-    }
+//     if (!availableSlot) {
+//       return res.status(400).json({ message: 'Selected time slot is not available' });
+//     }
 
-    // Check for existing appointments
-    const existingAppointment = await Appointment.findOne({
-      where: {
-        doctorId,
-        dateTime: requestedDate.toDate(),
-        status: {
-          [Op.notIn]: ['cancelled']
-        }
-      }
-    });
+//     // Check for existing appointments
+//     const existingAppointment = await Appointment.findOne({
+//       where: {
+//         doctorId,
+//         dateTime: requestedDate.toDate(),
+//         status: {
+//           [Op.notIn]: ['cancelled']
+//         }
+//       }
+//     });
 
-    if (existingAppointment) {
-      return res.status(400).json({ message: 'Time slot already booked' });
-    }
+//     if (existingAppointment) {
+//       return res.status(400).json({ message: 'Time slot already booked' });
+//     }
 
-    // Create appointment
-    const appointment = await Appointment.create({
-      patientId,
-      doctorId,
-      dateTime,
-      type,
-      reason,
-      status: 'pending'
-    });
+//     // Create appointment
+//     const appointment = await Appointment.create({
+//       patientId,
+//       doctorId,
+//       dateTime,
+//       type,
+//       reason,
+//       status: 'pending'
+//     });
 
-    // Fetch the user for email
-    const patient = await User.findByPk(patientId);
+//     // Fetch the user for email
+//     const patient = await User.findByPk(patientId);
 
-    // Send notifications
-    await Promise.all([
-      sendEmail({
-        to: patient.email,
-        subject: 'Appointment Booking Confirmation',
-        html: generateAppointmentEmail('confirmation', {
-          name: patient.name,
-          date: moment(dateTime).format('MMMM Do YYYY'),
-          time: moment(dateTime).format('h:mm a'),
-          doctor: doctor.name,
-          type
-        })
-      }),
-      sendEmail({
-        to: doctor.email,
-        subject: 'New Appointment Request',
-        html: generateAppointmentEmail('request', {
-          name: doctor.name,
-          date: moment(dateTime).format('MMMM Do YYYY'),
-          time: moment(dateTime).format('h:mm a'),
-          patient: patient.name,
-          type
-        })
-      })
-    ]);
+//     // Send notifications
+//     await Promise.all([
+//       sendEmail({
+//         to: patient.email,
+//         subject: 'Appointment Booking Confirmation',
+//         html: generateAppointmentEmail('confirmation', {
+//           name: patient.name,
+//           date: moment(dateTime).format('MMMM Do YYYY'),
+//           time: moment(dateTime).format('h:mm a'),
+//           doctor: doctor.name,
+//           type
+//         })
+//       }),
+//       sendEmail({
+//         to: doctor.email,
+//         subject: 'New Appointment Request',
+//         html: generateAppointmentEmail('request', {
+//           name: doctor.name,
+//           date: moment(dateTime).format('MMMM Do YYYY'),
+//           time: moment(dateTime).format('h:mm a'),
+//           patient: patient.name,
+//           type
+//         })
+//       })
+//     ]);
 
-    res.status(201).json({
-      message: 'Appointment booked successfully',
-      appointment
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+//     res.status(201).json({
+//       message: 'Appointment booked successfully',
+//       appointment
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 
 exports.getAppointments = async (req, res, next) => {
   try {
@@ -498,6 +498,145 @@ res.json({ availability });
 } catch (error) {
   next(error);
 }
+};
+
+exports.validateAppointmentCreation = async (req, res, next) => {
+  try {
+    const { doctorId, dateTime, type, reason } = req.body;
+
+    // Validate required fields
+    if (!doctorId || !dateTime || !type || !reason) {
+      return res.status(400).json({
+        message: 'Please provide all required fields: doctorId, dateTime, type, and reason'
+      });
+    }
+
+    // Validate appointment type
+    if (!['in-person', 'video'].includes(type)) {
+      return res.status(400).json({
+        message: 'Appointment type must be either "in-person" or "video"'
+      });
+    }
+
+    // Validate date
+    const appointmentDate = moment(dateTime);
+    if (!appointmentDate.isValid()) {
+      return res.status(400).json({
+        message: 'Invalid date format'
+      });
+    }
+
+    if (appointmentDate.isBefore(moment())) {
+      return res.status(400).json({
+        message: 'Cannot book appointments in the past'
+      });
+    }
+
+    // Check if doctor exists and is active
+    const doctor = await User.findOne({
+      where: {
+        id: doctorId,
+        role: 'doctor',
+        isActive: true
+      }
+    });
+
+    if (!doctor) {
+      return res.status(404).json({
+        message: 'Doctor not found'
+      });
+    }
+
+    // Check if slot is available
+    const availability = await DoctorAvailability.findOne({
+      where: { doctorId }
+    });
+
+    if (!availability) {
+      return res.status(400).json({
+        message: 'Doctor has no available slots'
+      });
+    }
+
+    // Store validated data for the next middleware
+    req.validatedAppointment = {
+      doctor,
+      appointmentDate,
+      availability
+    };
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.createAppointment = async (req, res, next) => {
+  try {
+    const { doctorId, dateTime, type, reason } = req.body;
+    const patientId = req.user.id;
+    const { doctor, appointmentDate, availability } = req.validatedAppointment;
+
+    // Check for conflicting appointments
+    const existingAppointment = await Appointment.findOne({
+      where: {
+        doctorId,
+        dateTime: appointmentDate.toDate(),
+        status: {
+          [Op.notIn]: ['cancelled']
+        }
+      }
+    });
+
+    if (existingAppointment) {
+      return res.status(400).json({
+        message: 'This time slot is already booked'
+      });
+    }
+
+    // Create the appointment
+    const appointment = await Appointment.create({
+      patientId,
+      doctorId,
+      dateTime: appointmentDate.toDate(),
+      type,
+      reason,
+      status: 'pending'
+    });
+
+    // Send notifications
+    await Promise.all([
+      sendEmail({
+        to: req.user.email,
+        subject: 'Appointment Booking Confirmation',
+        html: generateAppointmentEmail('confirmation', {
+          name: req.user.name,
+          date: appointmentDate.format('MMMM Do YYYY'),
+          time: appointmentDate.format('h:mm a'),
+          doctor: doctor.name,
+          type
+        })
+      }),
+      sendEmail({
+        to: doctor.email,
+        subject: 'New Appointment Request',
+        html: generateAppointmentEmail('request', {
+          name: doctor.name,
+          date: appointmentDate.format('MMMM Do YYYY'),
+          time: appointmentDate.format('h:mm a'),
+          patient: req.user.name,
+          type
+        })
+      })
+    ]);
+
+    res.status(201).json({
+      message: 'Appointment booked successfully',
+      appointment
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 module.exports = exports;

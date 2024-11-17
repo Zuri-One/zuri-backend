@@ -1,3 +1,4 @@
+// src/config/sequelize.js
 require('dotenv').config();
 
 module.exports = {
@@ -9,6 +10,10 @@ module.exports = {
         require: true,
         rejectUnauthorized: false
       }
+    },
+    define: {  // Add this section
+      timestamps: true,
+      underscored: true
     }
   },
   test: {
@@ -19,6 +24,10 @@ module.exports = {
         require: true,
         rejectUnauthorized: false
       }
+    },
+    define: {
+      timestamps: true,
+      underscored: true
     }
   },
   production: {
@@ -29,6 +38,10 @@ module.exports = {
         require: true,
         rejectUnauthorized: false
       }
+    },
+    define: {
+      timestamps: true,
+      underscored: true
     }
   }
 };

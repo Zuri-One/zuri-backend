@@ -51,6 +51,34 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+if (process.env.NODE_ENV === 'development') {
+  router.get('/debug-password/:email', async (req, res) => {
+    try {
+      const user = await User.findOne({ 
+        where: { email: req.params.email }
+      });
+      
+      if (!user) {
+        return res.json({ exists: false });
+      }
+
+      // Test password
+      const testPassword = '20405011006@Ki';
+      const isMatch = await user.comparePassword(testPassword);
+
+      res.json({
+        exists: true,
+        passwordHash: user.password,
+        testPassword,
+        isMatch,
+        isHashed: user.password !== testPassword && user.password.length === 60 // bcrypt hashes are always 60 chars
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+}
+
 
 if (process.env.NODE_ENV === 'development') {
   router.get('/debug-user/:email', async (req, res) => {

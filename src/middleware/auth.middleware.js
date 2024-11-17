@@ -2,7 +2,7 @@
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 
-exports.authenticate = async (req, res, next) => {
+const authenticate = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     
@@ -30,7 +30,7 @@ exports.authenticate = async (req, res, next) => {
   }
 };
 
-exports.authorize = (...roles) => {
+const authorize = (roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({ 
@@ -49,3 +49,7 @@ exports.requireVerified = async (req, res, next) => {
   }
   next();
 };
+
+
+exports.authenticate = authenticate;
+exports.authorize = authorize;

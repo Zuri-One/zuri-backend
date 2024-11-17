@@ -1,5 +1,7 @@
-const router = require('express').Router();
-const v1Routes = require('./v1/index');
+// src/routes/index.routes.js
+const express = require('express');
+const router = express.Router();
+const v1Routes = require('./v1');
 const landingPage = require('../utils/landingPage');
 
 // Landing page route
