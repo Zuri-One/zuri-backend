@@ -295,3 +295,108 @@ exports.generateVerificationEmail = (name, verificationUrl, verificationCode) =>
       </html>
     `;
   };
+
+  // src/utils/email-templates.util.js
+
+const generateAppointmentEmail = (type, data) => {
+  switch (type) {
+    case 'confirmation':
+      return `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Appointment Confirmation</h2>
+          <p>Dear ${data.name},</p>
+          <p>Your appointment has been successfully booked with ${data.doctor}.</p>
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Date:</strong> ${data.date}</p>
+            <p><strong>Time:</strong> ${data.time}</p>
+            <p><strong>Type:</strong> ${data.type === 'video' ? 'Video Consultation' : 'In-Person Visit'}</p>
+          </div>
+          ${data.type === 'video' ? `
+            <p>You will receive a video consultation link before your appointment.</p>
+          ` : `
+            <p>Please arrive 15 minutes before your appointment time.</p>
+          `}
+          <p>Thank you for choosing Zuri Health.</p>
+        </div>
+      `;
+
+    case 'request':
+      return `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>New Appointment Request</h2>
+          <p>Dear Dr. ${data.name},</p>
+          <p>You have a new appointment request from ${data.patient}.</p>
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Date:</strong> ${data.date}</p>
+            <p><strong>Time:</strong> ${data.time}</p>
+            <p><strong>Type:</strong> ${data.type === 'video' ? 'Video Consultation' : 'In-Person Visit'}</p>
+          </div>
+          <p>Please review and confirm the appointment.</p>
+        </div>
+      `;
+
+    default:
+      throw new Error('Invalid email template type');
+  }
+};
+
+const generateAppointmentCancellationEmail = (data) => {
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>Appointment Cancelled</h2>
+      <p>Dear ${data.name},</p>
+      <p>Your appointment scheduled for ${data.date} at ${data.time} has been cancelled.</p>
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+        <p><strong>Cancelled by:</strong> ${data.cancelledBy}</p>
+        <p><strong>Reason:</strong> ${data.reason}</p>
+      </div>
+      <p>Please book another appointment if you would like to reschedule.</p>
+    </div>
+  `;
+};
+
+const generateAppointmentUpdateEmail = (type, data) => {
+  switch (type) {
+    case 'confirmation':
+      return `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Appointment Confirmed</h2>
+          <p>Dear ${data.name},</p>
+          <p>Your appointment with ${data.doctor} has been confirmed.</p>
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Date:</strong> ${data.date}</p>
+            <p><strong>Time:</strong> ${data.time}</p>
+            <p><strong>Type:</strong> ${data.type === 'video' ? 'Video Consultation' : 'In-Person Visit'}</p>
+          </div>
+          ${data.type === 'video' ? `
+            <p>You will receive a video consultation link before your appointment.</p>
+          ` : `
+            <p>Please arrive 15 minutes before your appointment time.</p>
+          `}
+        </div>
+      `;
+
+    case 'reschedule':
+      return `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Appointment Rescheduled</h2>
+          <p>Dear ${data.name},</p>
+          <p>Your appointment has been rescheduled.</p>
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Previous Date/Time:</strong> ${data.oldDate} at ${data.oldTime}</p>
+            <p><strong>New Date/Time:</strong> ${data.newDate} at ${data.newTime}</p>
+            <p><strong>Type:</strong> ${data.type === 'video' ? 'Video Consultation' : 'In-Person Visit'}</p>
+          </div>
+        </div>
+      `;
+
+    default:
+      throw new Error('Invalid email template type');
+  }
+};
+
+module.exports = {
+  generateAppointmentEmail,
+  generateAppointmentCancellationEmail,
+  generateAppointmentUpdateEmail
+};
