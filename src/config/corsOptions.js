@@ -1,11 +1,5 @@
-const corsOptions = {
-    origin: [
-      'http://localhost:3000',
-      'https://your-frontend-domain.vercel.app'
-    ],
-    credentials: true,
-    optionsSuccessStatus: 200
-  };
-  
-  module.exports = corsOptions;
-  
+app.use(cors({
+  origin: '*', // Allow all origins
+  credentials: false, // Credentials cannot be used with '*' as origin
+  optionsSuccessStatus: 200,
+}));
