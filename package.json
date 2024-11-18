@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node -r source-map-support/register server.js",
+    "start": "node server.js",
     "dev": "nodemon server.js",
     "fix-doctor": "node src/scripts/verify-doctor-credentials.js"
   },

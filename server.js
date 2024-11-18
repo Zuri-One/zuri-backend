@@ -93,7 +93,7 @@ const startServer = async () => {
 if (process.env.NODE_ENV === 'production') {
   const https = require('https');
   setInterval(() => {
-    https.get(process.env.RENDER_EXTERNAL_URL || 'https://your-app.onrender.com/health', (resp) => {
+    https.get(process.env.RENDER_EXTERNAL_URL || 'https://zuri-8f5l.onrender.com/health', (resp) => {
       if (resp.statusCode === 200) {
         console.log('Keep-alive ping successful');
       }
