@@ -1,14 +1,17 @@
 // src/models/index.js
 const { sequelize } = require('../config/database');
 const { DataTypes } = require('sequelize');
+const path = require('path');
 
-// Import models
-const User = require('./user.model');
-const Appointment = require('./appointment.model');
-const DoctorAvailability = require('./doctor-availability.model');
-const DoctorProfile = require('./doctor-profile.model');
-const TestResult = require('./test-result.model');
-const HealthMetric = require('./health-metric.model');
+// Import models using path.join to handle cross-platform paths
+const models = {
+  User: require(path.join(__dirname, 'user.model')),
+  Appointment: require(path.join(__dirname, 'appointment.model')),
+  DoctorAvailability: require(path.join(__dirname, 'doctor-availability.model')),
+  DoctorProfile: require(path.join(__dirname, 'doctor-profile.model')),
+  TestResult: require(path.join(__dirname, 'test-result.model')),
+  HealthMetric: require(path.join(__dirname, 'health-metric.model'))
+};
 
 // Helper function to initialize a model based on its structure
 const initializeModel = (Model) => {
@@ -30,24 +33,25 @@ const initializeModel = (Model) => {
   throw new Error(`Model ${Model.name} does not have a valid initialization pattern`);
 };
 
-// Initialize models with sequelize instance
-const models = {
-  User: initializeModel(User),
-  Appointment: initializeModel(Appointment),
-  DoctorAvailability: initializeModel(DoctorAvailability),
-  DoctorProfile: initializeModel(DoctorProfile),
-  TestResult: initializeModel(TestResult),
-  HealthMetric: initializeModel(HealthMetric)
-};
+// Initialize all models
+const initializedModels = Object.entries(models).reduce((acc, [key, Model]) => {
+  try {
+    acc[key] = initializeModel(Model);
+    return acc;
+  } catch (error) {
+    console.error(`Error initializing model ${key}:`, error);
+    process.exit(1);
+  }
+}, {});
 
 // Define associations
-Object.keys(models).forEach(modelName => {
-  if (models[modelName].associate) {
-    models[modelName].associate(models);
+Object.keys(initializedModels).forEach(modelName => {
+  if (initializedModels[modelName].associate) {
+    initializedModels[modelName].associate(initializedModels);
   }
 });
 
 module.exports = {
   sequelize,
-  ...models
+  ...initializedModels
 };
