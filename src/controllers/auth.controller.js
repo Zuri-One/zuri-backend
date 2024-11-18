@@ -7,12 +7,13 @@ const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const { Op } = require('sequelize');
 const { 
-  generateVerificationEmail, 
-  generateResetPasswordEmail, 
+  generateVerificationEmail,
+  generateResetPasswordEmail,
   generate2FAEmail,
   generatePasswordResetEmail,
   generatePasswordChangeConfirmationEmail
 } = require('../utils/email-templates.util');
+
 
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();

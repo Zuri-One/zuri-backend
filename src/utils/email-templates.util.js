@@ -457,8 +457,13 @@ const generateVideoAppointmentEmail = (type, data) => {
 };
 
 module.exports = {
+  generateVerificationEmail: exports.generateVerificationEmail,
+  generateResetPasswordEmail: exports.generateResetPasswordEmail,
+  generate2FAEmail: exports.generate2FAEmail,
+  generatePasswordResetEmail: exports.generatePasswordResetEmail,
+  generatePasswordChangeConfirmationEmail: exports.generatePasswordChangeConfirmationEmail,
   generateAppointmentEmail,
   generateAppointmentCancellationEmail,
-  generateAppointmentUpdateEmail,
+  generateAppointmentUpdateEmail, 
   generateVideoAppointmentEmail
 };
