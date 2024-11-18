@@ -1,16 +1,23 @@
+// src/routes/v1/doctor.route.js
 const express = require('express');
 const router = express.Router();
 const doctorController = require('../../controllers/doctor.controller');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
-// Public routes (require only authentication)
-router.get('/available', authenticate, doctorController.getAvailableDoctors);
-router.get('/:id/availability', authenticate, doctorController.validateAvailabilityQuery, doctorController.getDoctorAvailability);
+// Apply authentication to all routes first
+router.use(authenticate);
 
-// Protected routes (require doctor role)
-router.use(authorize('doctor'));
+// Public doctor routes (need only authentication)
+router.get('/available', doctorController.getAvailableDoctors);
+router.get('/:id/availability', doctorController.validateAvailabilityQuery, doctorController.getDoctorAvailability);
 
+// Protected doctor routes
+// Note: Changed from 'doctor' to ['doctor'] to match the middleware expectation
+router.use(authorize(['doctor']));
+
+// These routes now require both authentication and doctor role
 router.get('/stats', doctorController.getDoctorStats);
+router.get('/calendar', doctorController.getCalendarData);
 router.get('/profile', doctorController.getDoctorProfile);
 router.put('/profile', doctorController.updateDoctorProfile);
 router.get('/profile/:id', doctorController.getDoctorProfile);

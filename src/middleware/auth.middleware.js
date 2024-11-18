@@ -23,15 +23,26 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: 'Please verify your email first' });
     }
 
-    req.user = user;
+    req.user = user.toJSON(); // Convert to plain object
     next();
   } catch (error) {
-    res.status(401).json({ message: 'Invalid token' });
+    console.error('Auth error:', error);
+    res.status(401).json({ 
+      message: error.name === 'JsonWebTokenError' ? 'Invalid token' : error.message 
+    });
   }
 };
 
 const authorize = (roles) => {
   return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!Array.isArray(roles)) {
+      roles = [roles]; // Convert single role to array
+    }
+
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({ 
         message: 'Not authorized to access this resource' 
@@ -42,6 +53,10 @@ const authorize = (roles) => {
 };
 
 exports.requireVerified = async (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+
   if (!req.user.isEmailVerified) {
     return res.status(403).json({
       message: 'Email verification required'
@@ -49,7 +64,6 @@ exports.requireVerified = async (req, res, next) => {
   }
   next();
 };
-
 
 exports.authenticate = authenticate;
 exports.authorize = authorize;

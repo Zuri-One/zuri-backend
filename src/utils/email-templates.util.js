@@ -395,6 +395,67 @@ const generateAppointmentUpdateEmail = (type, data) => {
   }
 };
 
+exports.generateVideoAppointmentEmail = (type, data) => {
+  const templates = {
+    confirmation: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #f8fafc; padding: 24px; border-radius: 8px; margin-bottom: 24px;">
+          <h1 style="color: #0f172a; margin-bottom: 16px;">Video Appointment Confirmed</h1>
+          <p style="color: #475569; margin-bottom: 24px;">Dear ${data.name},</p>
+          <p style="color: #475569; margin-bottom: 16px;">Your video appointment with Dr. ${data.doctor} has been confirmed.</p>
+          
+          <div style="background-color: white; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+            <h2 style="color: #0f172a; font-size: 18px; margin-bottom: 16px;">Appointment Details</h2>
+            <p style="color: #475569; margin-bottom: 8px;"><strong>Date:</strong> ${data.date}</p>
+            <p style="color: #475569; margin-bottom: 8px;"><strong>Time:</strong> ${data.time}</p>
+            <p style="color: #475569; margin-bottom: 8px;"><strong>Platform:</strong> ${data.platform}</p>
+          </div>
+
+          <div style="background-color: #e0f2fe; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+            <h2 style="color: #0369a1; font-size: 18px; margin-bottom: 16px;">How to Join</h2>
+            ${data.platform === 'zoom' ? `
+              <p style="color: #0369a1; margin-bottom: 8px;"><strong>Zoom Meeting ID:</strong> ${data.meetingId}</p>
+              <p style="color: #0369a1; margin-bottom: 16px;"><strong>Password:</strong> ${data.password}</p>
+            ` : ''}
+            <a href="${data.meetingLink}" style="display: inline-block; background-color: #0284c7; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; margin-bottom: 16px;">Join Video Call</a>
+            <p style="color: #075985; font-size: 14px;">Please click the link above or use the meeting ID and password to join your appointment.</p>
+          </div>
+
+          <div style="background-color: #fef3c7; padding: 16px; border-radius: 8px;">
+            <h2 style="color: #92400e; font-size: 18px; margin-bottom: 16px;">Important Notes</h2>
+            <ul style="color: #92400e; margin: 0; padding-left: 20px;">
+              <li>Join 5 minutes before your appointment time</li>
+              <li>Ensure you have a stable internet connection</li>
+              <li>Test your camera and microphone beforehand</li>
+              <li>Choose a quiet, well-lit location</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="text-align: center; color: #64748b; font-size: 14px;">
+          <p>Zuri Health Medical Center</p>
+          <p>If you need to reschedule, please contact us at least 24 hours before your appointment.</p>
+        </div>
+      </div>
+    `,
+
+    reminder: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #f8fafc; padding: 24px; border-radius: 8px; margin-bottom: 24px;">
+          <h1 style="color: #0f172a; margin-bottom: 16px;">Appointment Reminder</h1>
+          <p style="color: #475569;">Your video appointment with Dr. ${data.doctor} is in 1 hour.</p>
+          
+          <div style="background-color: #e0f2fe; padding: 16px; border-radius: 8px; margin: 24px 0;">
+            <a href="${data.meetingLink}" style="display: inline-block; background-color: #0284c7; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none;">Join Video Call</a>
+          </div>
+        </div>
+      </div>
+    `
+  };
+
+  return templates[type] || '';
+};
+
 module.exports = {
   generateAppointmentEmail,
   generateAppointmentCancellationEmail,
