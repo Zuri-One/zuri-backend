@@ -395,7 +395,7 @@ const generateAppointmentUpdateEmail = (type, data) => {
   }
 };
 
-exports.generateVideoAppointmentEmail = (type, data) => {
+const generateVideoAppointmentEmail = (type, data) => {
   const templates = {
     confirmation: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -459,5 +459,6 @@ exports.generateVideoAppointmentEmail = (type, data) => {
 module.exports = {
   generateAppointmentEmail,
   generateAppointmentCancellationEmail,
-  generateAppointmentUpdateEmail
+  generateAppointmentUpdateEmail,
+  generateVideoAppointmentEmail
 };

@@ -6,7 +6,8 @@ class Appointment extends Model {
     id: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
+      primaryKey: true,
+      allowNull: false
     },
     patientId: {
       type: DataTypes.UUID,
@@ -39,9 +40,11 @@ class Appointment extends Model {
         'in-progress',
         'completed', 
         'cancelled',
+        'upcoming',
         'no-show'
       ),
-      defaultValue: 'pending'
+      defaultValue: 'pending',
+      allowNull: false
     },
     reason: {
       type: DataTypes.TEXT,
@@ -49,54 +52,111 @@ class Appointment extends Model {
     },
     symptoms: {
       type: DataTypes.JSONB,
-      defaultValue: []
+      defaultValue: [],
+      allowNull: true
     },
     notes: {
-      type: DataTypes.TEXT
+      type: DataTypes.TEXT,
+      allowNull: true
     },
     diagnosis: {
-      type: DataTypes.TEXT
+      type: DataTypes.TEXT,
+      allowNull: true
     },
     prescription: {
       type: DataTypes.JSONB,
-      defaultValue: []
+      defaultValue: [],
+      allowNull: true
     },
     meetingLink: {
-      type: DataTypes.STRING
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    startUrl: {
+      type: DataTypes.TEXT,
+      allowNull: true
     },
     meetingId: {
-      type: DataTypes.STRING
+      type: DataTypes.STRING(255),
+      allowNull: true
     },
     meetingPassword: {
-      type: DataTypes.STRING
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
+    platform: {
+      type: DataTypes.STRING(50),
+      allowNull: true
+    },
+    duration: {
+      type: DataTypes.INTEGER,
+      defaultValue: 30, // Default 30 minutes
+      allowNull: true
     },
     cancelledById: {
       type: DataTypes.UUID,
+      allowNull: true,
       references: {
         model: 'Users',
         key: 'id'
       }
     },
     cancelReason: {
-      type: DataTypes.TEXT
+      type: DataTypes.TEXT,
+      allowNull: true
     },
     paymentStatus: {
       type: DataTypes.ENUM('pending', 'completed', 'refunded'),
-      defaultValue: 'pending'
+      defaultValue: 'pending',
+      allowNull: false
     },
     paymentAmount: {
-      type: DataTypes.DECIMAL(10, 2)
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true
+    },
+    reminder: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    reminderSentAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    feedback: {
+      type: DataTypes.JSONB,
+      allowNull: true
+    },
+    rating: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      validate: {
+        min: 1,
+        max: 5
+      }
     }
   };
 
   static associate(models) {
     this.belongsTo(models.User, { 
       as: 'patient',
-      foreignKey: 'patientId'
+      foreignKey: 'patientId',
+      onDelete: 'NO ACTION',
+      onUpdate: 'CASCADE'
     });
+    
     this.belongsTo(models.User, { 
       as: 'doctor',
-      foreignKey: 'doctorId'
+      foreignKey: 'doctorId',
+      onDelete: 'NO ACTION',
+      onUpdate: 'CASCADE'
+    });
+    
+    this.belongsTo(models.User, {
+      as: 'cancelledBy',
+      foreignKey: 'cancelledById',
+      onDelete: 'NO ACTION',
+      onUpdate: 'CASCADE'
     });
   }
 
@@ -105,8 +165,96 @@ class Appointment extends Model {
       sequelize,
       modelName: 'Appointment',
       tableName: 'Appointments',
-      timestamps: true
+      timestamps: true,
+      paranoid: true, // Enables soft deletes
+      indexes: [
+        {
+          fields: ['patientId']
+        },
+        {
+          fields: ['doctorId']
+        },
+        {
+          fields: ['status']
+        },
+        {
+          fields: ['dateTime']
+        },
+        {
+          fields: ['type']
+        },
+        {
+          fields: ['platform']
+        },
+        {
+          fields: ['paymentStatus']
+        },
+        {
+          fields: ['createdAt']
+        }
+      ],
+      hooks: {
+        beforeSave: async (appointment) => {
+          // Convert dateTime to UTC if it isn't already
+          if (appointment.dateTime && appointment.changed('dateTime')) {
+            appointment.dateTime = new Date(appointment.dateTime);
+          }
+        },
+        afterCreate: async (appointment) => {
+          // Log appointment creation
+          console.log(`New appointment created with ID: ${appointment.id}`);
+        },
+        afterUpdate: async (appointment) => {
+          // Log appointment updates
+          console.log(`Appointment ${appointment.id} updated`);
+        }
+      }
     });
+  }
+
+  // Instance methods
+  async cancel(userId, reason) {
+    this.status = 'cancelled';
+    this.cancelledById = userId;
+    this.cancelReason = reason;
+    return await this.save();
+  }
+
+  async complete() {
+    this.status = 'completed';
+    return await this.save();
+  }
+
+  async addFeedback(rating, feedback) {
+    this.rating = rating;
+    this.feedback = feedback;
+    return await this.save();
+  }
+
+  // Helper methods
+  isUpcoming() {
+    return new Date(this.dateTime) > new Date();
+  }
+
+  isPast() {
+    return new Date(this.dateTime) < new Date();
+  }
+
+  canBeCancelled() {
+    return ['pending', 'confirmed'].includes(this.status) && this.isUpcoming();
+  }
+
+  canBeRescheduled() {
+    return ['pending', 'confirmed'].includes(this.status) && this.isUpcoming();
+  }
+
+  toJSON() {
+    const values = { ...super.toJSON() };
+    values.isUpcoming = this.isUpcoming();
+    values.isPast = this.isPast();
+    values.canBeCancelled = this.canBeCancelled();
+    values.canBeRescheduled = this.canBeRescheduled();
+    return values;
   }
 }
 

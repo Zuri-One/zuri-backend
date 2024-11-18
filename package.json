@@ -14,10 +14,13 @@
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "@sendgrid/mail": "^8.1.4",
+    "@zoomus/websdk": "^2.18.3",
     "axios": "^1.7.7",
     "bcryptjs": "^2.4.3",
     "chalk": "^5.3.0",
     "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "express-rate-limit": "^7.4.1",

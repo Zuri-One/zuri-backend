@@ -10,6 +10,15 @@ const { generateMeetLink } = require('../utils/meet.util');
 const { generateZoomLink } = require('../utils/zoom.util');
 const { createWebRTCRoom } = require('../utils/webrtc.util');
 const sendEmail = require('../utils/email.util');
+const zoomApi = require('../utils/video/zoom.util');
+const { 
+  generateAppointmentEmail, 
+  generateAppointmentCancellationEmail,
+  generateAppointmentUpdateEmail, 
+  generateVideoAppointmentEmail
+} = require('../utils/email-templates.util');
+const { sequelize } = require('../config/database');
+const { format } = require('date-fns');
 
 
 exports.getDoctorStats = async (req, res, next) => {
@@ -202,39 +211,6 @@ exports.getAppointmentRequests = async (req, res, next) => {
   }
 };
 
-exports.handleAppointmentRequest = async (req, res, next) => {
-  try {
-    const { id, action } = req.params;
-    const doctorId = req.user.id;
-
-    const appointment = await Appointment.findOne({
-      where: {
-        id,
-        doctorId,
-        status: 'pending'
-      }
-    });
-
-    if (!appointment) {
-      return res.status(404).json({ message: 'Appointment request not found' });
-    }
-
-    appointment.status = action === 'accept' ? 'confirmed' : 'cancelled';
-    if (action === 'reject') {
-      appointment.cancelledById = doctorId;
-      appointment.cancelReason = 'Rejected by doctor';
-    }
-
-    await appointment.save();
-
-    res.json({
-      message: `Appointment ${action === 'accept' ? 'accepted' : 'rejected'} successfully`,
-      appointment
-    });
-  } catch (error) {
-    next(error);
-  }
-};
 
 exports.getDoctorProfile = async (req, res, next) => {
   try {
@@ -351,8 +327,9 @@ exports.validateAvailabilityQuery = async (req, res, next) => {
 exports.handleAppointmentRequest = async (req, res, next) => {
   try {
     const { id, action } = req.params;
-    const { platform, dateTime } = req.body;
     const doctorId = req.user.id;
+
+    console.log('Handling appointment request:', { id, action, doctorId });
 
     const appointment = await Appointment.findOne({
       where: {
@@ -365,108 +342,156 @@ exports.handleAppointmentRequest = async (req, res, next) => {
           model: User,
           as: 'patient',
           attributes: ['id', 'name', 'email']
+        },
+        {
+          model: User,
+          as: 'doctor',
+          attributes: ['id', 'name', 'email']
         }
       ]
     });
 
+    console.log('Found appointment:', appointment ? 'yes' : 'no');
+
     if (!appointment) {
-      return res.status(404).json({ message: 'Appointment request not found' });
+      console.log('Appointment not found with criteria:', {
+        id,
+        doctorId,
+        status: 'pending'
+      });
+      return res.status(404).json({ 
+        message: 'Appointment request not found'
+      });
     }
 
     if (action === 'accept') {
-      let meetingDetails = null;
+      try {
+        if (appointment.type === 'video') {
+          console.log('Creating video meeting...');
+          const meetingDetails = await zoomApi.createMeeting({
+            topic: `Medical Consultation with Dr. ${appointment.doctor.name}`,
+            startTime: appointment.dateTime,
+            duration: 30,
+            agenda: `Consultation with patient: ${appointment.patient.name}\nReason: ${appointment.reason}`
+          });
 
-      // Generate meeting details if it's a video appointment
-      if (appointment.type === 'video' && platform) {
-        const meetingTime = dateTime || appointment.dateTime;
-        const duration = 30; // Default duration in minutes
+          console.log('Meeting created:', meetingDetails);
 
-        try {
-          if (platform === 'zoom') {
-            meetingDetails = await generateZoomLink({
-              topic: `Medical Consultation with Dr. ${req.user.name}`,
-              startTime: meetingTime,
-              duration,
-              doctorEmail: req.user.email
-            });
-          } else if (platform === 'google-meet') {
-            meetingDetails = await generateMeetLink({
-              summary: `Medical Consultation - ${appointment.patient.name}`,
-              description: appointment.reason,
-              startTime: meetingTime,
-              duration,
-              attendees: [
-                { email: appointment.patient.email },
-                { email: req.user.email }
-              ]
-            });
-          }
-        } catch (error) {
-          console.error('Video platform integration error:', error);
-          return res.status(500).json({
-            message: `Failed to set up ${platform} meeting. Please try again.`
+          // Update appointment without transaction
+          await appointment.update({
+            status: 'confirmed',
+            meetingLink: meetingDetails.joinUrl,
+            startUrl: meetingDetails.startUrl,
+            meetingId: meetingDetails.meetingId.toString(),
+            meetingPassword: meetingDetails.password,
+            platform: 'zoom'
+          });
+
+          // Send confirmation email
+          await sendEmail({
+            to: appointment.patient.email,
+            subject: 'Video Appointment Confirmed',
+            html: generateVideoAppointmentEmail('confirmation', {
+              name: appointment.patient.name,
+              doctor: appointment.doctor.name,
+              date: format(new Date(appointment.dateTime), 'MMMM do, yyyy'),
+              time: format(new Date(appointment.dateTime), 'h:mm a'),
+              type: appointment.type,
+              meetingLink: meetingDetails.joinUrl,
+              meetingId: meetingDetails.meetingId,
+              password: meetingDetails.password
+            })
+          });
+
+          // Send email to doctor as well
+          await sendEmail({
+            to: appointment.doctor.email,
+            subject: 'Video Appointment Scheduled',
+            html: generateVideoAppointmentEmail('doctor_confirmation', {
+              name: appointment.doctor.name,
+              patient: appointment.patient.name,
+              date: format(new Date(appointment.dateTime), 'MMMM do, yyyy'),
+              time: format(new Date(appointment.dateTime), 'h:mm a'),
+              type: appointment.type,
+              meetingLink: meetingDetails.startUrl, // Note: Using startUrl for doctor
+              meetingId: meetingDetails.meetingId,
+              password: meetingDetails.password
+            })
+          });
+
+        } else {
+          // Handle non-video appointment
+          await appointment.update({ status: 'confirmed' });
+          
+          await sendEmail({
+            to: appointment.patient.email,
+            subject: 'Appointment Confirmed',
+            html: generateAppointmentEmail('confirmation', {
+              name: appointment.patient.name,
+              doctor: appointment.doctor.name,
+              date: format(new Date(appointment.dateTime), 'MMMM do, yyyy'),
+              time: format(new Date(appointment.dateTime), 'h:mm a'),
+              type: appointment.type
+            })
           });
         }
+
+        // Fetch the updated appointment
+        const updatedAppointment = await Appointment.findByPk(appointment.id, {
+          include: [
+            {
+              model: User,
+              as: 'patient',
+              attributes: ['id', 'name', 'email']
+            },
+            {
+              model: User,
+              as: 'doctor',
+              attributes: ['id', 'name', 'email']
+            }
+          ]
+        });
+
+        return res.json({
+          message: 'Appointment confirmed successfully',
+          appointment: updatedAppointment
+        });
+      } catch (error) {
+        console.error('Error in appointment confirmation:', error);
+        return res.status(500).json({
+          message: 'Failed to confirm appointment',
+          error: error.message
+        });
       }
-
-      // Update appointment
-      appointment.status = 'confirmed';
-      if (meetingDetails) {
-        appointment.meetingLink = meetingDetails.joinUrl;
-        appointment.meetingId = meetingDetails.meetingId;
-        appointment.platform = platform;
-        if (meetingDetails.password) {
-          appointment.meetingPassword = meetingDetails.password;
-        }
-      }
-
-      if (dateTime) {
-        appointment.dateTime = dateTime;
-      }
-
-      await appointment.save();
-
-      // Send confirmation email
-      await sendEmail({
-        to: appointment.patient.email,
-        subject: 'Appointment Confirmed',
-        html: generateAppointmentEmail('confirmation', {
-          name: appointment.patient.name,
-          date: moment(appointment.dateTime).format('MMMM Do YYYY'),
-          time: moment(appointment.dateTime).format('h:mm a'),
-          doctor: req.user.name,
-          platform: meetingDetails?.platform,
-          meetingLink: meetingDetails?.joinUrl,
-          meetingId: meetingDetails?.meetingId,
-          password: meetingDetails?.password
-        })
+    } else if (action === 'reject') {
+      await appointment.update({
+        status: 'cancelled',
+        cancelledById: doctorId,
+        cancelReason: 'Rejected by doctor'
       });
 
-    } else {
-      // Handle rejection
-      appointment.status = 'cancelled';
-      appointment.cancelledById = doctorId;
-      appointment.cancelReason = 'Rejected by doctor';
-      await appointment.save();
-
-      // Send rejection email
       await sendEmail({
         to: appointment.patient.email,
         subject: 'Appointment Request Declined',
         html: generateAppointmentEmail('rejection', {
           name: appointment.patient.name,
-          doctor: req.user.name,
-          date: moment(appointment.dateTime).format('MMMM Do YYYY'),
-          time: moment(appointment.dateTime).format('h:mm a')
+          doctor: appointment.doctor.name,
+          date: format(new Date(appointment.dateTime), 'MMMM do, yyyy'),
+          time: format(new Date(appointment.dateTime), 'h:mm a')
         })
       });
-    }
 
-    res.json({
-      message: `Appointment ${action === 'accept' ? 'confirmed' : 'rejected'} successfully`,
-      appointment
-    });
+      return res.json({
+        message: 'Appointment rejected successfully',
+        appointment
+      });
+    } else {
+      return res.status(400).json({
+        message: 'Invalid action'
+      });
+    }
   } catch (error) {
+    console.error('General error in handleAppointmentRequest:', error);
     next(error);
   }
 };

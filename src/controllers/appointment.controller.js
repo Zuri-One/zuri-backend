@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const { Appointment, User, DoctorAvailability } = require('../models');
 const sendEmail = require('../utils/email.util');
 const moment = require('moment');
+const zoomApi = require('../utils/video/zoom.util');
 const { 
   generateAppointmentEmail, 
   generateAppointmentCancellationEmail,
@@ -117,23 +118,39 @@ const {
 
 exports.getAppointments = async (req, res, next) => {
   try {
-    const { status, type, startDate, endDate } = req.query;
+    const { type, status, timeframe } = req.query;
     const where = {};
 
-    // Add user-specific filter based on role
+    // Add user-specific filter
     if (req.user.role === 'patient') {
       where.patientId = req.user.id;
     } else if (req.user.role === 'doctor') {
       where.doctorId = req.user.id;
     }
 
-    // Add filters if provided
-    if (status) where.status = status;
+    // Add type filter
     if (type) where.type = type;
-    if (startDate || endDate) {
-      where.dateTime = {};
-      if (startDate) where.dateTime[Op.gte] = new Date(startDate);
-      if (endDate) where.dateTime[Op.lte] = new Date(endDate);
+    
+    // Base status filter
+    if (status) where.status = status;
+
+    // Add timeframe filtering
+    if (timeframe) {
+      const now = new Date();
+      
+      switch (timeframe) {
+        case 'upcoming':
+          where.dateTime = { [Op.gt]: now };
+          break;
+        case 'today':
+          const startOfDay = new Date(now.setHours(0, 0, 0, 0));
+          const endOfDay = new Date(now.setHours(23, 59, 59, 999));
+          where.dateTime = { [Op.between]: [startOfDay, endOfDay] };
+          break;
+        case 'past':
+          where.dateTime = { [Op.lt]: now };
+          break;
+      }
     }
 
     const appointments = await Appointment.findAll({
@@ -633,6 +650,209 @@ exports.createAppointment = async (req, res, next) => {
     res.status(201).json({
       message: 'Appointment booked successfully',
       appointment
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.handleAppointmentRequest = async (req, res, next) => {
+  try {
+    const { id, action } = req.params;
+    const doctorId = req.user.id;
+
+    const appointment = await Appointment.findOne({
+      where: {
+        id,
+        doctorId,
+        status: 'pending'
+      },
+      include: [
+        {
+          model: User,
+          as: 'patient',
+          attributes: ['id', 'name', 'email']
+        },
+        {
+          model: User,
+          as: 'doctor',
+          attributes: ['id', 'name', 'email']
+        }
+      ]
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ message: 'Appointment request not found' });
+    }
+
+    if (action === 'accept') {
+      let meetingDetails = null;
+
+      // Create Zoom meeting for video appointments
+      if (appointment.type === 'video') {
+        try {
+          meetingDetails = await zoomApi.createMeeting({
+            topic: `Medical Consultation with Dr. ${appointment.doctor.name}`,
+            startTime: appointment.dateTime,
+            duration: 30,
+            agenda: `Consultation with patient: ${appointment.patient.name}\nReason: ${appointment.reason}`
+          });
+
+          // Update appointment with meeting details
+          appointment.meetingLink = meetingDetails.joinUrl;
+          appointment.startUrl = meetingDetails.startUrl;
+          appointment.meetingId = meetingDetails.meetingId;
+          appointment.meetingPassword = meetingDetails.password;
+          appointment.platform = 'zoom';
+        } catch (error) {
+          console.error('Failed to create Zoom meeting:', error);
+          return res.status(500).json({
+            message: 'Failed to set up video consultation. Please try again.'
+          });
+        }
+      }
+
+      appointment.status = 'confirmed';
+      await appointment.save();
+
+      // Send confirmation email
+      await sendEmail({
+        to: appointment.patient.email,
+        subject: 'Appointment Confirmed',
+        html: generateVideoAppointmentEmail('confirmation', {
+          name: appointment.patient.name,
+          doctor: appointment.doctor.name,
+          date: format(new Date(appointment.dateTime), 'MMMM do, yyyy'),
+          time: format(new Date(appointment.dateTime), 'h:mm a'),
+          type: appointment.type,
+          meetingLink: meetingDetails?.joinUrl,
+          meetingId: meetingDetails?.meetingId,
+          password: meetingDetails?.password
+        })
+      });
+
+    } else {
+      appointment.status = 'cancelled';
+      appointment.cancelledById = doctorId;
+      appointment.cancelReason = 'Rejected by doctor';
+      await appointment.save();
+
+      // Send rejection email
+      await sendEmail({
+        to: appointment.patient.email,
+        subject: 'Appointment Request Declined',
+        html: generateAppointmentEmail('rejection', {
+          name: appointment.patient.name,
+          doctor: appointment.doctor.name,
+          date: format(new Date(appointment.dateTime), 'MMMM do, yyyy'),
+          time: format(new Date(appointment.dateTime), 'h:mm a')
+        })
+      });
+    }
+
+    res.json({
+      message: `Appointment ${action === 'accept' ? 'confirmed' : 'rejected'} successfully`,
+      appointment
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const generateVideoAppointment = async (appointment, doctor, patient) => {
+  // Only generate video meeting for video appointments
+  if (appointment.type !== 'video') return null;
+
+  try {
+    const meetingDetails = await zoomClient.createMeeting({
+      topic: `Medical Consultation with Dr. ${doctor.name}`,
+      startTime: appointment.dateTime,
+      duration: 30, // Default 30 minutes
+      doctorEmail: doctor.email,
+      patientEmail: patient.email
+    });
+
+    return meetingDetails;
+  } catch (error) {
+    console.error('Failed to create video meeting:', error);
+    throw error;
+  }
+};
+
+exports.confirmAppointment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const doctorId = req.user.id;
+
+    const appointment = await Appointment.findOne({
+      where: {
+        id,
+        doctorId,
+        status: 'pending'
+      },
+      include: [
+        {
+          model: User,
+          as: 'patient',
+          attributes: ['id', 'name', 'email']
+        },
+        {
+          model: User,
+          as: 'doctor',
+          attributes: ['id', 'name', 'email']
+        }
+      ]
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ message: 'Appointment not found' });
+    }
+
+    let videoDetails = null;
+    if (appointment.type === 'video') {
+      videoDetails = await generateVideoAppointment(
+        appointment,
+        appointment.doctor,
+        appointment.patient
+      );
+
+      // Update appointment with video details
+      appointment.meetingLink = videoDetails.joinUrl;
+      appointment.meetingId = videoDetails.meetingId;
+      appointment.platform = 'zoom';
+      appointment.meetingPassword = videoDetails.password;
+    }
+
+    appointment.status = 'confirmed';
+    await appointment.save();
+
+    // Send confirmation email with video details if applicable
+    await sendEmail({
+      to: appointment.patient.email,
+      subject: 'Appointment Confirmed',
+      html: generateVideoAppointmentEmail('confirmation', {
+        name: appointment.patient.name,
+        doctor: appointment.doctor.name,
+        date: moment(appointment.dateTime).format('MMMM Do YYYY'),
+        time: moment(appointment.dateTime).format('h:mm a'),
+        type: appointment.type,
+        platform: videoDetails?.platform,
+        meetingLink: videoDetails?.joinUrl,
+        meetingId: videoDetails?.meetingId,
+        password: videoDetails?.password
+      })
+    });
+
+    res.json({
+      message: 'Appointment confirmed successfully',
+      appointment: {
+        ...appointment.toJSON(),
+        videoDetails: videoDetails ? {
+          joinUrl: videoDetails.joinUrl,
+          meetingId: videoDetails.meetingId,
+          password: videoDetails.password
+        } : null
+      }
     });
   } catch (error) {
     next(error);
