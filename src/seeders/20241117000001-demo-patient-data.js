@@ -13,7 +13,7 @@ module.exports = {
 
     // Get the doctor's ID
     const doctor = await queryInterface.sequelize.query(
-      `SELECT id FROM "Users" WHERE email = 'doctor@zurihealth.com'`,
+      `SELECT id FROM "Users" WHERE email = 'isaacwambiri254@gmail.com'`,
       { type: Sequelize.QueryTypes.SELECT }
     );
     const doctorId = doctor[0]?.id;

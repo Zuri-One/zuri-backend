@@ -1,16 +1,17 @@
-// src/seeders/20241117000002-demo-doctor-availability.js
 'use strict';
+const { v4: uuidv4 } = require('uuid');
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     // Get the doctor's ID
     const doctor = await queryInterface.sequelize.query(
-      `SELECT id FROM "Users" WHERE email = 'doctor@zurihealth.com'`,
-      { type: queryInterface.sequelize.QueryTypes.SELECT }
+      `SELECT id FROM "Users" WHERE email = 'isaacwambiri254@gmail.com'`,
+      { type: Sequelize.QueryTypes.SELECT }
     );
 
     if (!doctor || !doctor[0]) {
-      throw new Error('Doctor user not found');
+      console.error('Doctor user not found');
+      return Promise.reject(new Error('Doctor user not found'));
     }
 
     const doctorId = doctor[0].id;
@@ -18,29 +19,29 @@ module.exports = {
     // Create weekly schedule
     const weeklySchedule = {
       monday: [
-        { startTime: '09:00', endTime: '12:00', isAvailable: true },
-        { startTime: '14:00', endTime: '17:00', isAvailable: true }
+        { startTime: '09:00', endTime: '12:00', isAvailable: true, slotDuration: 30 },
+        { startTime: '14:00', endTime: '17:00', isAvailable: true, slotDuration: 30 }
       ],
       tuesday: [
-        { startTime: '09:00', endTime: '12:00', isAvailable: true },
-        { startTime: '14:00', endTime: '17:00', isAvailable: true }
+        { startTime: '09:00', endTime: '12:00', isAvailable: true, slotDuration: 30 },
+        { startTime: '14:00', endTime: '17:00', isAvailable: true, slotDuration: 30 }
       ],
       wednesday: [
-        { startTime: '09:00', endTime: '12:00', isAvailable: true },
-        { startTime: '14:00', endTime: '17:00', isAvailable: true }
+        { startTime: '09:00', endTime: '12:00', isAvailable: true, slotDuration: 30 },
+        { startTime: '14:00', endTime: '17:00', isAvailable: true, slotDuration: 30 }
       ],
       thursday: [
-        { startTime: '09:00', endTime: '12:00', isAvailable: true },
-        { startTime: '14:00', endTime: '17:00', isAvailable: true }
+        { startTime: '09:00', endTime: '12:00', isAvailable: true, slotDuration: 30 },
+        { startTime: '14:00', endTime: '17:00', isAvailable: true, slotDuration: 30 }
       ],
       friday: [
-        { startTime: '09:00', endTime: '12:00', isAvailable: true },
-        { startTime: '14:00', endTime: '17:00', isAvailable: true }
+        { startTime: '09:00', endTime: '12:00', isAvailable: true, slotDuration: 30 },
+        { startTime: '14:00', endTime: '17:00', isAvailable: true, slotDuration: 30 }
       ]
     };
 
     return queryInterface.bulkInsert('DoctorAvailabilities', [{
-      id: require('uuid').v4(),
+      id: uuidv4(),
       doctorId: doctorId,
       weeklySchedule: JSON.stringify(weeklySchedule),
       exceptions: JSON.stringify([]),
