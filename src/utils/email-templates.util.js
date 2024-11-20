@@ -416,9 +416,11 @@ const generateVideoAppointmentEmail = (type, data) => {
             ${data.platform === 'zoom' ? `
               <p style="color: #0369a1; margin-bottom: 8px;"><strong>Zoom Meeting ID:</strong> ${data.meetingId}</p>
               <p style="color: #0369a1; margin-bottom: 16px;"><strong>Password:</strong> ${data.password}</p>
-            ` : ''}
-            <a href="${data.meetingLink}" style="display: inline-block; background-color: #0284c7; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; margin-bottom: 16px;">Join Video Call</a>
-            <p style="color: #075985; font-size: 14px;">Please click the link above or use the meeting ID and password to join your appointment.</p>
+              <a href="${data.meetingLink}" style="display: inline-block; background-color: #0284c7; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; margin-bottom: 16px;">Join Zoom Meeting</a>
+            ` : `
+              <p style="color: #0369a1; margin-bottom: 16px;">Your consultation will take place on our secure built-in video platform.</p>
+              <p style="color: #0369a1; margin-bottom: 16px;">You can join the meeting directly through our platform when it's time.</p>
+            `}
           </div>
 
           <div style="background-color: #fef3c7; padding: 16px; border-radius: 8px;">
@@ -428,6 +430,9 @@ const generateVideoAppointmentEmail = (type, data) => {
               <li>Ensure you have a stable internet connection</li>
               <li>Test your camera and microphone beforehand</li>
               <li>Choose a quiet, well-lit location</li>
+              ${data.platform === 'whereby' ? `
+                <li>No downloads required - works directly in your browser</li>
+              ` : ''}
             </ul>
           </div>
         </div>
@@ -435,19 +440,6 @@ const generateVideoAppointmentEmail = (type, data) => {
         <div style="text-align: center; color: #64748b; font-size: 14px;">
           <p>Zuri Health Medical Center</p>
           <p>If you need to reschedule, please contact us at least 24 hours before your appointment.</p>
-        </div>
-      </div>
-    `,
-
-    reminder: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background-color: #f8fafc; padding: 24px; border-radius: 8px; margin-bottom: 24px;">
-          <h1 style="color: #0f172a; margin-bottom: 16px;">Appointment Reminder</h1>
-          <p style="color: #475569;">Your video appointment with Dr. ${data.doctor} is in 1 hour.</p>
-          
-          <div style="background-color: #e0f2fe; padding: 16px; border-radius: 8px; margin: 24px 0;">
-            <a href="${data.meetingLink}" style="display: inline-block; background-color: #0284c7; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none;">Join Video Call</a>
-          </div>
         </div>
       </div>
     `

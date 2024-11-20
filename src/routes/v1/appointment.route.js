@@ -8,6 +8,8 @@ router.use(authenticate);
 
 router.post('/', appointmentController.validateAppointmentCreation, appointmentController.createAppointment);
 router.get('/', appointmentController.getAppointments);
+
+router.post('/:id/handle-request/:action', authenticate, appointmentController.handleAppointmentRequest);
 router.get('/:id', appointmentController.getAppointmentById);
 router.patch('/:id/status', appointmentController.updateAppointmentStatus);
 router.patch('/:id/reschedule', appointmentController.rescheduleAppointment);

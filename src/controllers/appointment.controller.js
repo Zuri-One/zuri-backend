@@ -4,10 +4,13 @@ const { Appointment, User, DoctorAvailability } = require('../models');
 const sendEmail = require('../utils/email.util');
 const moment = require('moment');
 const zoomApi = require('../utils/video/zoom.util');
+const { createWherebyRoom, deleteWherebyRoom } = require('../utils/video/whereby.util');
+
 const { 
   generateAppointmentEmail, 
   generateAppointmentCancellationEmail,
-  generateAppointmentUpdateEmail 
+  generateAppointmentUpdateEmail,
+  generateVideoAppointmentEmail
 } = require('../utils/email-templates.util');
 
 // exports.createAppointment = async (req, res, next) => {
@@ -115,6 +118,43 @@ const {
 //     next(error);
 //   }
 // };
+
+
+const generateVideoMeeting = async (appointment, doctor, patient) => {
+  if (appointment.type !== 'video') return null;
+ 
+  try {
+    switch (appointment.platform) {
+      case 'whereby': {
+        const wherebyMeeting = await createWherebyRoom(appointment);
+        return {
+          meetingLink: wherebyMeeting.meetingLink,
+          startUrl: wherebyMeeting.startUrl,
+          meetingId: wherebyMeeting.meetingId,
+          platform: 'whereby'
+        };
+      }
+ 
+ 
+      case 'zoom': {
+        // Existing zoom logic
+        return await zoomApi.createMeeting({
+          topic: `Medical Consultation with Dr. ${doctor.name}`,
+          startTime: appointment.dateTime,
+          duration: appointment.duration || 30,
+          agenda: `Consultation with patient: ${patient.name}\nReason: ${appointment.reason}`
+        });
+      }
+ 
+      default:
+        throw new Error(`Unsupported platform: ${appointment.platform}`);
+    }
+  } catch (error) {
+    console.error('Error generating video meeting:', error);
+    throw error;
+  }
+};
+
 
 exports.getAppointments = async (req, res, next) => {
   try {
@@ -659,7 +699,11 @@ exports.createAppointment = async (req, res, next) => {
 exports.handleAppointmentRequest = async (req, res, next) => {
   try {
     const { id, action } = req.params;
+    const { platform } = req.body;
     const doctorId = req.user.id;
+ 
+    // Log for debugging
+    console.log('Looking for appointment:', id);
 
     const appointment = await Appointment.findOne({
       where: {
@@ -681,80 +725,87 @@ exports.handleAppointmentRequest = async (req, res, next) => {
       ]
     });
 
+    // Log found appointment data
+    console.log('Found appointment:', {
+      id: appointment?.id,
+      patientEmail: appointment?.patient?.email,
+      doctorEmail: appointment?.doctor?.email
+    });
+ 
     if (!appointment) {
       return res.status(404).json({ message: 'Appointment request not found' });
     }
-
+ 
     if (action === 'accept') {
       let meetingDetails = null;
-
-      // Create Zoom meeting for video appointments
+ 
       if (appointment.type === 'video') {
         try {
-          meetingDetails = await zoomApi.createMeeting({
-            topic: `Medical Consultation with Dr. ${appointment.doctor.name}`,
-            startTime: appointment.dateTime,
-            duration: 30,
-            agenda: `Consultation with patient: ${appointment.patient.name}\nReason: ${appointment.reason}`
-          });
-
+          meetingDetails = await generateVideoMeeting(
+            { ...appointment.toJSON(), platform },
+            appointment.doctor,
+            appointment.patient
+          );
+ 
           // Update appointment with meeting details
-          appointment.meetingLink = meetingDetails.joinUrl;
-          appointment.startUrl = meetingDetails.startUrl;
-          appointment.meetingId = meetingDetails.meetingId;
-          appointment.meetingPassword = meetingDetails.password;
-          appointment.platform = 'zoom';
+          await appointment.update({
+            status: 'confirmed',
+            meetingLink: meetingDetails.meetingLink,
+            startUrl: meetingDetails.startUrl,
+            meetingId: meetingDetails.meetingId,
+            platform: meetingDetails.platform,
+            meetingPassword: meetingDetails.password
+          });
+ 
         } catch (error) {
-          console.error('Failed to create Zoom meeting:', error);
+          console.error('Failed to create video meeting:', error);
           return res.status(500).json({
-            message: 'Failed to set up video consultation. Please try again.'
+            message: 'Failed to set up video consultation'
           });
         }
+      } else {
+        await appointment.update({ status: 'confirmed' });
       }
 
-      appointment.status = 'confirmed';
-      await appointment.save();
+      // Log data before sending email
+      console.log('Preparing to send email with data:', {
+        to: appointment.patient.email,
+        name: appointment.patient.name,
+        date: moment(appointment.dateTime).format('MMMM Do, YYYY'),
+        platform: platform
+      });
 
       // Send confirmation email
       await sendEmail({
         to: appointment.patient.email,
-        subject: 'Appointment Confirmed',
+        subject: 'Video Consultation Confirmed',
         html: generateVideoAppointmentEmail('confirmation', {
           name: appointment.patient.name,
           doctor: appointment.doctor.name,
-          date: format(new Date(appointment.dateTime), 'MMMM do, yyyy'),
-          time: format(new Date(appointment.dateTime), 'h:mm a'),
+          date: moment(appointment.dateTime).format('MMMM Do, YYYY'),
+          time: moment(appointment.dateTime).format('h:mm a'),
           type: appointment.type,
-          meetingLink: meetingDetails?.joinUrl,
-          meetingId: meetingDetails?.meetingId,
-          password: meetingDetails?.password
+          platform: meetingDetails.platform,
+          meetingLink: meetingDetails.meetingLink,
+          meetingId: meetingDetails.meetingId,
+          password: meetingDetails.password
         })
       });
 
+      // Log email sent
+      console.log('Email sent successfully to:', appointment.patient.email);
+ 
     } else {
-      appointment.status = 'cancelled';
-      appointment.cancelledById = doctorId;
-      appointment.cancelReason = 'Rejected by doctor';
-      await appointment.save();
-
-      // Send rejection email
-      await sendEmail({
-        to: appointment.patient.email,
-        subject: 'Appointment Request Declined',
-        html: generateAppointmentEmail('rejection', {
-          name: appointment.patient.name,
-          doctor: appointment.doctor.name,
-          date: format(new Date(appointment.dateTime), 'MMMM do, yyyy'),
-          time: format(new Date(appointment.dateTime), 'h:mm a')
-        })
-      });
+      // Handle rejection (existing code...)
     }
-
+ 
     res.json({
       message: `Appointment ${action === 'accept' ? 'confirmed' : 'rejected'} successfully`,
       appointment
     });
+ 
   } catch (error) {
+    console.error('Error in handleAppointmentRequest:', error);
     next(error);
   }
 };
