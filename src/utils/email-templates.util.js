@@ -395,6 +395,72 @@ const generateAppointmentUpdateEmail = (type, data) => {
   }
 };
 
+const generatePrescriptionEmail = (type, data) => {
+  switch (type) {
+    case 'new':
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>New Prescription</h2>
+      <p>Dear ${data.patientName},</p>
+      <p>Dr. ${data.doctorName} has issued you a new prescription.</p>
+      
+      <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+        <p><strong>Date Issued:</strong> ${data.dateIssued}</p>
+        <p><strong>Valid Until:</strong> ${data.validUntil}</p>
+        <p><strong>Diagnosis:</strong> ${data.diagnosis}</p>
+        
+        <h3>Prescribed Medications:</h3>
+        ${data.medications.map(med => `
+          <div style="background: white; padding: 10px; margin: 10px 0; border-radius: 3px;">
+            <p><strong>Medicine:</strong> ${med.name}</p>
+            <p><strong>Dosage:</strong> ${med.dosage}</p>
+            <p><strong>Frequency:</strong> ${med.frequency}</p>
+            <p><strong>Duration:</strong> ${med.duration}</p>
+            <p><strong>Instructions:</strong> ${med.instructions}</p>
+          </div>
+        `).join('')}
+        
+        ${data.notes ? `<p><strong>Additional Notes:</strong> ${data.notes}</p>` : ''}
+      </div>
+      
+      <p>Please log in to your account to view the complete prescription details.</p>
+      <p>Make sure to follow the prescribed dosage and instructions carefully.</p>
+    </div>
+  `;
+
+    case 'update':
+      return `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Prescription Updated</h2>
+          <p>Dear ${data.patientName},</p>
+          <p>Your prescription has been updated by Dr. ${data.doctorName}.</p>
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Date Updated:</strong> ${data.dateUpdated}</p>
+            <p><strong>Valid Until:</strong> ${data.validUntil}</p>
+            ${data.notes ? `<p><strong>Update Notes:</strong> ${data.notes}</p>` : ''}
+          </div>
+          <p>Please log in to your account to view the updated prescription details.</p>
+        </div>
+      `;
+
+    case 'reminder':
+      return `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Prescription Reminder</h2>
+          <p>Dear ${data.patientName},</p>
+          <p>This is a reminder about your prescription from Dr. ${data.doctorName}.</p>
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Valid Until:</strong> ${data.validUntil}</p>
+            <p><strong>Refills Remaining:</strong> ${data.refillsRemaining}</p>
+          </div>
+          <p>Please ensure you refill your prescription before it expires.</p>
+        </div>
+      `;
+
+    default:
+      throw new Error('Invalid prescription email template type');
+  }
+};
 const generateVideoAppointmentEmail = (type, data) => {
   const templates = {
     confirmation: `
@@ -457,5 +523,6 @@ module.exports = {
   generateAppointmentEmail,
   generateAppointmentCancellationEmail,
   generateAppointmentUpdateEmail, 
-  generateVideoAppointmentEmail
+  generateVideoAppointmentEmail,
+  generatePrescriptionEmail
 };

@@ -10,9 +10,19 @@ const models = {
   DoctorAvailability: require(path.join(__dirname, 'doctor-availability.model')),
   DoctorProfile: require(path.join(__dirname, 'doctor-profile.model')),
   TestResult: require(path.join(__dirname, 'test-result.model')),
-  HealthMetric: require(path.join(__dirname, 'health-metric.model'))
+  HealthMetric: require(path.join(__dirname, 'health-metric.model')),
+  Prescription: require(path.join(__dirname, 'prescription.model')),
+  Medication: require(path.join(__dirname, 'medication.model')),
+  PrescriptionMedications: require(path.join(__dirname, 'prescription-medications.model')),
+  MedicalRecord: require(path.join(__dirname, 'medical-record.model')),
+  LabTest: require(path.join(__dirname, 'lab-test.model')),
+  LabTestTemplate: require(path.join(__dirname, 'lab-test-template.model')),
+  Laboratory: require(path.join(__dirname, 'laboratory.model')),
+  MedicationInventory: require(path.join(__dirname, 'medication-inventory.model')),
+  MedicationDispense: require(path.join(__dirname, 'medication-dispense.model')),
+  StockMovement: require(path.join(__dirname, 'stock-movement.model')),
+  Pharmacy: require(path.join(__dirname, 'pharmacy.model'))
 };
-
 // Helper function to initialize a model based on its structure
 const initializeModel = (Model) => {
   // For models using initModel pattern

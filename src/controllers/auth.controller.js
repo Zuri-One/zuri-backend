@@ -15,6 +15,52 @@ const {
 } = require('../utils/email-templates.util');
 
 
+
+
+
+exports.staffLogin = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ 
+      where: { 
+        email: email.toLowerCase() // Add this where clause
+      } 
+    });
+
+    if (!user || user.role === 'patient' || user.role === 'admin') {
+      return res.status(401).json({
+        message: 'Invalid credentials'
+      });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({
+        message: 'Invalid credentials'
+      });
+    }
+
+    const token = user.generateAuthToken();
+    user.lastLogin = new Date();
+    await user.save();
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        department: user.department,
+        permissions: User.rolePermissions[user.role] || []
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
@@ -69,36 +115,93 @@ exports.verifyEmailWithCode = async (req, res, next) => {
 
 exports.register = async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const {
+      name,
+      email,
+      password,
+      role,
+      department,
+      employeeId,
+      licenseNumber,
+      specialization,
+      qualification,
+      contactNumber
+    } = req.body;
+
+    // Validate role
+    const validRoles = [
+      'patient',
+      'doctor',
+      'nurse',
+      'lab_technician',
+      'pharmacist',
+      'radiologist',
+      'physiotherapist',
+      'nutritionist',
+      'receptionist',
+      'billing_staff',
+      'medical_assistant',
+      'ward_manager'
+    ];
+
+    if (role && role !== 'patient' && !validRoles.includes(role)) {
+      return res.status(400).json({
+        message: 'Invalid role specified'
+      });
+    }
 
     // Check if user exists
-    let user = await User.findOne({ 
+    let user = await User.findOne({
       where: { email: email.toLowerCase() }
     });
-    
+
     if (user) {
       return res.status(400).json({
         message: 'Email already registered'
       });
     }
 
+    // Validate required fields based on role
+    if (role !== 'patient') {
+      if (!employeeId) {
+        return res.status(400).json({
+          message: 'Employee ID is required for staff registration'
+        });
+      }
+
+      // Additional validation for medical professionals
+      if (['doctor', 'nurse', 'pharmacist', 'lab_technician'].includes(role)) {
+        if (!licenseNumber) {
+          return res.status(400).json({
+            message: 'License number is required for medical professionals'
+          });
+        }
+      }
+    }
+
     // Generate verification code and token
-    const verificationCode = generateVerificationCode();
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
-    console.log('Generated verification code:', verificationCode);
-
-    // Create new user
+    // Create new user with role-specific fields
     user = await User.create({
       name,
       email: email.toLowerCase(),
       password,
+      role: role || 'patient',
+      department,
+      employeeId,
+      licenseNumber,
+      specialization,
+      qualification,
+      contactNumber,
       emailVerificationCode: verificationCode,
       emailVerificationToken: crypto
         .createHash('sha256')
         .update(verificationToken)
         .digest('hex'),
-      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000)
+      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      joiningDate: role !== 'patient' ? new Date() : null
     });
 
     // Generate verification URL
@@ -120,24 +223,17 @@ exports.register = async (req, res, next) => {
   }
 };
 
+// Update login controller to handle role-specific logic
 exports.login = async (req, res, next) => {
   try {
     const { email, password, role } = req.body;
-    console.log('\nLogin attempt:', { email, role });
 
-    const user = await User.findOne({ 
-      where: { 
+    const user = await User.findOne({
+      where: {
         email: email.toLowerCase(),
-        role 
+        role
       }
     });
-
-    console.log('User found:', user ? {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      hasPassword: !!user.password
-    } : 'No user found');
 
     if (!user) {
       return res.status(401).json({
@@ -145,18 +241,21 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    const isMatch = await user.comparePassword(password);
-    console.log('Password verification:', {
-      providedPassword: password,
-      isMatch: isMatch
-    });
+    // Check if user is active
+    if (!user.isActive || user.status !== 'active') {
+      return res.status(401).json({
+        message: 'Account is not active. Please contact administrator.'
+      });
+    }
 
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({
         message: 'Invalid credentials'
       });
     }
 
+    // Generate role-specific token
     const token = user.generateAuthToken();
 
     // Update last login
@@ -169,12 +268,12 @@ exports.login = async (req, res, next) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
+        department: user.department,
+        permissions: User.rolePermissions[user.role] || []
       }
     });
-
   } catch (error) {
-    console.error('Login error:', error);
     next(error);
   }
 };

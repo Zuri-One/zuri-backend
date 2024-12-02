@@ -9,11 +9,12 @@ const {
   enable2FA,
   verify2FA,
   verifyEmailWithCode,
+  staffLogin
   
 } = require('../../controllers/auth.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
 const { validatePasswordReset } = require('../../middleware/validation.middleware');
-
+router.post('/staff-login', staffLogin);
 router.post('/register', register);
 router.post('/verify-email-code', verifyEmailWithCode);
 router.post('/login', login);
