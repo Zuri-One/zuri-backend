@@ -40,10 +40,10 @@ const startServer = async () => {
     console.log('✅ Database connection has been established successfully.');
 
     // Sync models in development (be careful with this in production)
-    if (process.env.NODE_ENV === 'development') {
-      await sequelize.sync({ alter: true });
-      console.log('✅ Database synchronized');
-    }
+    // if (process.env.NODE_ENV === 'development') {
+    //   await sequelize.sync({ alter: false });
+    //   console.log('✅ Database synchronized');
+    // }
 
     // Seed initial data in development
     if (process.env.NODE_ENV === 'development') {

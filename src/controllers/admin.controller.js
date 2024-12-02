@@ -57,6 +57,42 @@ exports.getAllPatients = async (req, res, next) => {
   }
 };
 
+
+exports.getPatientsBasicInfo = async (req, res, next) => {
+  try {
+    const patients = await User.findAll({
+      where: { 
+        role: 'patient',
+        deletedAt: null
+      },
+      attributes: [
+        'id', 
+        'name', 
+        'email', 
+        'contactNumber',
+        'gender',
+        'bloodGroup'
+      ],
+      raw: true
+    });
+
+    res.json({
+      success: true,
+      patients: patients || []
+    });
+
+  } catch (error) {
+    console.error('Error in getPatientsBasicInfo:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      }
+    });
+  }
+};
+
 exports.getAllDoctors = async (req, res, next) => {
   try {
     const doctors = await User.findAll({

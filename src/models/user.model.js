@@ -14,6 +14,20 @@ class User extends Model {
       type: DataTypes.STRING,
       allowNull: true
     },
+    gender: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      validate: {
+        isIn: [['MALE', 'FEMALE', 'OTHER']]
+      }
+    },
+    bloodGroup: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      validate: {
+        isIn: [['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']]
+      }
+    },
     email: {
       type: DataTypes.STRING,
       allowNull: false,
