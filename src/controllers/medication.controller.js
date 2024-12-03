@@ -81,6 +81,74 @@ exports.createPrescription = async (req, res, next) => {
   }
 };
 
+exports.getDoctorPrescription = async (req, res, next) => {
+  try {
+    const doctorId = req.user.id;
+    const { id } = req.params;
+
+    const prescription = await Prescription.findOne({
+      where: { 
+        id,
+        doctorId 
+      },
+      include: [
+        {
+          model: Medication,
+          through: {
+            model: PrescriptionMedications,
+            attributes: ['quantity', 'specialInstructions']
+          }
+        },
+        {
+          model: User,
+          as: 'patient',
+          attributes: ['id', 'name', 'email']
+        }
+      ]
+    });
+
+    if (!prescription) {
+      return res.status(404).json({ message: 'Prescription not found' });
+    }
+
+    res.json({ prescription });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getPrescription = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const prescription = await Prescription.findOne({
+      where: { id },
+      include: [
+        {
+          model: Medication,
+          through: {
+            model: PrescriptionMedications,
+            attributes: ['quantity', 'specialInstructions']
+          }
+        },
+        {
+          model: User,
+          as: 'patient',
+          attributes: ['id', 'name', 'email']
+        }
+      ]
+    });
+
+    if (!prescription) {
+      return res.status(404).json({ message: 'Prescription not found' });
+    }
+
+    res.json({ prescription });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.getPatientPrescriptions = async (req, res, next) => {
   try {
     const patientId = req.user.id;

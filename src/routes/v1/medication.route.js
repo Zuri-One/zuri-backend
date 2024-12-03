@@ -4,6 +4,12 @@ const router = express.Router();
 const medicationController = require('../../controllers/medication.controller');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
+// Open route for viewing prescriptions
+router.get(
+  '/prescriptions/:id',  // Changed from /doctor/prescriptions/:id
+  medicationController.getPrescription  // New controller method
+);
+
 // Protected routes
 router.use(authenticate);
 
