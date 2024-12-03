@@ -272,3 +272,178 @@ exports.getDoctorById = async (req, res, next) => {
     next(error);
   }
 };
+
+
+exports.getAllStaff = async (req, res, next) => {
+  try {
+    const staff = await User.findAll({
+      where: { 
+        role: {
+          [Op.notIn]: ['patient', 'admin']
+        }
+      },
+      attributes: { exclude: ['password'] },
+      include: [
+        {
+          model: DoctorProfile,
+          required: false // Make it optional since not all staff are doctors
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json({
+      success: true,
+      staff: staff.map(member => ({
+        ...member.toJSON(),
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update staff status
+exports.updateStaffStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const validStatuses = ['active', 'suspended', 'on_leave'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status'
+      });
+    }
+
+    const staff = await User.findOne({
+      where: { 
+        id,
+        role: {
+          [Op.notIn]: ['patient', 'admin']
+        }
+      }
+    });
+
+    if (!staff) {
+      return res.status(404).json({
+        success: false,
+        message: 'Staff member not found'
+      });
+    }
+
+    await staff.update({ status });
+
+    res.json({
+      success: true,
+      message: 'Staff status updated successfully',
+      staff: {
+        id: staff.id,
+        name: staff.name,
+        email: staff.email,
+        role: staff.role,
+        status: staff.status
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Delete staff member
+exports.deleteStaff = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const staff = await User.findOne({
+      where: { 
+        id,
+        role: {
+          [Op.notIn]: ['patient', 'admin']
+        }
+      }
+    });
+
+    if (!staff) {
+      return res.status(404).json({
+        success: false,
+        message: 'Staff member not found'
+      });
+    }
+
+    // Soft delete
+    await staff.update({ isActive: false });
+    // If you want hard delete instead:
+    // await staff.destroy();
+
+    res.json({
+      success: true,
+      message: 'Staff member deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Update staff details
+exports.updateStaff = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      department,
+      licenseNumber,
+      specialization,
+      contactNumber
+    } = req.body;
+
+    const staff = await User.findOne({
+      where: { 
+        id,
+        role: {
+          [Op.notIn]: ['patient', 'admin']
+        }
+      },
+      include: [
+        {
+          model: DoctorProfile,
+          required: false
+        }
+      ]
+    });
+
+    if (!staff) {
+      return res.status(404).json({
+        success: false,
+        message: 'Staff member not found'
+      });
+    }
+
+    // Update basic staff details
+    await staff.update({
+      name,
+      department,
+      licenseNumber,
+      contactNumber
+    });
+
+    // If staff is a doctor, update their profile
+    if (staff.role === 'doctor' && staff.DoctorProfile) {
+      await staff.DoctorProfile.update({
+        specialization
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Staff details updated successfully',
+      staff: {
+        ...staff.toJSON(),
+        DoctorProfile: staff.DoctorProfile
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};

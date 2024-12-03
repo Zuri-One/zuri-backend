@@ -1,9 +1,10 @@
-const { Medication, Prescription, User, Appointment } = require('../models');
+const { Medication, Prescription, User, Appointment, PrescriptionMedications } = require('../models');
 const { Op } = require('sequelize');
 const moment = require('moment');
 const sendEmail = require('../utils/email.util');
-const {   generatePrescriptionEmail
-} = require('../utils/email-templates.util');
+const { generatePrescriptionEmail } = require('../utils/email-templates.util');
+
+
 
 exports.createPrescription = async (req, res, next) => {
   try {
@@ -139,7 +140,10 @@ exports.getDoctorPrescriptions = async (req, res, next) => {
       include: [
         {
           model: Medication,
-          through: { attributes: ['dosage', 'frequency', 'duration', 'instructions'] }
+          through: {
+            model: PrescriptionMedications,
+            attributes: ['quantity', 'specialInstructions']
+          }
         },
         {
           model: User,
