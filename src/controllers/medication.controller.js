@@ -152,26 +152,17 @@ exports.getPrescription = async (req, res, next) => {
 exports.getPatientPrescriptions = async (req, res, next) => {
   try {
     const patientId = req.user.id;
-    const { status, startDate, endDate } = req.query;
-
-    const whereClause = { patientId };
-    
-    if (status) {
-      whereClause.status = status;
-    }
-
-    if (startDate || endDate) {
-      whereClause.createdAt = {};
-      if (startDate) whereClause.createdAt[Op.gte] = new Date(startDate);
-      if (endDate) whereClause.createdAt[Op.lte] = new Date(endDate);
-    }
+    console.log('Fetching prescriptions for patient:', patientId);
 
     const prescriptions = await Prescription.findAll({
-      where: whereClause,
+      where: { patientId },
       include: [
         {
           model: Medication,
-          through: { attributes: ['dosage', 'frequency', 'duration', 'instructions'] }
+          through: { 
+            model: PrescriptionMedications,
+            attributes: ['quantity', 'specialInstructions'] 
+          }
         },
         {
           model: User,
@@ -182,8 +173,29 @@ exports.getPatientPrescriptions = async (req, res, next) => {
       order: [['createdAt', 'DESC']]
     });
 
-    res.json({ prescriptions });
+    // Transform the data to include medication details
+    const formattedPrescriptions = prescriptions.map(prescription => ({
+      id: prescription.id,
+      diagnosis: prescription.diagnosis,
+      notes: prescription.notes,
+      status: prescription.status,
+      validUntil: prescription.validUntil,
+      createdAt: prescription.createdAt,
+      doctor: prescription.doctor,
+      medications: prescription.Medications?.map(med => ({
+        id: med.id,
+        name: med.name,
+        quantity: med.PrescriptionMedications.quantity,
+        specialInstructions: med.PrescriptionMedications.specialInstructions
+      })) || []
+    }));
+
+    res.json({ 
+      success: true,
+      prescriptions: formattedPrescriptions 
+    });
   } catch (error) {
+    console.error('Prescription fetch error:', error);
     next(error);
   }
 };

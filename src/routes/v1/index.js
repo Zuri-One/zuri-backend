@@ -14,6 +14,7 @@ const recordRoutes = (require('./medicalrecord.route'))
 const labRoutes = (require('./lab.route'))
 const labTemplateRoutes = require('./lab-template.route'); 
 const pharmacyRoutes = require('./pharmacy.route'); 
+const uploadRoutes = require('./medical-records.route'); 
 
 const videoRoutes = require('./video.route')
 
@@ -30,6 +31,7 @@ router.use('/records', recordRoutes);
 router.use('/labs', labRoutes);
 router.use('/lab-templates', labTemplateRoutes);
 router.use('/pharmacy', pharmacyRoutes);
+router.use('/medical-records', uploadRoutes);
 // Health check route
 router.get('/health', (req, res) => {
   res.json({

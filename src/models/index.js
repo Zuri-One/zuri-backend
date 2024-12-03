@@ -21,13 +21,16 @@ const models = {
   MedicationInventory: require(path.join(__dirname, 'medication-inventory.model')),
   MedicationDispense: require(path.join(__dirname, 'medication-dispense.model')),
   StockMovement: require(path.join(__dirname, 'stock-movement.model')),
-  Pharmacy: require(path.join(__dirname, 'pharmacy.model'))
+  Pharmacy: require(path.join(__dirname, 'pharmacy.model')),
+  MedicalDocument: require(path.join(__dirname, 'medical-document.model')), 
+  DocumentShare: require(path.join(__dirname, 'document-share.model'))
 };
+
 // Helper function to initialize a model based on its structure
 const initializeModel = (Model) => {
-  // For models using initModel pattern
-  if (typeof Model.initModel === 'function') {
-    return Model.initModel(sequelize);
+  // For models using initialize pattern (like MedicalDocument)
+  if (typeof Model.initialize === 'function') {
+    return Model.initialize(sequelize);
   }
   
   // For models using direct init with schema
@@ -46,7 +49,12 @@ const initializeModel = (Model) => {
 // Initialize all models
 const initializedModels = Object.entries(models).reduce((acc, [key, Model]) => {
   try {
-    acc[key] = initializeModel(Model);
+    if (key === 'MedicalDocument') {
+      // Special handling for MedicalDocument
+      acc[key] = Model.initialize(sequelize);
+    } else {
+      acc[key] = initializeModel(Model);
+    }
     return acc;
   } catch (error) {
     console.error(`Error initializing model ${key}:`, error);
