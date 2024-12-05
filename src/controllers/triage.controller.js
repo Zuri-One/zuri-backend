@@ -1,67 +1,102 @@
 // controllers/triage.controller.js
 const { Triage, User, Department } = require('../models');
 const { Op } = require('sequelize');
+const { sequelize } = require('../config/database');
 
 exports.createTriageAssessment = async (req, res, next) => {
   try {
-    const {
-      patientId,
-      chiefComplaint,
-      vitalSigns,
-      consciousness,
-      symptoms,
-      medicalHistory,
-      physicalAssessment
-    } = req.body;
+    const { patientId, chiefComplaint, vitalSigns, consciousness } = req.body;
 
+    // Create base triage with calculated fields
     const triage = await Triage.create({
       patientId,
       assessedBy: req.user.id,
+      assessmentDateTime: new Date(),
       chiefComplaint,
       vitalSigns,
       consciousness,
-      symptoms,
-      medicalHistory,
-      physicalAssessment
+      status: 'IN_PROGRESS',
+      category: 'GREEN',  // Default
+      priorityScore: 0,   // Will be updated
+      recommendedAction: 'STANDARD_CARE',
+      reassessmentRequired: false,
+      alerts: []
     });
 
-    // Calculate initial priority score and category
+    // Calculate scores and update
     const priorityScore = triage.calculatePriorityScore();
     const category = triage.determineCategory();
 
-    // Update triage with calculated values
     await triage.update({
       priorityScore,
       category,
-      recommendedAction: determineRecommendedAction(category, vitalSigns, symptoms)
+      recommendedAction: determineRecommendedAction(category)
     });
-
-    // If critical, create immediate alert
-    if (category === 'RED') {
-      await createCriticalAlert(triage);
-    }
 
     res.status(201).json({
       success: true,
-      triage: await Triage.findByPk(triage.id, {
-        include: [
-          {
-            model: User,
-            as: 'patient',
-            attributes: ['id', 'name', 'dateOfBirth', 'gender']
-          },
-          {
-            model: User,
-            as: 'nurse',
-            attributes: ['id', 'name']
-          }
-        ]
-      })
+      triage
     });
+  } catch (error) {
+    console.error('Triage creation error:', error);
+    next(error);
+  }
+};
+
+const determineRecommendedAction = (category) => {
+  switch(category) {
+    case 'RED': return 'IMMEDIATE_TREATMENT';
+    case 'YELLOW': return 'URGENT_CARE';
+    default: return 'STANDARD_CARE';
+  }
+};
+
+
+exports.getActiveTriages = async (req, res, next) => {
+  try {
+    const triages = await Triage.findAll({
+      where: { status: ['IN_PROGRESS', 'REASSESSED'] },
+      include: [
+        {
+          model: User,
+          as: 'patient',
+          attributes: ['id', 'name', 'gender']
+        },
+        {
+          model: User,
+          as: 'nurse',
+          attributes: ['id', 'name']
+        }
+      ],
+      order: [['category', 'ASC'], ['assessmentDateTime', 'ASC']]
+    });
+ 
+    console.log("Active triages data:", JSON.stringify(triages, null, 2));
+    res.json({ success: true, triages });
+  } catch (error) {
+    next(error);
+  }
+ };
+
+exports.getTriageStats = async (req, res, next) => {
+  try {
+    // Count by category
+    const stats = {
+      RED: await Triage.count({ where: { category: 'RED' } }), 
+      YELLOW: await Triage.count({ where: { category: 'YELLOW' } }),
+      GREEN: await Triage.count({ where: { category: 'GREEN' } }),
+      BLACK: await Triage.count({ where: { category: 'BLACK' } }),
+      vitalAlerts: await Triage.count({
+        where: sequelize.literal(`"vitalSigns"->>'isAbnormal' = 'true'`)
+      })
+    };
+
+    res.json({ success: true, stats });
   } catch (error) {
     next(error);
   }
 };
+
 
 exports.updateTriageAssessment = async (req, res, next) => {
   try {
@@ -93,46 +128,49 @@ exports.updateTriageAssessment = async (req, res, next) => {
   }
 };
 
-exports.getActiveTriages = async (req, res, next) => {
-  try {
-    const triages = await Triage.findAll({
-      where: {
-        status: {
-          [Op.in]: ['IN_PROGRESS', 'REASSESSED']
-        }
-      },
-      include: [
-        {
-          model: User,
-          as: 'patient',
-          attributes: ['id', 'name', 'dateOfBirth', 'gender']
-        },
-        {
-          model: User,
-          as: 'nurse',
-          attributes: ['id', 'name']
-        }
-      ],
-      order: [
-        [sequelize.literal(`CASE 
-          WHEN category = 'RED' THEN 1 
-          WHEN category = 'YELLOW' THEN 2 
-          WHEN category = 'GREEN' THEN 3 
-          ELSE 4 END`), 'ASC'],
-        ['assessmentDateTime', 'ASC']
-      ]
-    });
+// exports.getActiveTriages = async (req, res, next) => {
+//   try {
+//     const triages = await Triage.findAll({
+//       where: {
+//         status: {
+//           [Op.in]: ['IN_PROGRESS', 'REASSESSED']
+//         }
+//       },
+//       include: [
+//         {
+//           model: User,
+//           as: 'patient',
+//           attributes: ['id', 'name', 'dateOfBirth', 'gender']
+//         },
+//         {
+//           model: User,
+//           as: 'nurse',
+//           attributes: ['id', 'name']
+//         }
+//       ],
+//       order: [
+//         [sequelize.literal(`CASE 
+//           WHEN category = 'RED' THEN 1 
+//           WHEN category = 'YELLOW' THEN 2 
+//           WHEN category = 'GREEN' THEN 3 
+//           ELSE 4 END`), 'ASC'],
+//         ['assessmentDateTime', 'ASC']
+//       ]
+//     });
 
-    res.json({
-      success: true,
-      triages
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+//     res.json({
+//       success: true,
+//       triages
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 
 exports.getTriageById = async (req, res, next) => {
+  if (req.params.id === 'stats') {
+    return this.getTriageStats(req, res, next);
+  }
   try {
     const { id } = req.params;
 
@@ -175,7 +213,7 @@ exports.getTriageById = async (req, res, next) => {
 exports.reassessPatient = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { vitalSigns, notes } = req.body;
+    const { vitalSigns } = req.body;
 
     const triage = await Triage.findByPk(id);
     if (!triage) {
@@ -188,13 +226,6 @@ exports.reassessPatient = async (req, res, next) => {
     // Update vital signs and recalculate
     await triage.updateVitalSigns(vitalSigns);
 
-    // Add reassessment note
-    await triage.createTriageNote({
-      type: 'REASSESSMENT',
-      notes,
-      createdBy: req.user.id
-    });
-
     res.json({
       success: true,
       message: 'Patient reassessed successfully',
@@ -204,13 +235,12 @@ exports.reassessPatient = async (req, res, next) => {
     next(error);
   }
 };
-
-// Helper functions
-const determineRecommendedAction = (category, vitalSigns, symptoms) => {
-  if (category === 'RED') return 'IMMEDIATE_TREATMENT';
-  if (category === 'YELLOW') return 'URGENT_CARE';
-  return 'STANDARD_CARE';
-};
+// // Helper functions
+// const determineRecommendedAction = (category, vitalSigns, symptoms) => {
+//   if (category === 'RED') return 'IMMEDIATE_TREATMENT';
+//   if (category === 'YELLOW') return 'URGENT_CARE';
+//   return 'STANDARD_CARE';
+// };
 
 const createCriticalAlert = async (triage) => {
   // Implementation for critical alert notification
