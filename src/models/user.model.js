@@ -201,6 +201,16 @@ class User extends Model {
       type: DataTypes.DATE,
       allowNull: true
     },
+    nationalId: {
+      type: DataTypes.STRING,
+      unique: true,
+      allowNull: true
+    },
+    registrationId: {
+      type: DataTypes.STRING,
+      unique: true,
+      allowNull: true
+    },
     permissions: {
       type: DataTypes.JSONB,
       defaultValue: {},
@@ -405,6 +415,18 @@ class User extends Model {
       hooks: {
         beforeValidate: async (user) => {
           console.log('beforeValidate hook triggered');
+          // Normalize role case
+          if (user.role) {
+            user.role = user.role.toUpperCase();
+          }
+          // Normalize gender case
+          if (user.gender) {
+            user.gender = user.gender.toUpperCase();
+          }
+          // Normalize blood group case
+          if (user.bloodGroup) {
+            user.bloodGroup = user.bloodGroup.toUpperCase();
+          }
         },
         beforeCreate: async (user) => {
           console.log('beforeCreate hook triggered');
@@ -426,7 +448,6 @@ class User extends Model {
           console.log('afterSave hook triggered');
           console.log('Final stored password:', user.password);
         }
-      
       },
       indexes: [
         {
@@ -453,7 +474,7 @@ class User extends Model {
         }
       ]
     });
-  }
+}
 }
 
 module.exports = User;

@@ -118,7 +118,19 @@ exports.verifyEmailWithCode = async (req, res, next) => {
   }
 };
 
+
+const generateRegistrationId = (name, date = new Date()) => {
+  const day = String(date.getDate()).padStart(2, '0').slice(-2);
+  const month = String(date.getMonth() + 1).padStart(2, '0').slice(-2);
+  const year = String(date.getFullYear()).slice(-2);
+  const cleanName = name.replace(/[^a-zA-Z]/g, '').toUpperCase();
+  return `ZURI-${cleanName}-${day}${month}${year}`;
+};
+
+
+
 exports.register = async (req, res, next) => {
+  console.log('Complete request body:', req.body);
   try {
     const {
       name,
@@ -130,7 +142,14 @@ exports.register = async (req, res, next) => {
       licenseNumber,
       specialization,
       qualification,
-      contactNumber
+      contactNumber,
+      gender,
+      bloodGroup,
+      dateOfBirth,
+      emergencyContact,
+      medicalHistory,
+      insuranceInfo,
+      nationalId  // Add this field
     } = req.body;
 
     console.log('Incoming registration data:', {
@@ -159,13 +178,21 @@ exports.register = async (req, res, next) => {
       });
     }
 
-    let user = await User.findOne({
-      where: { email: email.toLowerCase() }
+    // Check for existing email or nationalId (for patients)
+    const existingUser = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: email.toLowerCase() },
+          ...(!role || role === 'patient' ? [{ nationalId }] : [])
+        ]
+      }
     });
 
-    if (user) {
+    if (existingUser) {
       return res.status(400).json({
-        message: 'Email already registered'
+        message: existingUser.email === email.toLowerCase() ? 
+          'Email already registered' : 
+          'National ID already registered'
       });
     }
 
@@ -187,6 +214,18 @@ exports.register = async (req, res, next) => {
 
     let normalizedRole = role ? role.toLowerCase() : 'patient';
     
+    // If it's a patient registration, require National ID
+    if ((!role || normalizedRole === 'patient') && !nationalId) {
+      return res.status(400).json({
+        message: 'National ID is required for patient registration'
+      });
+    }
+
+    // Generate registration ID for patients
+    const registrationId = (!role || normalizedRole === 'patient') ? 
+      `ZURI-${name.replace(/[^a-zA-Z]/g, '').toUpperCase()}-${new Date().toISOString().slice(2,10).replace(/-/g, '')}` : 
+      null;
+    
     // These special cases should also be lowercase
     if (normalizedRole === 'lab_technician') {
       normalizedRole = 'lab_technician';
@@ -200,7 +239,6 @@ exports.register = async (req, res, next) => {
 
     console.log('Attempting to create user with role:', normalizedRole);
 
-    // Hash password before user creation
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     console.log('Password hashed successfully');
@@ -212,21 +250,29 @@ exports.register = async (req, res, next) => {
       user = await User.create({
         name,
         email: email.toLowerCase(),
-        password: hashedPassword,  // Use hashed password here
-        role: normalizedRole,
+        password: hashedPassword,
+        role: normalizedRole,  // Let the hook handle the case conversion
         department,
         employeeId,
         licenseNumber,
         specialization,
         qualification,
         contactNumber,
+        gender,             // Let the hook handle the case conversion
+        bloodGroup,         // Let the hook handle the case conversion
+        dateOfBirth,
+        emergencyContact,
+        medicalHistory,
+        insuranceInfo,
+        nationalId,         // Add the new field
+        registrationId,     // Add the registration ID
         emailVerificationCode: verificationCode,
         emailVerificationToken: crypto
           .createHash('sha256')
           .update(verificationToken)
           .digest('hex'),
         emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        joiningDate: normalizedRole !== 'PATIENT' ? new Date() : null
+        joiningDate: normalizedRole !== 'patient' ? new Date() : null
       });
     } catch (createError) {
       console.error('User creation error:', createError);
@@ -246,7 +292,10 @@ exports.register = async (req, res, next) => {
 
     res.status(201).json({
       message: 'Registration successful. Please verify your email.',
-      userId: user.id
+      userId: user.id,
+      ...((!role || normalizedRole === 'patient') && {
+        registrationId: user.registrationId
+      })
     });
   } catch (error) {
     next(error);

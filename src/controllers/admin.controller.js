@@ -274,7 +274,202 @@ exports.getDoctorById = async (req, res, next) => {
   }
 };
 
+exports.getPatientStats = async (req, res, next) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
+    const [
+      totalPatients,
+      newPatientsToday,
+      activePatients,
+      pendingAppointments,
+      genderStats,
+      weeklyRegistrations
+    ] = await Promise.all([
+      // Total patients count
+      User.count({
+        where: { 
+          role: 'patient'
+        }
+      }),
+
+      // New patients today
+      User.count({
+        where: {
+          role: 'patient',
+          createdAt: {
+            [Op.gte]: today
+          }
+        }
+      }),
+
+      // Active patients
+      User.count({
+        where: {
+          role: 'patient',
+          isActive: true
+        }
+      }),
+
+      // Pending appointments
+      Appointment.count({
+        where: {
+          status: 'pending'
+        }
+      }),
+
+      // Gender distribution
+      User.findAll({
+        where: { role: 'patient' },
+        attributes: [
+          'gender',
+          [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+        ],
+        group: ['gender']
+      }),
+
+      // Weekly registration trend (last 7 days)
+      User.findAll({
+        where: {
+          role: 'patient',
+          createdAt: {
+            [Op.gte]: new Date(new Date() - 7 * 24 * 60 * 60 * 1000)
+          }
+        },
+        attributes: [
+          [sequelize.fn('date', sequelize.col('createdAt')), 'date'],
+          [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+        ],
+        group: [sequelize.fn('date', sequelize.col('createdAt'))]
+      })
+    ]);
+
+    // Process gender stats
+    const patientsByGender = {
+      male: 0,
+      female: 0,
+      other: 0
+    };
+
+    genderStats.forEach(stat => {
+      const gender = stat.gender?.toLowerCase() || 'other';
+      patientsByGender[gender] = parseInt(stat.dataValues.count);
+    });
+
+    // Format registration trend
+    const registrationTrend = weeklyRegistrations.map(day => ({
+      date: day.dataValues.date,
+      count: parseInt(day.dataValues.count)
+    }));
+
+    // Fill in missing days with zero counts
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      return date.toISOString().split('T')[0];
+    }).reverse();
+
+    const filledRegistrationTrend = last7Days.map(date => ({
+      date,
+      count: registrationTrend.find(day => day.date === date)?.count || 0
+    }));
+
+    res.json({
+      success: true,
+      stats: {
+        totalPatients,
+        newPatientsToday,
+        activePatients,
+        pendingAppointments,
+        patientsByGender,
+        registrationTrend: filledRegistrationTrend
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching patient stats:', error);
+    next(error);
+  }
+};
+
+// Add this endpoint for single patient retrieval by email
+exports.getPatientByEmail = async (req, res, next) => {
+  try {
+    const { email } = req.params;
+
+    const patient = await User.findOne({
+      where: {
+        email: email.toLowerCase(),
+        role: 'patient'
+      },
+      attributes: { exclude: ['password'] }
+    });
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      patient
+    });
+
+  } catch (error) {
+    console.error('Error fetching patient by email:', error);
+    next(error);
+  }
+};
+
+
+exports.searchPatients = async (req, res, next) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.trim() === '') {
+      return res.json({
+        success: true,
+        patients: []
+      });
+    }
+
+    const patients = await User.findAll({
+      where: {
+        role: {
+          [Op.or]: [{ [Op.eq]: 'patient' }, { [Op.eq]: 'patient' }]
+        },
+        [Op.or]: [
+          { name: { [Op.iLike]: `%${q}%` } },
+          { email: { [Op.iLike]: `%${q}%` } },
+          { nationalId: { [Op.iLike]: `%${q}%` } },
+          { registrationId: { [Op.iLike]: `%${q}%` } },
+          { contactNumber: { [Op.iLike]: `%${q}%` } }
+        ]
+      },
+      attributes: { 
+        exclude: ['password'],
+        include: [
+          'id', 'name', 'email', 'contactNumber', 
+          'gender', 'bloodGroup', 'nationalId', 
+          'registrationId', 'isActive'
+        ] 
+      }
+    });
+
+    console.log('Search results:', patients);
+
+    res.json({
+      success: true,
+      patients: patients.map(patient => patient.toJSON())
+    });
+  } catch (error) {
+    console.error('Search error:', error);
+    next(error);
+  }
+};
 
 exports.getAllStaff = async (req, res, next) => {
   try {
