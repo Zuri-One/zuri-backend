@@ -275,26 +275,32 @@ class User extends Model {
   };
 
   async hasPermission(permission) {
-    if (this.role === 'ADMIN') return true;
-    const rolePerms = User.rolePermissions[this.role] || [];
+    if (this.role.toUpperCase() === 'ADMIN') return true;
+    const rolePerms = User.rolePermissions[this.role.toUpperCase()] || [];
     return rolePerms.includes(permission);
   }
 
   async comparePassword(candidatePassword) {
     try {
-      return await bcrypt.compare(candidatePassword, this.password);
+      console.log('Comparing passwords for:', this.email);
+      console.log('Stored hash:', this.password);
+      const isMatch = await bcrypt.compare(candidatePassword, this.password);
+      console.log('Password match result:', isMatch);
+      return isMatch;
     } catch (error) {
       console.error('Password comparison error:', error);
+      console.error('Error details:', error.message);
       return false;
     }
   }
 
+  
   generateAuthToken() {
     return jwt.sign(
       {
         id: this.id,
-        role: this.role,
-        permissions: User.rolePermissions[this.role] || []
+        role: this.role,  // Keep original case
+        permissions: User.rolePermissions[this.role.toUpperCase()] || []
       },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRE || '24h' }
@@ -397,12 +403,30 @@ class User extends Model {
       timestamps: true,
       paranoid: false,
       hooks: {
+        beforeValidate: async (user) => {
+          console.log('beforeValidate hook triggered');
+        },
+        beforeCreate: async (user) => {
+          console.log('beforeCreate hook triggered');
+        },
         beforeSave: async (user) => {
+          console.log('beforeSave hook triggered');
           if (user.changed('password')) {
+            console.log('Password change detected for:', user.email);
+            console.log('Original password:', user.password);
             const salt = await bcrypt.genSalt(10);
-            user.password = await bcrypt.hash(user.password, salt);
+            const hashedPassword = await bcrypt.hash(user.password, salt);
+            user.password = hashedPassword;
+            console.log('New hashed password:', hashedPassword);
+          } else {
+            console.log('No password change detected');
           }
+        },
+        afterSave: async (user) => {
+          console.log('afterSave hook triggered');
+          console.log('Final stored password:', user.password);
         }
+      
       },
       indexes: [
         {

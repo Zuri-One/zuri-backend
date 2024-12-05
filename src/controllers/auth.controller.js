@@ -24,10 +24,11 @@ exports.staffLogin = async (req, res, next) => {
 
     const user = await User.findOne({ 
       where: { 
-        email: email.toLowerCase() // Add this where clause
+        email: email.toLowerCase() 
       } 
     });
 
+    // Change this condition to use lowercase for comparison
     if (!user || user.role === 'patient' || user.role === 'admin') {
       return res.status(401).json({
         message: 'Invalid credentials'
@@ -36,6 +37,8 @@ exports.staffLogin = async (req, res, next) => {
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      // Add some logging here to debug password issues
+      console.log('Password match failed for user:', email);
       return res.status(401).json({
         message: 'Invalid credentials'
       });
@@ -45,18 +48,20 @@ exports.staffLogin = async (req, res, next) => {
     user.lastLogin = new Date();
     await user.save();
 
+    // Make sure this matches your frontend ROLE_REDIRECTS
     res.json({
       token,
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: user.role,  // Will be lowercase from DB
         department: user.department,
-        permissions: User.rolePermissions[user.role] || []
+        permissions: User.rolePermissions[user.role.toUpperCase()] || []
       }
     });
   } catch (error) {
+    console.error('Login error:', error);
     next(error);
   }
 };
@@ -128,7 +133,11 @@ exports.register = async (req, res, next) => {
       contactNumber
     } = req.body;
 
-    // Validate role
+    console.log('Incoming registration data:', {
+      role,
+      normalizedRole: role ? role.toUpperCase() : 'PATIENT'
+    });
+
     const validRoles = [
       'patient',
       'doctor',
@@ -150,7 +159,6 @@ exports.register = async (req, res, next) => {
       });
     }
 
-    // Check if user exists
     let user = await User.findOne({
       where: { email: email.toLowerCase() }
     });
@@ -161,7 +169,6 @@ exports.register = async (req, res, next) => {
       });
     }
 
-    // Validate required fields based on role
     if (role !== 'patient') {
       if (!employeeId) {
         return res.status(400).json({
@@ -169,7 +176,6 @@ exports.register = async (req, res, next) => {
         });
       }
 
-      // Additional validation for medical professionals
       if (['doctor', 'nurse', 'pharmacist', 'lab_technician'].includes(role)) {
         if (!licenseNumber) {
           return res.status(400).json({
@@ -179,35 +185,59 @@ exports.register = async (req, res, next) => {
       }
     }
 
-    // Generate verification code and token
+    let normalizedRole = role ? role.toLowerCase() : 'patient';
+    
+    // These special cases should also be lowercase
+    if (normalizedRole === 'lab_technician') {
+      normalizedRole = 'lab_technician';
+    } else if (normalizedRole === 'billing_staff') {
+      normalizedRole = 'billing_staff';
+    } else if (normalizedRole === 'ward_manager') {
+      normalizedRole = 'ward_manager';
+    } else if (normalizedRole === 'medical_assistant') {
+      normalizedRole = 'medical_assistant';
+    }
+
+    console.log('Attempting to create user with role:', normalizedRole);
+
+    // Hash password before user creation
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    console.log('Password hashed successfully');
+
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
-    // Create new user with role-specific fields
-    user = await User.create({
-      name,
-      email: email.toLowerCase(),
-      password,
-      role: role || 'patient',
-      department,
-      employeeId,
-      licenseNumber,
-      specialization,
-      qualification,
-      contactNumber,
-      emailVerificationCode: verificationCode,
-      emailVerificationToken: crypto
-        .createHash('sha256')
-        .update(verificationToken)
-        .digest('hex'),
-      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      joiningDate: role !== 'patient' ? new Date() : null
-    });
+    try {
+      user = await User.create({
+        name,
+        email: email.toLowerCase(),
+        password: hashedPassword,  // Use hashed password here
+        role: normalizedRole,
+        department,
+        employeeId,
+        licenseNumber,
+        specialization,
+        qualification,
+        contactNumber,
+        emailVerificationCode: verificationCode,
+        emailVerificationToken: crypto
+          .createHash('sha256')
+          .update(verificationToken)
+          .digest('hex'),
+        emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        joiningDate: normalizedRole !== 'PATIENT' ? new Date() : null
+      });
+    } catch (createError) {
+      console.error('User creation error:', createError);
+      return res.status(400).json({
+        message: 'Invalid role or data format',
+        error: createError.message
+      });
+    }
 
-    // Generate verification URL
     const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
 
-    // Send verification email
     await sendEmail({
       to: user.email,
       subject: 'Verify your email',
@@ -222,6 +252,7 @@ exports.register = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // Update login controller to handle role-specific logic
 exports.login = async (req, res, next) => {
