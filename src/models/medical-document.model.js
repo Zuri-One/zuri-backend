@@ -83,7 +83,7 @@ class MedicalDocument extends Model {
       modelName: 'MedicalDocument',
       tableName: 'medical_documents',
       timestamps: true,
-      paranoid: true,
+      paranoid: false,
       underscored: true
     });
 

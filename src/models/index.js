@@ -44,7 +44,7 @@ const initializeModel = (Model) => {
         sequelize,
         modelName: Model.name,
         timestamps: true,
-        paranoid: true
+        paranoid: false
       });
     }
     

@@ -91,7 +91,7 @@ class Department extends Model {
       modelName: 'Department',
       tableName: 'departments',
       timestamps: true,
-      paranoid: true,
+      paranoid: false,
       indexes: [
         {
           unique: true,

@@ -166,7 +166,7 @@ class Appointment extends Model {
       modelName: 'Appointment',
       tableName: 'Appointments',
       timestamps: true,
-      paranoid: true, // Enables soft deletes
+      paranoid: false, // Enables soft deletes
       indexes: [
         {
           fields: ['patientId']

@@ -395,7 +395,7 @@ class User extends Model {
       modelName: 'User',
       tableName: 'Users',
       timestamps: true,
-      paranoid: true,
+      paranoid: false,
       hooks: {
         beforeSave: async (user) => {
           if (user.changed('password')) {
