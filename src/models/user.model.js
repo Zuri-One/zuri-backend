@@ -46,27 +46,89 @@ class User extends Model {
     },
     role: {
       type: DataTypes.ENUM(
-        'patient',
-        'doctor',
-        'nurse',
-        'lab_technician',
-        'pharmacist',
-        'radiologist',
-        'physiotherapist',
-        'nutritionist',
-        'receptionist',
-        'admin',
-        'billing_staff',
-        'medical_assistant',
-        'hospital_admin',
-        'ward_manager'
+        'ADMIN',
+        'DOCTOR',
+        'NURSE',
+        'RECEPTIONIST',
+        'LAB_TECHNICIAN',
+        'PHARMACIST',
+        'RADIOLOGIST',
+        'PHYSIOTHERAPIST',
+        'CARDIOLOGIST',
+        'NEUROLOGIST',
+        'PEDIATRICIAN',
+        'PSYCHIATRIST',
+        'SURGEON',
+        'ANESTHESIOLOGIST',
+        'EMERGENCY_PHYSICIAN',
+        'PATIENT',
+        'WARD_MANAGER',
+        'BILLING_STAFF'
       ),
       allowNull: false,
-      defaultValue: 'patient'
+      defaultValue: 'PATIENT'
     },
-    department: {
+    departmentId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'departments',
+        key: 'id'
+      }
+    },
+    specialization: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      defaultValue: [],
+      allowNull: true
+    },
+    staffId: {
+      type: DataTypes.STRING,
+      unique: true,
+      allowNull: true
+    },
+    primaryDepartmentId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'departments',
+        key: 'id'
+      }
+    },
+    secondaryDepartments: {
+      type: DataTypes.ARRAY(DataTypes.UUID),
+      defaultValue: [],
+      allowNull: true
+    },
+    designation: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    expertise: {
+      type: DataTypes.JSONB,
+      defaultValue: {},
+      // Structure: {
+      //   skills: [],
+      //   certifications: [],
+      //   specialProcedures: []
+      // }
+    },
+    dutySchedule: {
+      type: DataTypes.JSONB,
+      defaultValue: {},
+      // Structure: {
+      //   monday: { shifts: ['MORNING'], hours: '9:00-17:00' }
+      // }
+    },
+    emergencyContact: {
+      type: DataTypes.JSONB,
+      defaultValue: {},
+      allowNull: true,
+      // Structure: {
+      //   name: string,
+      //   relationship: string,
+      //   phone: string,
+      //   address: string
+      // }
     },
     employeeId: {
       type: DataTypes.STRING,
@@ -74,10 +136,6 @@ class User extends Model {
       unique: true
     },
     licenseNumber: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
-    specialization: {
       type: DataTypes.STRING,
       allowNull: true
     },
@@ -139,11 +197,6 @@ class User extends Model {
       type: DataTypes.STRING,
       allowNull: true
     },
-    emergencyContact: {
-      type: DataTypes.JSONB,
-      defaultValue: {},
-      allowNull: true
-    },
     joiningDate: {
       type: DataTypes.DATE,
       allowNull: true
@@ -166,7 +219,7 @@ class User extends Model {
 
   // Role-based permission checks
   static rolePermissions = {
-    doctor: [
+    DOCTOR: [
       'view_patient_records',
       'create_prescriptions',
       'update_patient_records',
@@ -174,66 +227,55 @@ class User extends Model {
       'order_lab_tests',
       'view_lab_results'
     ],
-    nurse: [
+    NURSE: [
       'view_patient_records',
       'update_vitals',
       'administer_medication',
       'view_lab_results',
       'manage_ward_patients'
     ],
-    lab_technician: [
+    LAB_TECHNICIAN: [
       'view_lab_orders',
       'create_lab_results',
       'update_lab_results',
       'manage_lab_inventory'
     ],
-    pharmacist: [
+    PHARMACIST: [
       'view_prescriptions',
       'dispense_medication',
       'manage_pharmacy_inventory',
       'update_medication_records'
     ],
-    radiologist: [
+    RADIOLOGIST: [
       'view_imaging_orders',
       'create_imaging_results',
       'manage_imaging_equipment'
     ],
-    physiotherapist: [
+    PHYSIOTHERAPIST: [
       'view_patient_records',
       'create_therapy_plans',
       'update_therapy_records'
     ],
-    nutritionist: [
-      'view_patient_records',
-      'create_diet_plans',
-      'update_nutrition_records'
-    ],
-    receptionist: [
+    RECEPTIONIST: [
       'schedule_appointments',
       'register_patients',
       'manage_visitor_logs'
     ],
-    admin: ['all'],
-    hospital_admin: ['all'],
-    billing_staff: [
-      'create_invoices',
-      'process_payments',
-      'manage_insurance_claims'
-    ],
-    medical_assistant: [
-      'view_patient_records',
-      'update_vitals',
-      'assist_procedures'
-    ],
-    ward_manager: [
+    ADMIN: ['all'],
+    WARD_MANAGER: [
       'manage_ward_staff',
       'manage_ward_resources',
       'view_ward_reports'
+    ],
+    BILLING_STAFF: [
+      'create_invoices',
+      'process_payments',
+      'manage_insurance_claims'
     ]
   };
 
   async hasPermission(permission) {
-    if (this.role === 'admin' || this.role === 'hospital_admin') return true;
+    if (this.role === 'ADMIN') return true;
     const rolePerms = User.rolePermissions[this.role] || [];
     return rolePerms.includes(permission);
   }
@@ -259,18 +301,15 @@ class User extends Model {
     );
   }
 
-  // Helper method to safely get user data without sensitive fields
   toSafeObject() {
     const { password, resetPasswordToken, emailVerificationToken, ...safeUser } = this.toJSON();
     return safeUser;
   }
 
-  // Helper method to check if account is locked
   isAccountLocked() {
     return this.lockUntil && this.lockUntil > Date.now();
   }
 
-  // Helper method to increment login attempts
   async incrementLoginAttempts() {
     if (this.lockUntil && this.lockUntil < Date.now()) {
       this.loginAttempts = 1;
@@ -284,7 +323,6 @@ class User extends Model {
     await this.save();
   }
 
-  // Helper method to reset login attempts
   async resetLoginAttempts() {
     this.loginAttempts = 0;
     this.lockUntil = null;
@@ -292,38 +330,63 @@ class User extends Model {
   }
 
   static associate(models) {
-    this.hasMany(models.Appointment, { 
-      as: 'patientAppointments',
-      foreignKey: 'patientId',
-      onDelete: 'NO ACTION',
-      onUpdate: 'CASCADE'
-    });
-    
-    this.hasMany(models.Appointment, { 
-      as: 'doctorAppointments',
-      foreignKey: 'doctorId',
-      onDelete: 'NO ACTION',
-      onUpdate: 'CASCADE'
-    });
-    
-    this.hasOne(models.DoctorProfile, {
-      foreignKey: 'userId'
-    });
+    // Department associations
+    if (models.Department) {
+      this.belongsTo(models.Department, {
+        foreignKey: 'departmentId',
+        as: 'assignedDepartment'
+      });
+      
+      this.belongsTo(models.Department, {
+        foreignKey: 'primaryDepartmentId',
+        as: 'primaryDepartment'
+      });
+    }
 
-    this.hasMany(models.Prescription, {
-      as: 'patientPrescriptions',
-      foreignKey: 'patientId'
-    });
+    // Appointment associations
+    if (models.Appointment) {
+      this.hasMany(models.Appointment, { 
+        as: 'patientAppointments',
+        foreignKey: 'patientId',
+        onDelete: 'NO ACTION',
+        onUpdate: 'CASCADE'
+      });
+      
+      this.hasMany(models.Appointment, { 
+        as: 'doctorAppointments',
+        foreignKey: 'doctorId',
+        onDelete: 'NO ACTION',
+        onUpdate: 'CASCADE'
+      });
+    }
 
-    this.hasMany(models.Prescription, {
-      as: 'doctorPrescriptions',
-      foreignKey: 'doctorId'
-    });
+    // DoctorProfile association
+    if (models.DoctorProfile) {
+      this.hasOne(models.DoctorProfile, {
+        foreignKey: 'userId'
+      });
+    }
 
-    this.hasMany(models.TestResult, {
-      as: 'testResults',
-      foreignKey: 'patientId'
-    });
+    // Prescription associations
+    if (models.Prescription) {
+      this.hasMany(models.Prescription, {
+        as: 'patientPrescriptions',
+        foreignKey: 'patientId'
+      });
+
+      this.hasMany(models.Prescription, {
+        as: 'doctorPrescriptions',
+        foreignKey: 'doctorId'
+      });
+    }
+
+    // TestResult association
+    if (models.TestResult) {
+      this.hasMany(models.TestResult, {
+        as: 'testResults',
+        foreignKey: 'patientId'
+      });
+    }
   }
 
   static initModel(sequelize) {
@@ -353,13 +416,16 @@ class User extends Model {
           fields: ['employeeId']
         },
         {
-          fields: ['department']
-        },
-        {
           fields: ['status']
         },
         {
           fields: ['isActive']
+        },
+        {
+          fields: ['departmentId']
+        },
+        {
+          fields: ['primaryDepartmentId']
         }
       ]
     });

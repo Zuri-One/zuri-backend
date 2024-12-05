@@ -3,8 +3,9 @@ const { sequelize } = require('../config/database');
 const { DataTypes } = require('sequelize');
 const path = require('path');
 
-// Import models using path.join to handle cross-platform paths
+// Import all models
 const models = {
+  Department: require(path.join(__dirname, 'department.model')),
   User: require(path.join(__dirname, 'user.model')),
   Appointment: require(path.join(__dirname, 'appointment.model')),
   DoctorAvailability: require(path.join(__dirname, 'doctor-availability.model')),
@@ -23,49 +24,97 @@ const models = {
   StockMovement: require(path.join(__dirname, 'stock-movement.model')),
   Pharmacy: require(path.join(__dirname, 'pharmacy.model')),
   MedicalDocument: require(path.join(__dirname, 'medical-document.model')), 
-  DocumentShare: require(path.join(__dirname, 'document-share.model'))
+  DocumentShare: require(path.join(__dirname, 'document-share.model')),
+  ProgressNote: require(path.join(__dirname, 'progress-note.model')),
+  Consent: require(path.join(__dirname, 'consent.model')),
+
 };
 
-// Helper function to initialize a model based on its structure
+// Initialize models - Modified initialization function
 const initializeModel = (Model) => {
-  // For models using initialize pattern (like MedicalDocument)
-  if (typeof Model.initialize === 'function') {
-    return Model.initialize(sequelize);
-  }
-  
-  // For models using direct init with schema
-  if (Model.schema) {
-    return Model.init(Model.schema, { sequelize });
-  }
-  
-  // For traditional Sequelize models
-  if (typeof Model.init === 'function') {
-    return Model.init({ sequelize });
-  }
+  try {
+    // For models using MedicalDocument's initialize pattern
+    if (Model.initialize) {
+      return Model.initialize(sequelize);
+    }
+    
+    // For models using schema pattern
+    if (Model.schema) {
+      return Model.init(Model.schema, { 
+        sequelize,
+        modelName: Model.name,
+        timestamps: true,
+        paranoid: true
+      });
+    }
+    
+    // For traditional Sequelize models
+    if (Model.init) {
+      return Model.initModel(sequelize);
+    }
 
-  throw new Error(`Model ${Model.name} does not have a valid initialization pattern`);
+    throw new Error(`Model ${Model.name} does not have a valid initialization pattern`);
+  } catch (error) {
+    console.error(`Error initializing model ${Model.name}:`, error);
+    throw error;
+  }
 };
 
-// Initialize all models
-const initializedModels = Object.entries(models).reduce((acc, [key, Model]) => {
+// Initialize models in specific order
+const modelInitializationOrder = [
+  'Department',  // Initialize Department first
+  'User',        // Then User
+
+  'DoctorProfile',
+  'Appointment',
+  'ProgressNote',   
+  'Consent', 
+  'DoctorAvailability',
+  'TestResult',
+  'HealthMetric',
+  'Prescription',
+  'Medication',
+  'PrescriptionMedications',
+  'MedicalRecord',
+  'LabTest',
+  'LabTestTemplate',
+  'Laboratory',
+  'MedicationInventory',
+  'MedicationDispense',
+  'StockMovement',
+  'Pharmacy',
+  'MedicalDocument',
+  'DocumentShare'
+];
+
+// Initialize models in order
+const initializedModels = modelInitializationOrder.reduce((acc, modelName) => {
+  const Model = models[modelName];
+  if (!Model) {
+    console.warn(`Model ${modelName} not found in models object`);
+    return acc;
+  }
+
   try {
-    if (key === 'MedicalDocument') {
-      // Special handling for MedicalDocument
-      acc[key] = Model.initialize(sequelize);
-    } else {
-      acc[key] = initializeModel(Model);
-    }
+    acc[modelName] = initializeModel(Model);
+    console.log(`Successfully initialized model: ${modelName}`);
     return acc;
   } catch (error) {
-    console.error(`Error initializing model ${key}:`, error);
-    process.exit(1);
+    console.error(`Failed to initialize model ${modelName}:`, error);
+    throw error;
   }
 }, {});
 
-// Define associations
+// Create associations after all models are initialized
 Object.keys(initializedModels).forEach(modelName => {
-  if (initializedModels[modelName].associate) {
-    initializedModels[modelName].associate(initializedModels);
+  if (typeof initializedModels[modelName].associate === 'function') {
+    try {
+      initializedModels[modelName].associate(initializedModels);
+      console.log(`Successfully created associations for model: ${modelName}`);
+    } catch (error) {
+      console.error(`Failed to create associations for model ${modelName}:`, error);
+      throw error;
+    }
   }
 });
 

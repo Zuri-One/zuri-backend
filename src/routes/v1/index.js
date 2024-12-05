@@ -15,8 +15,13 @@ const labRoutes = (require('./lab.route'))
 const labTemplateRoutes = require('./lab-template.route'); 
 const pharmacyRoutes = require('./pharmacy.route'); 
 const uploadRoutes = require('./medical-records.route'); 
-
 const videoRoutes = require('./video.route')
+
+// New route imports
+// const progressNoteRoutes = require('./progress-note.route');
+// const consentRoutes = require('./consent.route');
+const departmentRoutes = require('./department.route');
+const triageRoutes = require('./triage.route');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -32,6 +37,13 @@ router.use('/labs', labRoutes);
 router.use('/lab-templates', labTemplateRoutes);
 router.use('/pharmacy', pharmacyRoutes);
 router.use('/medical-records', uploadRoutes);
+
+// Mount new routes
+// router.use('/progress-notes', progressNoteRoutes);
+// router.use('/consents', consentRoutes);
+router.use('/departments', departmentRoutes);
+router.use('/triage', triageRoutes);
+
 // Health check route
 router.get('/health', (req, res) => {
   res.json({

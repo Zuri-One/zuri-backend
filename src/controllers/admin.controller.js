@@ -1,6 +1,7 @@
 // src/controllers/admin.controller.js
-const { User, Appointment, DoctorProfile, Prescription, TestResult } = require('../models');
+const { User, Appointment, DoctorProfile, Prescription, TestResult, sequelize} = require('../models');
 const { Op } = require('sequelize');
+
 
 exports.getAllPatients = async (req, res, next) => {
   try {
@@ -274,19 +275,22 @@ exports.getDoctorById = async (req, res, next) => {
 };
 
 
+
 exports.getAllStaff = async (req, res, next) => {
   try {
     const staff = await User.findAll({
-      where: { 
-        role: {
-          [Op.notIn]: ['patient', 'admin']
-        }
+      where: {
+        [Op.and]: [
+          { role: { [Op.ne]: 'patient' } }, // handle one at a time instead of notIn
+          { role: { [Op.ne]: 'admin' } },
+          { isActive: true }
+        ]
       },
       attributes: { exclude: ['password'] },
       include: [
         {
           model: DoctorProfile,
-          required: false // Make it optional since not all staff are doctors
+          required: false
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -294,12 +298,15 @@ exports.getAllStaff = async (req, res, next) => {
 
     res.json({
       success: true,
-      staff: staff.map(member => ({
-        ...member.toJSON(),
-      }))
+      staff: staff.map(member => member.toJSON())
     });
   } catch (error) {
-    next(error);
+    console.error('Error fetching staff:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch staff members',
+      error: error.message
+    });
   }
 };
 

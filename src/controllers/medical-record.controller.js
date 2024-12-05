@@ -6,150 +6,326 @@ const sendEmail = require('../utils/email.util');
 
 exports.createMedicalRecord = async (req, res, next) => {
   try {
-    const doctorId = req.user.id;
     const {
       patientId,
-      visitDate,
+      visitType,
       chiefComplaint,
-      diagnosis,
+      presentIllness,
       vitalSigns,
-      symptoms,
-      treatment,
-      notes,
-      followUpDate,
-      attachments
+      physicalExamination,
+      diagnoses,
+      treatmentPlan,
+      followUpPlan,
+      confidentialityLevel
     } = req.body;
 
-    // Validate doctor and patient
-    const [doctor, patient] = await Promise.all([
-      User.findOne({ where: { id: doctorId, role: 'doctor' }}),
-      User.findOne({ where: { id: patientId, role: 'patient' }})
-    ]);
+    // Validate patient exists
+    const patient = await User.findOne({
+      where: { id: patientId, role: 'PATIENT' }
+    });
 
-    if (!doctor || !patient) {
-      return res.status(404).json({ message: 'Doctor or patient not found' });
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
     }
 
-    const medicalRecord = await MedicalRecord.create({
-      doctorId,
+    // Calculate BMI if height and weight provided
+    if (vitalSigns?.height && vitalSigns?.weight) {
+      vitalSigns.bmi = calculateBMI(vitalSigns.height, vitalSigns.weight);
+    }
+
+    const record = await MedicalRecord.create({
       patientId,
-      visitDate,
+      practitionerId: req.user.id,
+      departmentId: req.user.departmentId,
+      visitType,
+      visitDate: new Date(),
       chiefComplaint,
-      diagnosis,
+      presentIllness,
       vitalSigns,
-      symptoms,
-      treatment,
-      notes,
-      followUpDate,
-      attachments,
-      status: 'draft'
+      physicalExamination,
+      diagnoses,
+      treatmentPlan,
+      followUpPlan,
+      confidentialityLevel,
+      status: 'DRAFT'
+    });
+
+    // Log the creation access
+    await record.logAccess(req.user.id, 'CREATED');
+
+    // Fetch the complete record with associations
+    const completeRecord = await MedicalRecord.findByPk(record.id, {
+      include: getDefaultIncludes()
     });
 
     res.status(201).json({
-      message: 'Medical record created successfully',
-      medicalRecord
+      success: true,
+      record: completeRecord
     });
   } catch (error) {
     next(error);
   }
 };
+
+
+
 
 exports.updateMedicalRecord = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const doctorId = req.user.id;
     const updateData = req.body;
 
-    const medicalRecord = await MedicalRecord.findOne({
-      where: { id, doctorId }
-    });
-
-    if (!medicalRecord) {
-      return res.status(404).json({ message: 'Medical record not found' });
+    const record = await MedicalRecord.findByPk(id);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: 'Medical record not found'
+      });
     }
 
-    // Only allow updates if record is in draft status
-    if (medicalRecord.status === 'final') {
-      return res.status(400).json({ message: 'Cannot update finalized record' });
+    // Check if record is finalized
+    if (record.status === 'FINALIZED') {
+      // Create amendment instead of direct update
+      await record.addAmendment({
+        changes: updateData,
+        reason: req.body.amendmentReason || 'Record update'
+      }, req.user.id);
+    } else {
+      // Update draft record
+      await record.update(updateData);
     }
 
-    await medicalRecord.update(updateData);
+    // Log the update
+    await record.logAccess(req.user.id, 'UPDATED');
 
     res.json({
-      message: 'Medical record updated successfully',
-      medicalRecord
+      success: true,
+      message: record.status === 'FINALIZED' ? 'Amendment added' : 'Record updated',
+      record: await MedicalRecord.findByPk(id, {
+        include: getDefaultIncludes()
+      })
     });
   } catch (error) {
     next(error);
   }
 };
+
+
+exports.addProgressNote = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { content, noteType, isConfidential } = req.body;
+
+    const record = await MedicalRecord.findByPk(id);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: 'Medical record not found'
+      });
+    }
+
+    const note = await record.addProgressNote(content, req.user.id);
+    await note.update({ noteType, isConfidential });
+
+    res.json({
+      success: true,
+      message: 'Progress note added',
+      note
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+const getDefaultIncludes = () => [
+  {
+    model: User,
+    as: 'patient',
+    attributes: ['id', 'name', 'dateOfBirth', 'gender']
+  },
+  {
+    model: User,
+    as: 'practitioner',
+    attributes: ['id', 'name', 'role']
+  },
+  {
+    model: Department,
+    attributes: ['id', 'name']
+  },
+  {
+    model: ProgressNote,
+    include: [{
+      model: User,
+      as: 'author',
+      attributes: ['id', 'name', 'role']
+    }]
+  },
+  {
+    model: Consent,
+    where: {
+      status: 'ACTIVE'
+    },
+    required: false
+  }
+];
+
+const checkRecordAccess = async (user, record) => {
+  // Admin has full access
+  if (user.role === 'ADMIN') return true;
+
+  // Patient can only access their own records
+  if (user.role === 'PATIENT') {
+    return user.id === record.patientId;
+  }
+
+  // Healthcare providers can access based on department and confidentiality
+  if (['DOCTOR', 'NURSE'].includes(user.role)) {
+    if (record.confidentialityLevel === 'HIGHLY_RESTRICTED') {
+      return record.practitionerId === user.id;
+    }
+    return true;
+  }
+
+  return false;
+};
+
+const calculateBMI = (height, weight) => {
+  const heightInMeters = height.unit === 'm' ? height.value : height.value / 100;
+  const weightInKg = weight.unit === 'kg' ? weight.value : weight.value * 0.453592;
+  return (weightInKg / (heightInMeters * heightInMeters)).toFixed(1);
+};
+
 
 exports.finalizeMedicalRecord = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const doctorId = req.user.id;
+    
+    const record = await MedicalRecord.findByPk(id);
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: 'Medical record not found'
+      });
+    }
 
-    const medicalRecord = await MedicalRecord.findOne({
-      where: { id, doctorId },
-      include: [{
-        model: User,
-        as: 'patient',
-        attributes: ['id', 'name', 'email']
-      }]
+    if (record.status === 'FINALIZED') {
+      return res.status(400).json({
+        success: false,
+        message: 'Record is already finalized'
+      });
+    }
+
+    await record.update({
+      status: 'FINALIZED',
+      metadata: {
+        ...record.metadata,
+        finalizedBy: req.user.id,
+        finalizedAt: new Date()
+      }
     });
-
-    if (!medicalRecord) {
-      return res.status(404).json({ message: 'Medical record not found' });
-    }
-
-    if (medicalRecord.status === 'final') {
-      return res.status(400).json({ message: 'Record already finalized' });
-    }
-
-    await medicalRecord.update({ status: 'final' });
 
     res.json({
-      message: 'Medical record finalized successfully',
-      medicalRecord
+      success: true,
+      message: 'Medical record finalized',
+      record
     });
   } catch (error) {
     next(error);
   }
 };
 
-exports.getMedicalRecords = async (req, res, next) => {
+exports.getMedicalRecord = async (req, res, next) => {
   try {
-    const where = {};
+    const { id } = req.params;
     
-    // Filter based on user role
-    if (req.user.role === 'patient') {
-      where.patientId = req.user.id;
-    } else if (req.user.role === 'doctor') {
-      where.doctorId = req.user.id;
+    const record = await MedicalRecord.findByPk(id, {
+      include: getDefaultIncludes()
+    });
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: 'Medical record not found'
+      });
     }
 
-    const medicalRecords = await MedicalRecord.findAll({
-      where,
-      include: [
-        {
-          model: User,
-          as: 'patient',
-          attributes: ['id', 'name', 'email']
-        },
-        {
-          model: User,
-          as: 'doctor',
-          attributes: ['id', 'name', 'email']
-        }
-      ],
-      order: [['visitDate', 'DESC']]
-    });
+    // Check access permissions
+    if (!await checkRecordAccess(req.user, record)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized access to this medical record'
+      });
+    }
 
-    res.json({ medicalRecords });
+    // Log access
+    await record.logAccess(req.user.id, 'VIEWED');
+
+    res.json({
+      success: true,
+      record
+    });
   } catch (error) {
     next(error);
   }
 };
+
+exports.getPatientRecords = async (req, res, next) => {
+  try {
+    const { patientId } = req.params;
+    const { 
+      startDate, 
+      endDate, 
+      visitType, 
+      department,
+      status,
+      page = 1,
+      limit = 10
+    } = req.query;
+
+    const whereClause = { patientId };
+
+    // Apply filters
+    if (startDate && endDate) {
+      whereClause.visitDate = {
+        [Op.between]: [new Date(startDate), new Date(endDate)]
+      };
+    }
+    if (visitType) whereClause.visitType = visitType;
+    if (status) whereClause.status = status;
+    if (department) whereClause.departmentId = department;
+
+    // Check access permissions
+    if (req.user.role === 'PATIENT' && req.user.id !== patientId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized access to patient records'
+      });
+    }
+
+    const { count, rows: records } = await MedicalRecord.findAndCountAll({
+      where: whereClause,
+      include: getDefaultIncludes(),
+      order: [['visitDate', 'DESC']],
+      limit: parseInt(limit),
+      offset: (parseInt(page) - 1) * parseInt(limit)
+    });
+
+    res.json({
+      success: true,
+      count,
+      pages: Math.ceil(count / limit),
+      currentPage: parseInt(page),
+      records
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 exports.getPatientMedicalRecords = async (req, res, next) => {
     try {
@@ -233,3 +409,7 @@ exports.getMedicalRecordById = async (req, res, next) => {
     next(error);
   }
 };
+
+
+
+module.exports = exports;

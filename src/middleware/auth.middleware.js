@@ -2,58 +2,53 @@ const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 
 // Base authentication middleware
-const authenticate = async (req, res, next) => {
+exports.authenticate = async (req, res, next) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    
+    const token = req.header('Authorization')?.replace('Bearer ', '');
     if (!token) {
-      return res.status(401).json({ message: 'Authentication required' });
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findByPk(decoded.id, {
-      attributes: { 
-        exclude: ['password'],
-        include: ['role', 'permissions', 'department', 'status'] 
-      }
+    const user = await User.findOne({
+      where: { id: decoded.id, isActive: true },
+      include: [
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name', 'code', 'type']
+        }
+      ]
     });
 
     if (!user) {
-      return res.status(401).json({ message: 'User not found' });
+      return res.status(401).json({
+        success: false,
+        message: 'User not found or inactive'
+      });
     }
 
-    if (!user.isActive || user.status !== 'active') {
-      return res.status(401).json({ message: 'Account is inactive or suspended' });
-    }
-
-    if (!user.isEmailVerified) {
-      return res.status(401).json({ message: 'Please verify your email first' });
-    }
-
-    req.user = user.toJSON();
+    req.user = user;
+    req.token = token;
     next();
   } catch (error) {
-    console.error('Auth error:', error);
-    res.status(401).json({ 
-      message: error.name === 'JsonWebTokenError' ? 'Invalid token' : error.message 
+    res.status(401).json({
+      success: false,
+      message: 'Authentication failed'
     });
   }
 };
 
 // Role-based authorization middleware
-const authorize = (roles) => {
+exports.authorize = (roles) => {
   return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ message: 'Authentication required' });
-    }
-
-    if (!Array.isArray(roles)) {
-      roles = [roles];
-    }
-
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        message: 'Not authorized to access this resource' 
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized access'
       });
     }
     next();
@@ -61,59 +56,44 @@ const authorize = (roles) => {
 };
 
 // Permission-based authorization middleware
-const hasPermission = (requiredPermissions) => {
+exports.hasPermission = (requiredPermissions) => {
   return async (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ message: 'Authentication required' });
-    }
-
-    if (!Array.isArray(requiredPermissions)) {
-      requiredPermissions = [requiredPermissions];
-    }
-
-    // Admin and hospital_admin have all permissions
-    if (['admin', 'hospital_admin'].includes(req.user.role)) {
+    // Admin and hospital admin have all permissions
+    if (['ADMIN', 'HOSPITAL_ADMIN'].includes(req.user.role)) {
       return next();
     }
 
-    const userPermissions = User.rolePermissions[req.user.role] || [];
-    const hasAllPermissions = requiredPermissions.every(permission => 
-      userPermissions.includes(permission)
+    const userPermissions = req.user.permissions || [];
+    const hasPermission = requiredPermissions.every(
+      permission => userPermissions.includes(permission)
     );
 
-    if (!hasAllPermissions) {
-      return res.status(403).json({ 
-        message: 'Insufficient permissions to access this resource' 
+    if (!hasPermission) {
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions'
       });
     }
-
     next();
   };
 };
 
 // Department-based authorization
-const inDepartment = (departments) => {
+exports.inDepartment = (departmentTypes) => {
   return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ message: 'Authentication required' });
+    if (!req.user.department) {
+      return res.status(403).json({
+        success: false,
+        message: 'No department association'
+      });
     }
 
-    if (!Array.isArray(departments)) {
-      departments = [departments];
-    }
-
-    if (!departments.includes(req.user.department)) {
-      return res.status(403).json({ 
-        message: 'Not authorized to access resources from this department' 
+    if (!departmentTypes.includes(req.user.department.type)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized department access'
       });
     }
     next();
   };
-};
-
-module.exports = {
-  authenticate,
-  authorize,
-  hasPermission,
-  inDepartment
 };
