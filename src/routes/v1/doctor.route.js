@@ -3,7 +3,30 @@ const router = express.Router();
 const doctorController = require('../../controllers/doctor.controller');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
-// Public routes that only need authentication
+
+router.get('/availability/current', 
+    authenticate, 
+    authorize(['doctor']), 
+    doctorController.getCurrentAvailability
+  );
+  
+  router.put('/availability/update', 
+    authenticate, 
+    authorize(['doctor']), 
+    doctorController.updateAvailability
+  );
+  
+  router.put('/availability/exceptions', 
+    authenticate, 
+    authorize(['doctor']), 
+    doctorController.updateAvailabilityExceptions
+  );
+
+
+router.get('/departments/:departmentId/doctors', authenticate, doctorController.getDepartmentDoctors);
+router.get('/:id/availability', authenticate, doctorController.getDoctorAvailabilityForDate);
+
+
 router.get('/available', authenticate, doctorController.getAvailableDoctors);
 router.get('/:id/availability', 
  authenticate,
@@ -33,5 +56,8 @@ router.post('/appointment-requests/:id/reject', async (req, res, next) => {
 });
 
 router.put('/availability', doctorController.updateAvailability);
+
+
+
 
 module.exports = router;

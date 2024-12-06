@@ -15,7 +15,8 @@ const labRoutes = (require('./lab.route'))
 const labTemplateRoutes = require('./lab-template.route'); 
 const pharmacyRoutes = require('./pharmacy.route'); 
 const uploadRoutes = require('./medical-records.route'); 
-const videoRoutes = require('./video.route')
+const videoRoutes = require('./video.route');
+const consultationQueueRoutes = require('./consultation-queue.route');
 
 // New route imports
 // const progressNoteRoutes = require('./progress-note.route');
@@ -37,6 +38,7 @@ router.use('/labs', labRoutes);
 router.use('/lab-templates', labTemplateRoutes);
 router.use('/pharmacy', pharmacyRoutes);
 router.use('/medical-records', uploadRoutes);
+router.use('/consultation-queue', consultationQueueRoutes);
 
 // Mount new routes
 // router.use('/progress-notes', progressNoteRoutes);

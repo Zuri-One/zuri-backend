@@ -8,7 +8,7 @@ class Department extends Model {
       primaryKey: true
     },
     code: {
-      type: DataTypes.STRING(10),
+      type: DataTypes.STRING,
       allowNull: false,
       unique: true
     },
@@ -16,23 +16,21 @@ class Department extends Model {
       type: DataTypes.STRING,
       allowNull: false
     },
-    description: DataTypes.TEXT,
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     type: {
-      type: DataTypes.ENUM('CLINICAL', 'DIAGNOSTIC', 'ADMINISTRATIVE', 'SUPPORT'),
+      type: DataTypes.STRING,
       allowNull: false
     },
     operatingHours: {
       type: DataTypes.JSONB,
-      defaultValue: {},
-      // Structure: {
-      //   monday: { start: '09:00', end: '17:00' },
-      //   tuesday: { start: '09:00', end: '17:00' },
-      //   ...
-      // }
+      defaultValue: {}
     },
     location: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: true
     },
     capacity: {
       type: DataTypes.INTEGER,
@@ -60,13 +58,7 @@ class Department extends Model {
     },
     resources: {
       type: DataTypes.JSONB,
-      defaultValue: []
-      // Structure: [{
-      //   type: 'EQUIPMENT',
-      //   name: 'X-Ray Machine',
-      //   quantity: 2,
-      //   status: 'ACTIVE'
-      // }]
+      defaultValue: {}
     },
     metadata: {
       type: DataTypes.JSONB,
@@ -79,6 +71,7 @@ class Department extends Model {
       foreignKey: 'headOfDepartmentId',
       as: 'headOfDepartment'
     });
+    
     this.hasMany(models.User, {
       foreignKey: 'departmentId',
       as: 'staff'
@@ -89,21 +82,8 @@ class Department extends Model {
     return this.init(this.schema, {
       sequelize,
       modelName: 'Department',
-      tableName: 'departments',
-      timestamps: true,
-      paranoid: false,
-      indexes: [
-        {
-          unique: true,
-          fields: ['code']
-        },
-        {
-          fields: ['type']
-        },
-        {
-          fields: ['isActive']
-        }
-      ]
+      tableName: 'Departments',
+      timestamps: true
     });
   }
 }

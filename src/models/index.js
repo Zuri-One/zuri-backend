@@ -29,6 +29,7 @@ const models = {
   Consent: require(path.join(__dirname, 'consent.model')),
   Triage: require(path.join(__dirname, 'triage.model')),
   TriageNote: require(path.join(__dirname, 'triage-note.model')), 
+  ConsultationQueue: require(path.join(__dirname, 'consultation-queue.model')),
 
 };
 
@@ -88,7 +89,8 @@ const modelInitializationOrder = [
   'MedicalDocument',
   'DocumentShare',
   'Triage',
-  'TriageNote'
+  'TriageNote',
+  'ConsultationQueue'
 ];
 
 // Initialize models in order

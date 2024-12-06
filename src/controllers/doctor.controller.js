@@ -21,6 +21,214 @@ const { sequelize } = require('../config/database');
 const { format } = require('date-fns');
 
 
+
+exports.getCurrentAvailability = async (req, res, next) => {
+  try {
+    console.log('Current user:', req.user?.id);
+    
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    const doctorId = req.user.id;
+
+    // Verify the user is a doctor
+    if (req.user.role.toLowerCase() !== 'doctor') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied - Doctor only resource'
+      });
+    }
+
+    const availability = await DoctorAvailability.findOne({
+      where: { doctorId }
+    });
+
+    if (!availability) {
+      // Return default schedule if none exists
+      const defaultSchedule = {
+        weeklySchedule: {
+          monday: { isAvailable: true, slots: [{ start: '09:00', end: '17:00' }] },
+          tuesday: { isAvailable: true, slots: [{ start: '09:00', end: '17:00' }] },
+          wednesday: { isAvailable: true, slots: [{ start: '09:00', end: '17:00' }] },
+          thursday: { isAvailable: true, slots: [{ start: '09:00', end: '17:00' }] },
+          friday: { isAvailable: true, slots: [{ start: '09:00', end: '17:00' }] },
+          saturday: { isAvailable: false, slots: [] },
+          sunday: { isAvailable: false, slots: [] }
+        },
+        defaultSlotDuration: 30,
+        bufferTime: 10,
+        maxDailyAppointments: 16,
+        isAcceptingAppointments: true
+      };
+
+      // Create default availability
+      const newAvailability = await DoctorAvailability.create({
+        doctorId,
+        ...defaultSchedule
+      });
+
+      return res.json({
+        success: true,
+        data: newAvailability
+      });
+    }
+
+    res.json({
+      success: true,
+      data: availability
+    });
+  } catch (error) {
+    console.error('Error in getCurrentAvailability:', error);
+    next(error);
+  }
+};
+
+exports.updateAvailability = async (req, res, next) => {
+  try {
+    console.log('Updating availability for user:', req.user?.id);
+    
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    const doctorId = req.user.id;
+
+    // Verify the user is a doctor
+    if (req.user.role.toLowerCase() !== 'doctor') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied - Doctor only resource'
+      });
+    }
+
+    const {
+      weeklySchedule,
+      defaultSlotDuration,
+      bufferTime,
+      maxDailyAppointments,
+      isAcceptingAppointments
+    } = req.body;
+
+    console.log('Received availability data:', {
+      weeklySchedule,
+      defaultSlotDuration,
+      bufferTime,
+      maxDailyAppointments,
+      isAcceptingAppointments
+    });
+
+    // Input validation
+    if (!weeklySchedule || typeof weeklySchedule !== 'object') {
+      return res.status(400).json({
+        success: false,
+        message: 'Weekly schedule is required and must be an object'
+      });
+    }
+
+    // Validate each day's schedule
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    for (const day of days) {
+      if (!weeklySchedule[day]) {
+        return res.status(400).json({
+          success: false,
+          message: `Schedule for ${day} is missing`
+        });
+      }
+    }
+
+    try {
+      // Update or create availability
+      const [availability] = await DoctorAvailability.upsert({
+        doctorId,
+        weeklySchedule,
+        defaultSlotDuration: defaultSlotDuration || 30,
+        bufferTime: bufferTime || 10,
+        maxDailyAppointments: maxDailyAppointments || 16,
+        isAcceptingAppointments: isAcceptingAppointments ?? true,
+        lastUpdated: new Date()
+      });
+
+      console.log('Availability updated successfully:', availability);
+
+      res.json({
+        success: true,
+        message: 'Availability updated successfully',
+        data: availability
+      });
+    } catch (upsertError) {
+      console.error('Error during upsert:', upsertError);
+      throw upsertError;
+    }
+  } catch (error) {
+    console.error('Error in updateAvailability:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update availability',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+exports.updateAvailabilityExceptions = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    const doctorId = req.user.id;
+    const { exceptions } = req.body;
+
+    // Validate exceptions array
+    if (!Array.isArray(exceptions)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Exceptions must be an array'
+      });
+    }
+
+    const availability = await DoctorAvailability.findOne({
+      where: { doctorId }
+    });
+
+    if (!availability) {
+      return res.status(404).json({
+        success: false,
+        message: 'No availability settings found'
+      });
+    }
+
+    // Update exceptions
+    await availability.update({
+      exceptions,
+      lastUpdated: new Date()
+    });
+
+    res.json({
+      success: true,
+      message: 'Availability exceptions updated successfully',
+      data: availability
+    });
+  } catch (error) {
+    console.error('Error in updateAvailabilityExceptions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update availability exceptions',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+
 exports.getDoctorStats = async (req, res, next) => {
   try {
     const doctorId = req.user.id;
@@ -106,6 +314,201 @@ exports.getAvailableDoctors = async (req, res, next) => {
     next(error);
   }
 };
+
+
+exports.getDepartmentDoctors = async (req, res, next) => {
+  try {
+    const { departmentId } = req.params;
+    
+    // Get all doctors in the department with their availability
+    const doctors = await User.findAll({
+      where: {
+        role: 'DOCTOR',
+        isActive: true,
+        departmentId
+      },
+      include: [{
+        model: DoctorAvailability,
+        required: false // Left join to get all doctors even if no availability set
+      }],
+      attributes: ['id', 'name', 'specialization']
+    });
+
+    res.json({
+      success: true,
+      doctors: doctors.map(doctor => ({
+        id: doctor.id,
+        name: doctor.name,
+        specialization: doctor.specialization,
+        hasAvailability: !!doctor.DoctorAvailability
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getDoctorAvailabilityForDate = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { date } = req.query;
+
+    const availability = await DoctorAvailability.findOne({
+      where: { doctorId: id }
+    });
+
+    if (!availability) {
+      return res.status(404).json({
+        success: false,
+        message: 'No availability found for this doctor'
+      });
+    }
+
+    // Get day of week from date
+    const dayOfWeek = new Date(date).toLocaleLowerCase('en-US', { weekday: 'long' });
+    const daySchedule = availability.weeklySchedule[dayOfWeek] || [];
+
+    // Get existing appointments for the date
+    const existingAppointments = await ConsultationQueue.findAll({
+      where: {
+        doctorId: id,
+        appointmentTime: {
+          [Op.between]: [
+            new Date(date + 'T00:00:00Z'),
+            new Date(date + 'T23:59:59Z')
+          ]
+        },
+        status: {
+          [Op.notIn]: ['COMPLETED', 'CANCELLED']
+        }
+      }
+    });
+
+    // Filter out booked slots
+    const bookedTimes = existingAppointments.map(apt => 
+      new Date(apt.appointmentTime).toTimeString().slice(0, 5)
+    );
+
+    res.json({
+      success: true,
+      data: {
+        weeklySchedule: {
+          [dayOfWeek]: daySchedule.map(slot => ({
+            ...slot,
+            availableSlots: generateAvailableSlots(
+              slot.startTime,
+              slot.endTime,
+              slot.slotDuration,
+              bookedTimes
+            )
+          }))
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.createConsultationQueue = async (req, res, next) => {
+  try {
+    const {
+      triageId,
+      departmentId,
+      doctorId,
+      priority,
+      appointmentTime
+    } = req.body;
+
+    // Validate the time slot is available
+    const availability = await DoctorAvailability.findOne({
+      where: { doctorId }
+    });
+
+    if (!availability) {
+      return res.status(400).json({
+        success: false,
+        message: 'Doctor has no availability set'
+      });
+    }
+
+    // Check if slot is within doctor's schedule
+    const dayOfWeek = new Date(appointmentTime)
+      .toLocaleLowerCase('en-US', { weekday: 'long' });
+    
+    const timeStr = new Date(appointmentTime).toTimeString().slice(0, 5);
+    const daySchedule = availability.weeklySchedule[dayOfWeek] || [];
+
+    const isSlotAvailable = daySchedule.some(slot => {
+      return (
+        timeStr >= slot.startTime &&
+        timeStr <= slot.endTime &&
+        slot.isAvailable
+      );
+    });
+
+    if (!isSlotAvailable) {
+      return res.status(400).json({
+        success: false,
+        message: 'Selected time slot is not available'
+      });
+    }
+
+    // Check for existing appointment at the same time
+    const existingAppointment = await ConsultationQueue.findOne({
+      where: {
+        doctorId,
+        appointmentTime,
+        status: {
+          [Op.notIn]: ['COMPLETED', 'CANCELLED']
+        }
+      }
+    });
+
+    if (existingAppointment) {
+      return res.status(409).json({
+        success: false,
+        message: 'Time slot is already booked'
+      });
+    }
+
+    // Create queue entry
+    const queueEntry = await ConsultationQueue.create({
+      triageId,
+      departmentId,
+      doctorId,
+      priority,
+      appointmentTime,
+      status: 'WAITING',
+      estimatedStartTime: new Date(appointmentTime)
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Added to consultation queue',
+      data: queueEntry
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Helper function to generate available time slots
+function generateAvailableSlots(startTime, endTime, duration, bookedTimes) {
+  const slots = [];
+  const start = new Date(`1970-01-01T${startTime}Z`);
+  const end = new Date(`1970-01-01T${endTime}Z`);
+
+  while (start < end) {
+    const timeStr = start.toTimeString().slice(0, 5);
+    if (!bookedTimes.includes(timeStr)) {
+      slots.push(timeStr);
+    }
+    start.setMinutes(start.getMinutes() + duration);
+  }
+
+  return slots;
+}
 
 exports.getDoctorAvailability = async (req, res, next) => {
   try {

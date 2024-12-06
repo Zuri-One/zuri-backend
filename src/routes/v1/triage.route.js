@@ -7,6 +7,7 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
 // Apply authentication to all routes
 router.use(authenticate);
 
+router.get('/waiting-count', authenticate, triageController.getWaitingCount);
 
 router.get('/stats',  triageController.getTriageStats);
 // Create new triage assessment

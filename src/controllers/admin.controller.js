@@ -2,6 +2,8 @@
 const { User, Appointment, DoctorProfile, Prescription, TestResult, sequelize} = require('../models');
 const { Op } = require('sequelize');
 
+const { Triage, Department } = require('../models');
+
 
 exports.getAllPatients = async (req, res, next) => {
   try {
@@ -504,6 +506,83 @@ exports.getAllStaff = async (req, res, next) => {
     });
   }
 };
+
+
+exports.getWaitingPatients = async (req, res, next) => {
+  try {
+    // First get all patients who don't have an active triage assessment
+    const waitingPatients = await User.findAll({
+      where: { 
+        role: 'patient',
+        isActive: true 
+      },
+      include: [
+        {
+          model: Triage,
+          as: 'triageAssessments',
+          required: false,
+          where: {
+            status: {
+              [Op.notIn]: ['COMPLETED', 'TRANSFERRED']
+            }
+          },
+          order: [['createdAt', 'DESC']],
+          limit: 1
+        }
+      ],
+      attributes: ['id', 'name', 'registrationId', 'contactNumber', 'createdAt']
+    });
+
+    // Calculate waiting time and priority for each patient
+    const formattedPatients = waitingPatients.map(patient => {
+      const waitingTime = Math.floor(
+        (new Date() - new Date(patient.createdAt)) / (1000 * 60)
+      );
+
+      // Determine priority level based on waiting time and any available triage data
+      let priorityLevel = 'NORMAL';
+      const triageAssessment = patient.triageAssessments?.[0];
+      
+      if (triageAssessment) {
+        if (triageAssessment.category === 'RED') priorityLevel = 'HIGH';
+        else if (triageAssessment.category === 'YELLOW') priorityLevel = 'MEDIUM';
+      } else if (waitingTime > 45) {
+        priorityLevel = 'HIGH';
+      } else if (waitingTime > 30) {
+        priorityLevel = 'MEDIUM';
+      }
+
+      return {
+        id: patient.id,
+        name: patient.name,
+        registrationId: patient.registrationId,
+        contactNumber: patient.contactNumber,
+        waitingTime,
+        priorityLevel,
+        chiefComplaint: triageAssessment?.chiefComplaint || 'Awaiting assessment',
+        createdAt: patient.createdAt
+      };
+    });
+
+    // Sort patients by priority and waiting time
+    const sortedPatients = formattedPatients.sort((a, b) => {
+      if (a.priorityLevel === 'HIGH' && b.priorityLevel !== 'HIGH') return -1;
+      if (a.priorityLevel !== 'HIGH' && b.priorityLevel === 'HIGH') return 1;
+      return b.waitingTime - a.waitingTime;
+    });
+
+    res.json({
+      success: true,
+      patients: sortedPatients
+    });
+
+  } catch (error) {
+    console.error('Error fetching waiting patients:', error);
+    next(error);
+  }
+};
+
+
 
 // Update staff status
 exports.updateStaffStatus = async (req, res, next) => {

@@ -51,6 +51,114 @@ const determineRecommendedAction = (category) => {
   }
 };
 
+exports.assignPatient = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { departmentId, doctorId } = req.body;
+
+    const triage = await Triage.findByPk(id);
+    if (!triage) {
+      return res.status(404).json({
+        success: false,
+        message: 'Triage record not found'
+      });
+    }
+
+    // Get current queue number for department
+    const currentQueue = await Triage.count({
+      where: {
+        assignedDepartmentId: departmentId,
+        consultationStatus: {
+          [Op.in]: ['WAITING', 'IN_PROGRESS']
+        },
+        createdAt: {
+          [Op.gte]: new Date().setHours(0,0,0,0)
+        }
+      }
+    });
+
+    // Calculate estimated consultation time
+    const averageConsultationTime = 15; // minutes
+    const estimatedTime = new Date();
+    estimatedTime.setMinutes(estimatedTime.getMinutes() + (currentQueue * averageConsultationTime));
+
+    await triage.update({
+      assignedDepartmentId: departmentId,
+      assignedDoctorId: doctorId,
+      queueNumber: currentQueue + 1,
+      estimatedConsultationTime: estimatedTime,
+      consultationStatus: 'WAITING'
+    });
+
+    // Create calendar entry for doctor
+    await Appointment.create({
+      doctorId,
+      patientId: triage.patientId,
+      dateTime: estimatedTime,
+      type: 'consultation',
+      status: 'scheduled',
+      triageId: triage.id,
+      notes: triage.chiefComplaint
+    });
+
+    res.json({
+      success: true,
+      triage,
+      queueNumber: currentQueue + 1,
+      estimatedTime: estimatedTime
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.updateConsultationStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const triage = await Triage.findByPk(id);
+    if (!triage) {
+      return res.status(404).json({
+        success: false,
+        message: 'Triage record not found'
+      });
+    }
+
+    await triage.update({
+      consultationStatus: status
+    });
+
+    if (status === 'IN_PROGRESS') {
+      // Notify waiting patients about delay
+      const waitingPatients = await Triage.findAll({
+        where: {
+          assignedDepartmentId: triage.assignedDepartmentId,
+          consultationStatus: 'WAITING',
+          queueNumber: {
+            [Op.gt]: triage.queueNumber
+          }
+        }
+      });
+
+      // Update their estimated times
+      for (const patient of waitingPatients) {
+        const newEstimatedTime = new Date(patient.estimatedConsultationTime);
+        newEstimatedTime.setMinutes(newEstimatedTime.getMinutes() + 15);
+        await patient.update({
+          estimatedConsultationTime: newEstimatedTime
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Consultation status updated to ${status}`
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 exports.getActiveTriages = async (req, res, next) => {
   try {
@@ -70,13 +178,26 @@ exports.getActiveTriages = async (req, res, next) => {
       ],
       order: [['category', 'ASC'], ['assessmentDateTime', 'ASC']]
     });
+
+    // Calculate waiting time for each triage
+    const triagesWithWaitTime = triages.map(triage => {
+      const waitingTime = Math.floor(
+        (new Date() - new Date(triage.assessmentDateTime)) / (1000 * 60)
+      );
+      return {
+        ...triage.toJSON(),
+        waitingTime
+      };
+    });
  
-    console.log("Active triages data:", JSON.stringify(triages, null, 2));
-    res.json({ success: true, triages });
+    res.json({ 
+      success: true, 
+      triages: triagesWithWaitTime 
+    });
   } catch (error) {
     next(error);
   }
- };
+};
 
 exports.getTriageStats = async (req, res, next) => {
   try {
@@ -128,44 +249,6 @@ exports.updateTriageAssessment = async (req, res, next) => {
   }
 };
 
-// exports.getActiveTriages = async (req, res, next) => {
-//   try {
-//     const triages = await Triage.findAll({
-//       where: {
-//         status: {
-//           [Op.in]: ['IN_PROGRESS', 'REASSESSED']
-//         }
-//       },
-//       include: [
-//         {
-//           model: User,
-//           as: 'patient',
-//           attributes: ['id', 'name', 'dateOfBirth', 'gender']
-//         },
-//         {
-//           model: User,
-//           as: 'nurse',
-//           attributes: ['id', 'name']
-//         }
-//       ],
-//       order: [
-//         [sequelize.literal(`CASE 
-//           WHEN category = 'RED' THEN 1 
-//           WHEN category = 'YELLOW' THEN 2 
-//           WHEN category = 'GREEN' THEN 3 
-//           ELSE 4 END`), 'ASC'],
-//         ['assessmentDateTime', 'ASC']
-//       ]
-//     });
-
-//     res.json({
-//       success: true,
-//       triages
-//     });
-//   } catch (error) {
-//     next(error);
-//   }
-// };
 
 exports.getTriageById = async (req, res, next) => {
   if (req.params.id === 'stats') {
@@ -205,6 +288,23 @@ exports.getTriageById = async (req, res, next) => {
       success: true,
       triage
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.getWaitingCount = async (req, res, next) => {
+  try {
+    const count = await Triage.count({
+      where: {
+        status: 'IN_PROGRESS',
+        createdAt: {
+          [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+        }
+      }
+    });
+    res.json({ success: true, count });
   } catch (error) {
     next(error);
   }

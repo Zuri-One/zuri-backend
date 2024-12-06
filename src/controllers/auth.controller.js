@@ -119,14 +119,23 @@ exports.verifyEmailWithCode = async (req, res, next) => {
 };
 
 
-const generateRegistrationId = (name, date = new Date()) => {
-  const day = String(date.getDate()).padStart(2, '0').slice(-2);
-  const month = String(date.getMonth() + 1).padStart(2, '0').slice(-2);
+const generateUniqueRegistrationId = async (name, attempt = 0) => {
+  const date = new Date();
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = String(date.getFullYear()).slice(-2);
   const cleanName = name.replace(/[^a-zA-Z]/g, '').toUpperCase();
-  return `ZURI-${cleanName}-${day}${month}${year}`;
-};
+  const suffix = attempt > 0 ? `-${attempt}` : '';
+  const registrationId = `ZURI-${cleanName}-${day}${month}${year}${suffix}`;
 
+  // Check if ID exists
+  const existingUser = await User.findOne({ where: { registrationId } });
+  if (existingUser) {
+    return generateUniqueRegistrationId(name, attempt + 1);
+  }
+  
+  return registrationId;
+};
 
 
 exports.register = async (req, res, next) => {
@@ -223,8 +232,8 @@ exports.register = async (req, res, next) => {
 
     // Generate registration ID for patients
     const registrationId = (!role || normalizedRole === 'patient') ? 
-      `ZURI-${name.replace(/[^a-zA-Z]/g, '').toUpperCase()}-${new Date().toISOString().slice(2,10).replace(/-/g, '')}` : 
-      null;
+    await generateUniqueRegistrationId(name) : 
+    null;
     
     // These special cases should also be lowercase
     if (normalizedRole === 'lab_technician') {

@@ -74,6 +74,9 @@ class Triage extends Model {
       type: DataTypes.ENUM('ALERT', 'VERBAL', 'PAIN', 'UNRESPONSIVE'),
       allowNull: false
     },
+
+
+    
     symptoms: {
       type: DataTypes.JSONB,
       defaultValue: []
@@ -164,6 +167,9 @@ class Triage extends Model {
     });
   }
 
+  calculateWaitingTime() {
+    return Math.floor((new Date() - new Date(this.createdAt)) / (1000 * 60));
+  }
 
 calculatePriorityScore() {
     let score = 0;
