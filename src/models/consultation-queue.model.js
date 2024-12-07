@@ -53,9 +53,20 @@ class ConsultationQueue extends Model {
       comment: '0: Normal, 1: High, 2: Urgent'
     },
     status: {
-      type: DataTypes.ENUM('WAITING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'),
+      type: DataTypes.ENUM(
+        'WAITING',
+        'WAITING_FOR_DOCTOR',
+        'IN_PROGRESS',
+        'PENDING_LABS',
+        'PENDING_IMAGING',
+        'PENDING_PHARMACY',
+        'PENDING_BILLING',
+        'COMPLETED',
+        'CANCELLED'
+      ),
       defaultValue: 'WAITING'
     },
+    
     checkInTime: {
       type: DataTypes.DATE,
       allowNull: false

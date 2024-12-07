@@ -47,4 +47,6 @@ router.post(
   triageController.reassessPatient
 );
 
+router.patch('/:id/status', triageController.updateTriageStatus);
+
 module.exports = router;

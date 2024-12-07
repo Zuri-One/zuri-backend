@@ -1,6 +1,7 @@
 // controllers/consultation-queue.controller.js
-const { ConsultationQueue, User, Department, Triage, Appointment } = require('../models');
+const { ConsultationQueue, User, Department, Triage, Appointment, sequelize } = require('../models');
 const { Op } = require('sequelize');
+
 
 exports.createConsultationQueue = async (req, res, next) => {
   try {
@@ -237,22 +238,21 @@ exports.updateQueueStatus = async (req, res, next) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const queueEntry = await ConsultationQueue.create({
-      triageId,
-      patientId: triage.PATIENT.id,
-      departmentId,
-      doctorId,
-      queueNumber,
-      priority,
-      status: 'WAITING',
-      estimatedStartTime,
-      notes: String(triage.chiefComplaint || '').substring(0, 255), // Limit the length just in case
-      metadata: {  // Don't stringify here, let the model handle it
-        triageCategory: triage.category,
-        assignedBy: req.user.id,
-        assignedAt: new Date().toISOString()
-      }
+    const queueEntry = await ConsultationQueue.findByPk(id, {
+      include: [
+        {
+          model: Triage,
+          as: 'triage'
+        }
+      ]
     });
+
+    if (!queueEntry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Queue entry not found'
+      });
+    }
 
     const updates = { status };
 
@@ -266,27 +266,58 @@ exports.updateQueueStatus = async (req, res, next) => {
 
     // If completing consultation, update related records
     if (status === 'COMPLETED') {
-      await Promise.all([
-        // Update appointment status
-        Appointment.update(
-          { status: 'completed' },
-          {
-            where: {
-              patientId: queueEntry.patientId,
-              doctorId: queueEntry.doctorId,
-              'metadata.queueId': queueEntry.id
-            }
-          }
-        ),
-        // Update any remaining queue estimated times
-        this.recalculateQueueTimes(queueEntry.departmentId)
-      ]);
+      try {
+        // Find and update appointment without relying on metadata
+        await sequelize.query(`
+          UPDATE "Appointments" 
+          SET status = :status, 
+              "updatedAt" = NOW() 
+          WHERE "patientId" = :patientId 
+          AND "doctorId" = :doctorId 
+          AND DATE("dateTime") = DATE(NOW())
+        `, {
+          replacements: {
+            status: 'completed',
+            patientId: queueEntry.patientId,
+            doctorId: queueEntry.doctorId
+          },
+          type: sequelize.QueryTypes.UPDATE
+        });
+
+        // Recalculate queue times
+        if (queueEntry.departmentId) {
+          await this.recalculateQueueTimes(queueEntry.departmentId);
+        }
+      } catch (error) {
+        console.error('Error updating related records:', error);
+        // Don't fail the whole request if this update fails
+      }
     }
+
+    // Fetch updated queue entry with associations
+    const updatedQueueEntry = await ConsultationQueue.findByPk(id, {
+      include: [
+        {
+          model: Triage,
+          as: 'triage'
+        },
+        {
+          model: User,
+          as: 'PATIENT',
+          attributes: ['id', 'name', 'email']
+        },
+        {
+          model: Department,
+          as: 'department',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
 
     res.json({
       success: true,
       message: `Queue status updated to ${status}`,
-      queue: queueEntry
+      queue: updatedQueueEntry
     });
   } catch (error) {
     next(error);

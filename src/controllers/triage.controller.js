@@ -1,5 +1,5 @@
 // controllers/triage.controller.js
-const { Triage, User, Department } = require('../models');
+const { Triage, User, Department,  } = require('../models');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
@@ -154,6 +154,37 @@ exports.updateConsultationStatus = async (req, res, next) => {
     res.json({
       success: true,
       message: `Consultation status updated to ${status}`
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.updateTriageStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+
+    const triage = await Triage.findByPk(id);
+    if (!triage) {
+      return res.status(404).json({
+        success: false,
+        message: 'Triage record not found'
+      });
+    }
+
+    // Ensure notes is a string
+    const noteText = typeof notes === 'object' ? JSON.stringify(notes) : String(notes || '');
+
+    await triage.update({
+      status,
+      notes: noteText
+    });
+
+    res.json({
+      success: true,
+      message: 'Triage status updated successfully',
+      triage
     });
   } catch (error) {
     next(error);
