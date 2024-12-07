@@ -22,7 +22,7 @@ module.exports = {
         joiningDate,
         createdAt
       FROM "Users"
-      WHERE role = 'doctor';
+      WHERE role = 'DOCTOR';
     `, { type: queryInterface.sequelize.QueryTypes.SELECT });
 
     if (doctors.length === 0) {

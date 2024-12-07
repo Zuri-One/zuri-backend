@@ -16,13 +16,13 @@ router.post(
 
 router.get(
   '/tests',
-  // authorize(['doctor', 'lab_technician']),
+  // authorize(['DOCTOR', 'lab_technician']),
   labTestController.getLabTests
 );
 
 router.get(
   '/tests/:id',
-  // authorize(['doctor', 'lab_technician']),
+  // authorize(['DOCTOR', 'lab_technician']),
   labTestController.getLabTestById
 );
 

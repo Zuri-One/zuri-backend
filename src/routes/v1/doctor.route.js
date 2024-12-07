@@ -6,26 +6,27 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
 router.get('/availability/current', 
     authenticate, 
-    authorize(['doctor']), 
+    authorize(['DOCTOR']), 
     doctorController.getCurrentAvailability
   );
   
   router.put('/availability/update', 
     authenticate, 
-    authorize(['doctor']), 
+    authorize(['DOCTOR']), 
     doctorController.updateAvailability
   );
   
   router.put('/availability/exceptions', 
     authenticate, 
-    authorize(['doctor']), 
+    authorize(['DOCTOR']), 
     doctorController.updateAvailabilityExceptions
   );
 
 
 router.get('/departments/:departmentId/doctors', authenticate, doctorController.getDepartmentDoctors);
-router.get('/:id/availability', authenticate, doctorController.getDoctorAvailabilityForDate);
+// router.get('/:id/availability', authenticate, doctorController.getDoctorAvailabilityForDate);
 
+router.get('/:id/availability', authenticate, doctorController.getAvailability);
 
 router.get('/available', authenticate, doctorController.getAvailableDoctors);
 router.get('/:id/availability', 
@@ -35,7 +36,7 @@ router.get('/:id/availability',
 );
 
 // Apply authentication and doctor authorization for protected routes
-router.use(authenticate, authorize(['doctor']));
+router.use(authenticate, authorize(['DOCTOR']));
 
 // Protected routes for doctors only
 router.get('/stats', doctorController.getDoctorStats);

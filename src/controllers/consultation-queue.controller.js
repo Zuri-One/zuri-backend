@@ -4,25 +4,29 @@ const { Op } = require('sequelize');
 
 exports.createConsultationQueue = async (req, res, next) => {
   try {
-    const { triageId, departmentId, doctorId, priority = 0 } = req.body;
-
+    const { triageId, departmentId, doctorId, priority = 0, appointmentTime } = req.body;
+ 
+    console.log('Received request data:', req.body);
+ 
     // 1. Verify triage record
     const triage = await Triage.findByPk(triageId, {
       include: [{
         model: User,
-        as: 'patient',
+        as: 'PATIENT',
         attributes: ['id', 'name']
       }]
     });
-
+ 
     if (!triage) {
       return res.status(404).json({
         success: false,
         message: 'Triage record not found'
       });
     }
-
-    // 2. Get current queue number for the department
+ 
+    console.log('Found triage:', triage);
+ 
+    // 2. Get current queue number
     const latestQueue = await ConsultationQueue.findOne({
       where: {
         departmentId,
@@ -32,62 +36,118 @@ exports.createConsultationQueue = async (req, res, next) => {
       },
       order: [['queueNumber', 'DESC']]
     });
-
+ 
     const queueNumber = latestQueue ? latestQueue.queueNumber + 1 : 1;
-
-    // 3. Calculate estimated wait time
+    
+    // Generate token number (department prefix + current date + queue number)
+    const tokenPrefix = departmentId.substring(0, 3).toUpperCase();
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const tokenNumber = `${tokenPrefix}${dateStr}-${queueNumber.toString().padStart(3, '0')}`;
+ 
+    // 3. Calculate wait time
     const waitingPatients = await ConsultationQueue.count({
       where: {
         departmentId,
-        status: {
-          [Op.in]: ['WAITING', 'IN_PROGRESS']
-        }
+        status: 'WAITING'
       }
     });
-
-    const averageConsultationTime = 15; // minutes per patient
+ 
     const estimatedStartTime = new Date();
-    estimatedStartTime.setMinutes(estimatedStartTime.getMinutes() + (waitingPatients * averageConsultationTime));
-
-    // 4. Create queue entry
-    const queueEntry = await ConsultationQueue.create({
+    estimatedStartTime.setMinutes(estimatedStartTime.getMinutes() + (waitingPatients * 15));
+ 
+    // 4. Create queue entry with all required fields
+    const queueData = {
       triageId,
-      patientId: triage.patient.id,
+      patientId: triage.PATIENT.id,
       departmentId,
       doctorId,
       queueNumber,
-      priority,
+      tokenNumber,
+      priority: parseInt(priority, 10),
+      status: 'WAITING',
+      checkInTime: new Date(),
       estimatedStartTime,
-      notes: triage.chiefComplaint,
+      notes: {
+        nurseNotes: "",
+        triageNotes: triage.chiefComplaint || "",
+        patientRequirements: [],
+        specialInstructions: ""
+      },
+      patientCondition: {
+        vitalSigns: triage.vitalSigns || {},
+        urgencyLevel: triage.category || "",
+        triageCategory: triage.category || null,
+        primaryComplaint: triage.chiefComplaint || ""
+      },
+      consultationType: 'REGULAR',
+      statusHistory: [],
+      notifications: {
+        notified: false,
+        lastNotification: null,
+        notificationCount: 0,
+        notificationMethods: []
+      },
+      metrics: {
+        delayFactor: 0,
+        priorityChanges: 0,
+        expectedDuration: 0
+      },
       metadata: {
-        triageCategory: triage.category,
+        triageCategory: triage.category || 'UNKNOWN',
         assignedBy: req.user.id,
-        assignedAt: new Date()
-      }
-    });
+        assignedAt: new Date().toISOString()
+      },
+      createdBy: req.user.id,
+      updatedBy: req.user.id
+    };
 
-    // 5. Create appointment for doctor's calendar
-    await Appointment.create({
-      patientId: triage.patient.id,
+    const queueEntry = await ConsultationQueue.create(queueData);
+ 
+    console.log('Queue entry created:', queueEntry.id);
+ 
+    const appointment = await Appointment.create({
+      patientId: triage.PATIENT.id,
       doctorId,
       dateTime: estimatedStartTime,
-      type: 'consultation',
-      status: 'scheduled',
+      type: 'in-person', // Changed from 'consultation' to 'in-person'
+      status: 'pending',
+      reason: triage.chiefComplaint || 'General Consultation',
+      symptoms: triage.symptoms || [],
       notes: triage.chiefComplaint,
+      paymentStatus: 'pending',
+      reminder: false,
+      duration: 30,
       metadata: {
         triageId,
-        queueId: queueEntry.id
+        queueId: queueEntry.id,
+        category: triage.category,
+        priority: priority
       }
     });
-
+ 
     res.status(201).json({
       success: true,
       queue: queueEntry,
       estimatedStartTime,
-      queueNumber
+      queueNumber,
+      tokenNumber
     });
+ 
   } catch (error) {
-    next(error);
+    console.error('Full error object:', error);
+    console.error('Error creating queue:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+      original: error.original
+    });
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create consultation queue',
+      error: error.message,
+      details: error.original?.detail || 'No additional details'
+    });
   }
 };
 
@@ -105,12 +165,12 @@ exports.getDepartmentQueue = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name']
         },
         {
@@ -148,7 +208,7 @@ exports.getDoctorQueue = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
@@ -177,13 +237,22 @@ exports.updateQueueStatus = async (req, res, next) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const queueEntry = await ConsultationQueue.findByPk(id);
-    if (!queueEntry) {
-      return res.status(404).json({
-        success: false,
-        message: 'Queue entry not found'
-      });
-    }
+    const queueEntry = await ConsultationQueue.create({
+      triageId,
+      patientId: triage.PATIENT.id,
+      departmentId,
+      doctorId,
+      queueNumber,
+      priority,
+      status: 'WAITING',
+      estimatedStartTime,
+      notes: String(triage.chiefComplaint || '').substring(0, 255), // Limit the length just in case
+      metadata: {  // Don't stringify here, let the model handle it
+        triageCategory: triage.category,
+        assignedBy: req.user.id,
+        assignedAt: new Date().toISOString()
+      }
+    });
 
     const updates = { status };
 

@@ -11,7 +11,7 @@ const seedUsers = async () => {
       name: 'Dr. John Doe',
       email: 'kgicha@gmail.com',
       password: 'Doctor@123', // Plain password - let model hash it
-      role: 'doctor',
+      role: 'DOCTOR',
       isEmailVerified: true
     });
     await doctor.save();
@@ -30,7 +30,7 @@ const seedUsers = async () => {
       name: 'System Admin',
       email: 'wambiriisaac@gmail.com',
       password: 'Admin@123', // Plain password - let model hash it
-      role: 'patient',
+      role: 'PATIENT',
       isEmailVerified: true
     });
     await patient.save();

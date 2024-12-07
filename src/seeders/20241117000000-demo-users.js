@@ -13,7 +13,7 @@ module.exports = {
         name: 'Dr. Isaac',
         email: 'isaacwambiri254@gmail.com',  // This was the email we wanted
         password: hashedPassword,
-        role: 'doctor',
+        role: 'DOCTOR',
         isEmailVerified: true,
         createdAt: new Date(),
         updatedAt: new Date()

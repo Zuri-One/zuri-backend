@@ -11,7 +11,7 @@ exports.getVideoMeetings = async (req, res, next) => {
 
     const whereClause = {
       type: 'video',
-      [userRole === 'doctor' ? 'doctorId' : 'patientId']: userId,
+      [userRole === 'DOCTOR' ? 'doctorId' : 'patientId']: userId,
     };
 
     // Filter by status if provided
@@ -41,12 +41,12 @@ exports.getVideoMeetings = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         }
       ],
@@ -64,18 +64,18 @@ exports.getVideoMeetings = async (req, res, next) => {
       platform: meeting.platform,
       duration: meeting.duration,
       reason: meeting.reason,
-      otherParty: userRole === 'doctor' 
+      otherParty: userRole === 'DOCTOR' 
         ? {
             id: meeting.patient.id,
             name: meeting.patient.name,
             email: meeting.patient.email,
-            role: 'patient'
+            role: 'PATIENT'
           }
         : {
             id: meeting.doctor.id,
             name: meeting.doctor.name,
             email: meeting.doctor.email,
-            role: 'doctor'
+            role: 'DOCTOR'
           }
     }));
 
@@ -97,17 +97,17 @@ exports.getMeetingById = async (req, res, next) => {
       where: {
         id,
         type: 'video',
-        [userRole === 'doctor' ? 'doctorId' : 'patientId']: userId
+        [userRole === 'DOCTOR' ? 'doctorId' : 'patientId']: userId
       },
       include: [
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         }
       ]
@@ -130,18 +130,18 @@ exports.getMeetingById = async (req, res, next) => {
       platform: meeting.platform,
       duration: meeting.duration,
       reason: meeting.reason,
-      otherParty: userRole === 'doctor'
+      otherParty: userRole === 'DOCTOR'
         ? {
             id: meeting.patient.id,
             name: meeting.patient.name,
             email: meeting.patient.email,
-            role: 'patient'
+            role: 'PATIENT'
           }
         : {
             id: meeting.doctor.id,
             name: meeting.doctor.name,
             email: meeting.doctor.email,
-            role: 'doctor'
+            role: 'DOCTOR'
           }
     };
 

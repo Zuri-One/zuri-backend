@@ -18,14 +18,14 @@ router.post(
 // Get all templates
 router.get(
   '/',
-  authorize(['doctor', 'lab_technician', 'admin']),
+  authorize(['DOCTOR', 'lab_technician', 'admin']),
   labTemplateController.getTemplates
 );
 
 // Get specific template
 router.get(
   '/:id',
-  authorize(['doctor', 'lab_technician', 'admin']),
+  authorize(['DOCTOR', 'lab_technician', 'admin']),
   labTemplateController.getTemplateById
 );
 

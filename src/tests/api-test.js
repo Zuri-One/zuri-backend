@@ -14,7 +14,7 @@ const testAPI = async () => {
     const loginResponse = await axios.post(`${API_URL}/auth/login`, {
       email: 'doctor@zurihealth.com',
       password: 'Doctor@123',
-      role: 'doctor'
+      role: 'DOCTOR'
     });
     
     authToken = loginResponse.data.token;

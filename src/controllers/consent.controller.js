@@ -42,7 +42,7 @@ exports.createConsent = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name']
         },
         {
@@ -76,7 +76,7 @@ exports.getConsents = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name']
         },
         {
@@ -109,7 +109,7 @@ exports.getConsentById = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name']
         },
         {

@@ -141,7 +141,7 @@ class LabTest extends Model {
   static associate(models) {
     this.belongsTo(models.User, {
       foreignKey: 'patientId',
-      as: 'patient'
+      as: 'PATIENT'
     });
     this.belongsTo(models.User, {
       foreignKey: 'referringDoctorId',

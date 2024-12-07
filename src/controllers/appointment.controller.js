@@ -22,7 +22,7 @@ const {
 //     const doctor = await User.findOne({ 
 //       where: { 
 //         id: doctorId, 
-//         role: 'doctor', 
+//         role: 'DOCTOR', 
 //         isActive: true 
 //       }
 //     });
@@ -162,9 +162,9 @@ exports.getAppointments = async (req, res, next) => {
     const where = {};
 
     // Add user-specific filter
-    if (req.user.role === 'patient') {
+    if (req.user.role === 'PATIENT') {
       where.patientId = req.user.id;
-    } else if (req.user.role === 'doctor') {
+    } else if (req.user.role === 'DOCTOR') {
       where.doctorId = req.user.id;
     }
 
@@ -198,12 +198,12 @@ exports.getAppointments = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         }
       ],
@@ -224,12 +224,12 @@ exports.getAppointmentById = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         }
       ]
@@ -264,12 +264,12 @@ exports.updateAppointmentStatus = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         }
       ]
@@ -280,8 +280,8 @@ exports.updateAppointmentStatus = async (req, res, next) => {
     }
 
     // Validate permission to update
-    const isDoctor = req.user.role === 'doctor' && appointment.doctorId === req.user.id;
-    const isPatient = req.user.role === 'patient' && appointment.patientId === req.user.id;
+    const isDoctor = req.user.role === 'DOCTOR' && appointment.doctorId === req.user.id;
+    const isPatient = req.user.role === 'PATIENT' && appointment.patientId === req.user.id;
     
     if (!isDoctor && !isPatient) {
       return res.status(403).json({ message: 'Not authorized to update this appointment' });
@@ -322,7 +322,7 @@ exports.updateAppointmentStatus = async (req, res, next) => {
           date: moment(appointment.dateTime).format('MMMM Do YYYY'),
           time: moment(appointment.dateTime).format('h:mm a'),
           reason: reason || 'No reason provided',
-          cancelledBy: isDoctor ? 'doctor' : 'patient'
+          cancelledBy: isDoctor ? 'DOCTOR' : 'PATIENT'
         })
       });
     } else if (status === 'confirmed') {
@@ -357,12 +357,12 @@ exports.rescheduleAppointment = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         }
       ]
@@ -476,7 +476,7 @@ exports.addAppointmentNotes = async (req, res, next) => {
     }
 
     // Only doctors can add notes
-    if (req.user.role !== 'doctor' || appointment.doctorId !== req.user.id) {
+    if (req.user.role !== 'DOCTOR' || appointment.doctorId !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized to add notes' });
     }
 
@@ -593,7 +593,7 @@ exports.validateAppointmentCreation = async (req, res, next) => {
     const doctor = await User.findOne({
       where: {
         id: doctorId,
-        role: 'doctor',
+        role: 'DOCTOR',
         isActive: true
       }
     });
@@ -714,12 +714,12 @@ exports.handleAppointmentRequest = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         }
       ]
@@ -844,12 +844,12 @@ exports.confirmAppointment = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         }
       ]

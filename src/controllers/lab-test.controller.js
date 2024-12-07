@@ -79,7 +79,7 @@ getLabTests: async (req, res, next) => {
         include: [
           {
             model: User,
-            as: 'patient',
+            as: 'PATIENT',
             attributes: ['id', 'name', 'email']
           },
           {
@@ -124,7 +124,7 @@ getLabTests: async (req, res, next) => {
         include: [
           {
             model: User,
-            as: 'patient',
+            as: 'PATIENT',
             attributes: ['id', 'name', 'email']
           },
           {
@@ -155,7 +155,7 @@ getLabTests: async (req, res, next) => {
         include: [
           {
             model: User,
-            as: 'patient',
+            as: 'PATIENT',
             attributes: ['id', 'name', 'email']
           },
           {

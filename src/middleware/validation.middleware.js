@@ -149,7 +149,7 @@ exports.validateAvailabilityQuery = async (req, res, next) => {
     const doctor = await User.findOne({
       where: {
         id: doctorId,
-        role: 'doctor',
+        role: 'DOCTOR',
         isActive: true
       }
     });

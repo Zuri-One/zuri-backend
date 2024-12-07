@@ -167,7 +167,7 @@ exports.getActiveTriages = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'gender']
         },
         {
@@ -261,7 +261,7 @@ exports.getTriageById = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'dateOfBirth', 'gender']
         },
         {

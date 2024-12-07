@@ -66,6 +66,7 @@ const initializeModel = (Model) => {
 // Initialize models in specific order
 const modelInitializationOrder = [
   'Department',  // Initialize Department first
+  'Triage',
   'User',        // Then User
 
   'DoctorProfile',
@@ -88,7 +89,6 @@ const modelInitializationOrder = [
   'Pharmacy',
   'MedicalDocument',
   'DocumentShare',
-  'Triage',
   'TriageNote',
   'ConsultationQueue'
 ];
@@ -122,6 +122,13 @@ Object.keys(initializedModels).forEach(modelName => {
       throw error;
     }
   }
+});
+
+Object.keys(initializedModels).forEach(modelName => {
+  const model = initializedModels[modelName];
+  console.log(`${modelName} associations:`, 
+    Object.keys(model.associations || {})
+  );
 });
 
 module.exports = {

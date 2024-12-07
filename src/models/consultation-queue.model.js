@@ -1,4 +1,3 @@
-// models/consultation-queue.model.js
 const { Model, DataTypes } = require('sequelize');
 
 class ConsultationQueue extends Model {
@@ -44,6 +43,10 @@ class ConsultationQueue extends Model {
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    tokenNumber: {
+      type: DataTypes.STRING(255),
+      allowNull: false
+    },
     priority: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
@@ -52,6 +55,10 @@ class ConsultationQueue extends Model {
     status: {
       type: DataTypes.ENUM('WAITING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'),
       defaultValue: 'WAITING'
+    },
+    checkInTime: {
+      type: DataTypes.DATE,
+      allowNull: false
     },
     estimatedStartTime: {
       type: DataTypes.DATE,
@@ -65,15 +72,126 @@ class ConsultationQueue extends Model {
       type: DataTypes.DATE,
       allowNull: true
     },
-    notes: {
-      type: DataTypes.TEXT,
+    waitingTime: {
+      type: DataTypes.INTEGER,
       allowNull: true
+    },
+    consultationDuration: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    patientCondition: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {
+        vitalSigns: {},
+        urgencyLevel: "",
+        triageCategory: null,
+        primaryComplaint: ""
+      }
+    },
+    consultationType: {
+      type: DataTypes.STRING(255),
+      defaultValue: 'REGULAR'
+    },
+    consultationRoom: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
+    notes: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {
+        nurseNotes: "",
+        triageNotes: "",
+        patientRequirements: [],
+        specialInstructions: ""
+      },
+      get() {
+        return this.getDataValue('notes');
+      },
+      set(value) {
+        if (typeof value === 'string') {
+          this.setDataValue('notes', {
+            nurseNotes: "",
+            triageNotes: value,
+            patientRequirements: [],
+            specialInstructions: ""
+          });
+        } else {
+          this.setDataValue('notes', value || this.constructor.getAttributes().notes.defaultValue);
+        }
+      }
+    },
+    statusHistory: {
+      type: DataTypes.JSONB,
+      defaultValue: []
+    },
+    notifications: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {
+        notified: false,
+        lastNotification: null,
+        notificationCount: 0,
+        notificationMethods: []
+      }
+    },
+    metrics: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {
+        delayFactor: 0,
+        priorityChanges: 0,
+        expectedDuration: 0
+      }
     },
     metadata: {
       type: DataTypes.JSONB,
-      defaultValue: {}
+      allowNull: false,
+      defaultValue: {},
+      get() {
+        const value = this.getDataValue('metadata');
+        return value || {};
+      },
+      set(value) {
+        this.setDataValue('metadata', value || {});
+      }
+    },
+    createdBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'Users',
+        key: 'id'
+      }
+    },
+    updatedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'Users',
+        key: 'id'
+      }
     }
   };
+
+  // Add a hook to ensure notes is always properly formatted before save
+  static hooks = {
+    beforeValidate: (instance, options) => {
+      if (instance.notes !== null && instance.notes !== undefined) {
+        // If notes is a string, format it correctly
+        if (typeof instance.notes === 'string') {
+          instance.notes = {
+            nurseNotes: "",
+            triageNotes: instance.notes,
+            patientRequirements: [],
+            specialInstructions: ""
+          };
+        }
+      }
+    }
+  }
 
   static associate(models) {
     this.belongsTo(models.Triage, {
@@ -82,15 +200,23 @@ class ConsultationQueue extends Model {
     });
     this.belongsTo(models.User, {
       foreignKey: 'patientId',
-      as: 'patient'
+      as: 'PATIENT'
     });
     this.belongsTo(models.User, {
       foreignKey: 'doctorId',
-      as: 'doctor'
+      as: 'DOCTOR'
     });
     this.belongsTo(models.Department, {
       foreignKey: 'departmentId',
       as: 'department'
+    });
+    this.belongsTo(models.User, {
+      foreignKey: 'createdBy',
+      as: 'creator'
+    });
+    this.belongsTo(models.User, {
+      foreignKey: 'updatedBy',
+      as: 'updater'
     });
   }
 
@@ -98,7 +224,8 @@ class ConsultationQueue extends Model {
     return this.init(this.schema, {
       sequelize,
       modelName: 'ConsultationQueue',
-      tableName: 'consultation_queues',
+      tableName: 'ConsultationQueues',
+      hooks: this.hooks,
       timestamps: true,
       paranoid: true
     });

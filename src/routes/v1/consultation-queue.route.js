@@ -9,7 +9,7 @@ router.use(authenticate);
 
 // Create new queue entry
 router.post('/', consultationQueueController.createConsultationQueue);
-router.post('/', authenticate, consultationQueueController.createConsultationQueue);
+// router.post('/', authenticate, consultationQueueController.createConsultationQueue);
 
 // Get department queue
 router.get('/department/:departmentId', consultationQueueController.getDepartmentQueue);

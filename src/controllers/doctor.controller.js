@@ -35,8 +35,7 @@ exports.getCurrentAvailability = async (req, res, next) => {
 
     const doctorId = req.user.id;
 
-    // Verify the user is a doctor
-    if (req.user.role.toLowerCase() !== 'doctor') {
+    if (req.user.role !== 'DOCTOR') {
       return res.status(403).json({
         success: false,
         message: 'Access denied - Doctor only resource'
@@ -87,6 +86,40 @@ exports.getCurrentAvailability = async (req, res, next) => {
   }
 };
 
+
+exports.getAvailability = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date } = req.query;
+
+    const availability = await DoctorAvailability.findOne({
+      where: { doctorId: id }
+    });
+
+    if (!availability) {
+      return res.status(404).json({
+        success: false,
+        message: 'No availability found for this doctor'
+      });
+    }
+
+    res.json({
+      success: true,
+      weeklySchedule: availability.weeklySchedule,
+      defaultSlotDuration: availability.defaultSlotDuration
+    });
+
+  } catch (error) {
+    console.error('Error fetching doctor availability:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch doctor availability'
+    });
+  }
+};
+
+
+
 exports.updateAvailability = async (req, res, next) => {
   try {
     console.log('Updating availability for user:', req.user?.id);
@@ -100,8 +133,7 @@ exports.updateAvailability = async (req, res, next) => {
 
     const doctorId = req.user.id;
 
-    // Verify the user is a doctor
-    if (req.user.role.toLowerCase() !== 'doctor') {
+    if (req.user.role !== 'DOCTOR') {
       return res.status(403).json({
         success: false,
         message: 'Access denied - Doctor only resource'
@@ -290,7 +322,7 @@ exports.getAvailableDoctors = async (req, res, next) => {
   try {
     const doctors = await User.findAll({
       where: {
-        role: 'doctor',
+        role: 'DOCTOR',
         isActive: true
       },
       include: [{
@@ -601,7 +633,7 @@ exports.getAppointmentRequests = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         }
       ],
@@ -743,12 +775,12 @@ exports.handleAppointmentRequest = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         }
       ]
@@ -844,12 +876,12 @@ exports.handleAppointmentRequest = async (req, res, next) => {
           include: [
             {
               model: User,
-              as: 'patient',
+              as: 'PATIENT',
               attributes: ['id', 'name', 'email']
             },
             {
               model: User,
-              as: 'doctor',
+              as: 'DOCTOR',
               attributes: ['id', 'name', 'email']
             }
           ]
@@ -921,7 +953,7 @@ exports.getCalendarData = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         }
       ],
@@ -955,7 +987,7 @@ exports.getCalendarData = async (req, res, next) => {
         isToday: currentDate.isSame(moment(), 'day'),
         appointments: dayAppointments.map(apt => ({
           id: apt.id,
-          patientName: apt.patient.name,
+          patientName: apt.PATIENT.name,
           type: apt.type,
           time: moment(apt.dateTime).format('HH:mm'),
           status: apt.status

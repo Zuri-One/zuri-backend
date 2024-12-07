@@ -16,7 +16,7 @@ const testDatabase = async () => {
       name: 'Test User',
       email: 'test@example.com',
       password: 'Test@123',
-      role: 'doctor',
+      role: 'DOCTOR',
       isEmailVerified: true
     });
     console.log('✅ User created successfully:', {

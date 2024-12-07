@@ -32,7 +32,7 @@ class HealthMetric extends Model {
 
   static associate(models) {
     this.belongsTo(models.User, { 
-      as: 'patient',
+      as: 'PATIENT',
       foreignKey: 'patientId'
     });
   }

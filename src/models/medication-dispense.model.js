@@ -113,7 +113,7 @@ class MedicationDispense extends Model {
         foreignKey: 'medicationId'
       });
       this.belongsTo(models.User, {
-        as: 'patient',
+        as: 'PATIENT',
         foreignKey: 'patientId'
       });
       this.belongsTo(models.User, {

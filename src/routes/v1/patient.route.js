@@ -6,7 +6,7 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
 // Apply middleware
 router.use(authenticate);
-router.use(authorize('patient'));
+router.use(authorize('PATIENT'));
 
 // Only include routes that have corresponding controller methods
 router.get('/dashboard', patientController.getPatientDashboard);

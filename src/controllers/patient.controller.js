@@ -30,7 +30,7 @@ exports.getPatientDashboard = async (req, res, next) => {
         include: [
           {
             model: User,
-            as: 'doctor',
+            as: 'DOCTOR',
             attributes: ['id', 'name'],
             include: [
               {
@@ -65,7 +65,7 @@ exports.getPatientDashboard = async (req, res, next) => {
         include: [
           {
             model: User,
-            as: 'doctor',
+            as: 'DOCTOR',
             attributes: ['id', 'name'],
             include: [
               {
@@ -129,7 +129,7 @@ exports.searchDoctors = async (req, res, next) => {
   try {
     const { specialization, date } = req.query;
     const whereClause = {
-      role: 'doctor',
+      role: 'DOCTOR',
       isActive: true
     };
 
@@ -207,7 +207,7 @@ exports.getPatientAppointments = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name'],
           include: [
             {
@@ -301,7 +301,7 @@ exports.getAppointmentHistory = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name'],
           include: [
             {

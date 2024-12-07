@@ -28,8 +28,8 @@ exports.staffLogin = async (req, res, next) => {
       } 
     });
 
-    // Change this condition to use lowercase for comparison
-    if (!user || user.role === 'patient' || user.role === 'admin') {
+    
+    if (!user || user.role === 'PATIENT' || user.role === 'ADMIN') {
       return res.status(401).json({
         message: 'Invalid credentials'
       });
@@ -167,21 +167,21 @@ exports.register = async (req, res, next) => {
     });
 
     const validRoles = [
-      'patient',
-      'doctor',
-      'nurse',
-      'lab_technician',
-      'pharmacist',
-      'radiologist',
-      'physiotherapist',
-      'nutritionist',
-      'receptionist',
-      'billing_staff',
-      'medical_assistant',
-      'ward_manager'
+      'PATIENT',
+      'DOCTOR',
+      'NURSE',
+      'LAB_TECHNICIAN',
+      'PHARMACIST',
+      'RADIOLOGIST',
+      'PHYSIOTHERAPIST',
+      'NUTRITIONIST',
+      'RECEPTIONIST',
+      'BILLING_STAFF',
+      'MEDICAL_ASSISTANT',
+      'WARD_MANAGER'
     ];
 
-    if (role && role !== 'patient' && !validRoles.includes(role)) {
+    if (role && role !== 'PATIENT' && !validRoles.includes(role)) {
       return res.status(400).json({
         message: 'Invalid role specified'
       });
@@ -192,7 +192,7 @@ exports.register = async (req, res, next) => {
       where: {
         [Op.or]: [
           { email: email.toLowerCase() },
-          ...(!role || role === 'patient' ? [{ nationalId }] : [])
+          ...(!role || role === 'PATIENT' ? [{ nationalId }] : [])
         ]
       }
     });
@@ -205,14 +205,14 @@ exports.register = async (req, res, next) => {
       });
     }
 
-    if (role !== 'patient') {
+    if (role !== 'PATIENT') {
       if (!employeeId) {
         return res.status(400).json({
           message: 'Employee ID is required for staff registration'
         });
       }
 
-      if (['doctor', 'nurse', 'pharmacist', 'lab_technician'].includes(role)) {
+      if (['DOCTOR', 'DOCTOR', 'DOCTOR', 'LAB_TECHNICIAN'].includes(role)) {
         if (!licenseNumber) {
           return res.status(400).json({
             message: 'License number is required for medical professionals'
@@ -221,17 +221,17 @@ exports.register = async (req, res, next) => {
       }
     }
 
-    let normalizedRole = role ? role.toLowerCase() : 'patient';
+    let normalizedRole = role ? role : 'PATIENT';
     
     // If it's a patient registration, require National ID
-    if ((!role || normalizedRole === 'patient') && !nationalId) {
+    if ((!role || normalizedRole === 'PATIENT') && !nationalId) {
       return res.status(400).json({
         message: 'National ID is required for patient registration'
       });
     }
 
     // Generate registration ID for patients
-    const registrationId = (!role || normalizedRole === 'patient') ? 
+    const registrationId = (!role || normalizedRole === 'PATIENT') ? 
     await generateUniqueRegistrationId(name) : 
     null;
     
@@ -281,7 +281,7 @@ exports.register = async (req, res, next) => {
           .update(verificationToken)
           .digest('hex'),
         emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        joiningDate: normalizedRole !== 'patient' ? new Date() : null
+        joiningDate: normalizedRole !== 'PATIENT' ? new Date() : null
       });
     } catch (createError) {
       console.error('User creation error:', createError);
@@ -302,7 +302,7 @@ exports.register = async (req, res, next) => {
     res.status(201).json({
       message: 'Registration successful. Please verify your email.',
       userId: user.id,
-      ...((!role || normalizedRole === 'patient') && {
+      ...((!role || normalizedRole === 'PATIENT') && {
         registrationId: user.registrationId
       })
     });

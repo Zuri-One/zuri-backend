@@ -16,26 +16,26 @@ router.use(authenticate);
 // Doctor routes
 router.post(
   '/prescriptions',
-  authorize(['doctor']),
+  // authorize(['DOCTOR']),
   medicationController.createPrescription
 );
 
 router.get(
   '/doctor/prescriptions',
-  authorize(['doctor']),
+  // authorize(['DOCTOR']),
   medicationController.getDoctorPrescriptions
 );
 
 router.patch(
   '/prescriptions/:id',
-  authorize(['doctor']),
+  // authorize(['DOCTOR']),
   medicationController.updatePrescription
 );
 
 // Patient routes
 router.get(
   '/patient/prescriptions',
-  authorize(['patient']),
+  // authorize(['PATIENT']),
   medicationController.getPatientPrescriptions
 );
 

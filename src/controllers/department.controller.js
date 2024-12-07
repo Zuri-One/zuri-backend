@@ -266,6 +266,30 @@ exports.assignStaffToDepartment = async (req, res, next) => {
   }
 };
 
+exports.getDoctorsByDepartment = async (req, res, next) => {
+  try {
+    const { departmentId } = req.params;
+
+    const doctors = await User.findAll({
+      where: {
+        departmentId,
+        role: 'DOCTOR',
+        isActive: true
+      },
+      attributes: ['id', 'name', 'specialization'],
+      order: [['name', 'ASC']]
+    });
+
+    res.json({
+      success: true,
+      doctors
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
 exports.updateDepartmentResources = async (req, res, next) => {
   try {
     const { id } = req.params;

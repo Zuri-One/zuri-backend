@@ -54,6 +54,8 @@ router.post(
   departmentController.assignStaffToDepartment
 );
 
+router.get('/:departmentId/doctors', authenticate, departmentController.getDoctorsByDepartment);
+
 router.put(
   '/:id/resources',
   // authorize(['ADMIN', 'HOSPITAL_ADMIN', 'WARD_MANAGER']),

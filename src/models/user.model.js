@@ -352,6 +352,8 @@ class User extends Model {
         foreignKey: 'departmentId',
         as: 'assignedDepartment'
       });
+
+     
       
       this.belongsTo(models.Department, {
         foreignKey: 'primaryDepartmentId',
@@ -401,6 +403,21 @@ class User extends Model {
       this.hasMany(models.TestResult, {
         as: 'testResults',
         foreignKey: 'patientId'
+      });
+
+
+      
+    }
+
+    if (models.Triage) {
+      this.hasMany(models.Triage, {
+        foreignKey: 'patientId',
+        as: 'triageAssessments'
+      });
+  
+      this.hasMany(models.Triage, {
+        foreignKey: 'assessedBy',
+        as: 'assessedTriages'
       });
     }
   }

@@ -28,7 +28,7 @@ exports.uploadDocument = async (req, res, next) => {
     }
 
     // Check permissions
-    if (req.user.role === 'patient' && patientId !== req.user.id) {
+    if (req.user.role === 'PATIENT' && patientId !== req.user.id) {
       return res.status(403).json({ message: 'Unauthorized access' });
     }
 
@@ -63,7 +63,7 @@ exports.uploadDocument = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
@@ -93,7 +93,7 @@ exports.getDocuments = async (req, res, next) => {
     const { patientId, category, isArchived } = req.query;
     const whereClause = {};
 
-    if (req.user.role === 'patient') {
+    if (req.user.role === 'PATIENT') {
       whereClause.patientId = req.user.id;
     } else if (patientId) {
       whereClause.patientId = patientId;
@@ -112,7 +112,7 @@ exports.getDocuments = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
@@ -140,7 +140,7 @@ exports.getDocumentById = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
@@ -156,7 +156,7 @@ exports.getDocumentById = async (req, res, next) => {
     }
 
     // Check permissions
-    if (req.user.role === 'patient' && document.patientId !== req.user.id) {
+    if (req.user.role === 'PATIENT' && document.patientId !== req.user.id) {
       return res.status(403).json({ message: 'Unauthorized access' });
     }
 
@@ -186,7 +186,7 @@ exports.updateDocument = async (req, res, next) => {
     }
 
     // Check permissions
-    if (req.user.role === 'patient' && document.patientId !== req.user.id) {
+    if (req.user.role === 'PATIENT' && document.patientId !== req.user.id) {
       return res.status(403).json({ message: 'Unauthorized access' });
     }
 
@@ -210,7 +210,7 @@ exports.updateDocument = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
@@ -240,7 +240,7 @@ exports.deleteDocument = async (req, res, next) => {
     }
 
     // Check permissions
-    if (req.user.role === 'patient' && document.patientId !== req.user.id) {
+    if (req.user.role === 'PATIENT' && document.patientId !== req.user.id) {
       return res.status(403).json({ message: 'Unauthorized access' });
     }
 
@@ -293,7 +293,7 @@ exports.bulkUpdateDocuments = async (req, res, next) => {
     });
 
     // Check permissions
-    if (req.user.role === 'patient') {
+    if (req.user.role === 'PATIENT') {
       const unauthorized = documents.some(doc => doc.patientId !== req.user.id);
       if (unauthorized) {
         return res.status(403).json({ message: 'Unauthorized access to one or more documents' });

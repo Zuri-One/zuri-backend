@@ -139,14 +139,14 @@ class Appointment extends Model {
 
   static associate(models) {
     this.belongsTo(models.User, { 
-      as: 'patient',
+      as: 'PATIENT',
       foreignKey: 'patientId',
       onDelete: 'NO ACTION',
       onUpdate: 'CASCADE'
     });
     
     this.belongsTo(models.User, { 
-      as: 'doctor',
+      as: 'DOCTOR',
       foreignKey: 'doctorId',
       onDelete: 'NO ACTION',
       onUpdate: 'CASCADE'

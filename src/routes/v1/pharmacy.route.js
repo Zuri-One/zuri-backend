@@ -17,14 +17,14 @@ router.post(
 
 router.get(
   '/inventory',
-  authorize(['pharmacist', 'doctor', 'nurse']),
+  authorize(['pharmacist', 'DOCTOR', 'nurse']),
   hasPermission(['view_pharmacy_inventory']),
   pharmacyController.getInventory
 );
 
 router.get(
   '/inventory/:id',
-  authorize(['pharmacist', 'doctor', 'nurse']),
+  authorize(['pharmacist', 'DOCTOR', 'nurse']),
   hasPermission(['view_pharmacy_inventory']),
   pharmacyController.getMedicationById
 );
@@ -75,7 +75,7 @@ router.get(
 
 router.get(
   '/dispense/:id',
-  authorize(['pharmacist', 'doctor']),
+  authorize(['pharmacist', 'DOCTOR']),
   hasPermission(['view_dispensing_history']),
   pharmacyController.getDispenseById
 );

@@ -24,8 +24,8 @@ module.exports = {
         allowNull: false
       },
       role: {
-        type: Sequelize.ENUM('patient', 'doctor', 'admin', 'staff'),
-        defaultValue: 'patient'
+        type: Sequelize.ENUM('PATIENT', 'DOCTOR', 'admin', 'staff'),
+        defaultValue: 'PATIENT'
       },
       isEmailVerified: {
         type: Sequelize.BOOLEAN,

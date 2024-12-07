@@ -9,30 +9,30 @@ module.exports = {
       await queryInterface.sequelize.query(`
         -- Delete related appointments
         DELETE FROM "Appointments" 
-        WHERE "doctorId" IN (SELECT id FROM "Users" WHERE role = 'doctor');
+        WHERE "doctorId" IN (SELECT id FROM "Users" WHERE role = 'DOCTOR');
 
 
 
         -- Delete related prescriptions
         DELETE FROM "Prescriptions" 
-        WHERE "doctorId" IN (SELECT id FROM "Users" WHERE role = 'doctor');
+        WHERE "doctorId" IN (SELECT id FROM "Users" WHERE role = 'DOCTOR');
 
         -- Delete doctor availabilities
         DELETE FROM "DoctorAvailabilities" 
-        WHERE "doctorId" IN (SELECT id FROM "Users" WHERE role = 'doctor');
+        WHERE "doctorId" IN (SELECT id FROM "Users" WHERE role = 'DOCTOR');
 
         -- Delete lab tests
         DELETE FROM "LabTests" 
-        WHERE "referringDoctorId" IN (SELECT id FROM "Users" WHERE role = 'doctor');
+        WHERE "referringDoctorId" IN (SELECT id FROM "Users" WHERE role = 'DOCTOR');
 
 
 
         -- Delete doctor profiles
         DELETE FROM "DoctorProfiles" 
-        WHERE "userId" IN (SELECT id FROM "Users" WHERE role = 'doctor');
+        WHERE "userId" IN (SELECT id FROM "Users" WHERE role = 'DOCTOR');
 
         -- Finally delete the doctors
-        DELETE FROM "Users" WHERE role = 'doctor';
+        DELETE FROM "Users" WHERE role = 'DOCTOR';
       `);
 
       // Get department IDs
@@ -55,7 +55,7 @@ module.exports = {
           name: 'Dr. Isaac Wambiri',
           email: 'isaacwambiri254@gmail.com',
           password: commonPassword,
-          role: 'doctor',
+          role: 'DOCTOR',
           departmentId: departments.find(d => d.code === 'GEN-MED')?.id,
           specialization: ['Internal Medicine', 'Primary Care'],
           employeeId: `DOC${timestamp}1`,
@@ -94,7 +94,7 @@ module.exports = {
           name: 'Dr. Isaac W',
           email: 'isaacw@identifyafrica.io',
           password: commonPassword,
-          role: 'doctor',
+          role: 'DOCTOR',
           departmentId: departments.find(d => d.code === 'PED')?.id,
           specialization: ['Pediatrics', 'Pediatric Emergency'],
           employeeId: `DOC${timestamp}2`,

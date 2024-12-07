@@ -25,7 +25,7 @@ module.exports = {
         "joiningDate",
         "createdAt"
       FROM "Users"
-      WHERE role::text IN ('DOCTOR', 'doctor');
+      WHERE role::text IN ('DOCTOR', 'DOCTOR');
     `, { type: queryInterface.sequelize.QueryTypes.SELECT });
 
     if (doctors.length === 0) {

@@ -144,7 +144,7 @@ exports.addProgressNote = async (req, res, next) => {
 const getDefaultIncludes = () => [
   {
     model: User,
-    as: 'patient',
+    as: 'PATIENT',
     attributes: ['id', 'name', 'dateOfBirth', 'gender']
   },
   {
@@ -335,7 +335,7 @@ exports.getPatientMedicalRecords = async (req, res, next) => {
       const isAuthorized = 
         req.user.role === 'admin' || 
         req.user.id === patientId || 
-        (req.user.role === 'doctor');
+        (req.user.role === 'DOCTOR');
   
       if (!isAuthorized) {
         return res.status(403).json({ 
@@ -349,12 +349,12 @@ exports.getPatientMedicalRecords = async (req, res, next) => {
         include: [
           {
             model: User,
-            as: 'doctor',
+            as: 'DOCTOR',
             attributes: ['id', 'name', 'email']
           },
           {
             model: User,
-            as: 'patient',
+            as: 'PATIENT',
             attributes: ['id', 'name', 'email']
           }
         ],
@@ -378,9 +378,9 @@ exports.getMedicalRecordById = async (req, res, next) => {
     const where = { id };
 
     // Add user-specific conditions
-    if (req.user.role === 'patient') {
+    if (req.user.role === 'PATIENT') {
       where.patientId = req.user.id;
-    } else if (req.user.role === 'doctor') {
+    } else if (req.user.role === 'DOCTOR') {
       where.doctorId = req.user.id;
     }
 
@@ -389,12 +389,12 @@ exports.getMedicalRecordById = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         },
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         }
       ]

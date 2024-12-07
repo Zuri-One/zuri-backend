@@ -261,7 +261,7 @@ const {
           include: [
             {
               model: User,
-              as: 'patient',
+              as: 'PATIENT',
               attributes: ['id', 'name', 'email']
             },
             {
@@ -476,7 +476,7 @@ const {
             },
             {
               model: User,
-              as: 'patient',
+              as: 'PATIENT',
               attributes: ['id', 'name', 'email']
             },
             {
@@ -515,7 +515,7 @@ const {
             },
             {
               model: User,
-              as: 'patient',
+              as: 'PATIENT',
               attributes: ['id', 'name', 'email']
             },
             {
@@ -527,7 +527,7 @@ const {
               model: Prescription,
               include: [{
                 model: User,
-                as: 'doctor',
+                as: 'DOCTOR',
                 attributes: ['id', 'name']
               }]
             }

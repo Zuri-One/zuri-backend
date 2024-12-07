@@ -13,8 +13,8 @@ exports.createPrescription = async (req, res, next) => {
 
     // Validate doctor and patient
     const [doctor, patient] = await Promise.all([
-      User.findOne({ where: { id: doctorId, role: 'doctor' }}),
-      User.findOne({ where: { id: patientId, role: 'patient' }})
+      User.findOne({ where: { id: doctorId, role: 'DOCTOR' }}),
+      User.findOne({ where: { id: patientId, role: 'PATIENT' }})
     ]);
 
     if (!doctor || !patient) {
@@ -101,7 +101,7 @@ exports.getDoctorPrescription = async (req, res, next) => {
         },
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         }
       ]
@@ -133,7 +133,7 @@ exports.getPrescription = async (req, res, next) => {
         },
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         }
       ]
@@ -166,7 +166,7 @@ exports.getPatientPrescriptions = async (req, res, next) => {
         },
         {
           model: User,
-          as: 'doctor',
+          as: 'DOCTOR',
           attributes: ['id', 'name', 'email']
         }
       ],
@@ -227,7 +227,7 @@ exports.getDoctorPrescriptions = async (req, res, next) => {
         },
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         }
       ],
@@ -251,7 +251,7 @@ exports.updatePrescription = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'patient',
+          as: 'PATIENT',
           attributes: ['id', 'name', 'email']
         }
       ]

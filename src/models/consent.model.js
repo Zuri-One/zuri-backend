@@ -101,7 +101,7 @@ class Consent extends Model {
       });
       this.belongsTo(models.User, {
         foreignKey: 'patientId',
-        as: 'patient'
+        as: 'PATIENT'
       });
       this.belongsTo(models.User, {
         foreignKey: 'witnessId',

@@ -8,7 +8,7 @@ const { Triage, Department } = require('../models');
 exports.getAllPatients = async (req, res, next) => {
   try {
     const patients = await User.findAll({
-      where: { role: 'patient' },
+      where: { role: 'PATIENT' },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -16,7 +16,7 @@ exports.getAllPatients = async (req, res, next) => {
           as: 'patientAppointments',
           include: [{
             model: User,
-            as: 'doctor',
+            as: 'DOCTOR',
             attributes: ['id', 'name', 'email'],
             include: [{
               model: DoctorProfile,
@@ -29,7 +29,7 @@ exports.getAllPatients = async (req, res, next) => {
           as: 'patientPrescriptions',
           include: [{
             model: User,
-            as: 'doctor',
+            as: 'DOCTOR',
             attributes: ['id', 'name', 'email']
           }]
         },
@@ -65,7 +65,7 @@ exports.getPatientsBasicInfo = async (req, res, next) => {
   try {
     const patients = await User.findAll({
       where: { 
-        role: 'patient',
+        role: 'PATIENT',
         deletedAt: null
       },
       attributes: [
@@ -99,7 +99,7 @@ exports.getPatientsBasicInfo = async (req, res, next) => {
 exports.getAllDoctors = async (req, res, next) => {
   try {
     const doctors = await User.findAll({
-      where: { role: 'doctor' },
+      where: { role: 'DOCTOR' },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -111,7 +111,7 @@ exports.getAllDoctors = async (req, res, next) => {
           as: 'doctorAppointments',
           include: [{
             model: User,
-            as: 'patient',
+            as: 'PATIENT',
             attributes: ['id', 'name', 'email']
           }]
         },
@@ -120,7 +120,7 @@ exports.getAllDoctors = async (req, res, next) => {
           as: 'doctorPrescriptions',
           include: [{
             model: User,
-            as: 'patient',
+            as: 'PATIENT',
             attributes: ['id', 'name', 'email']
           }]
         }
@@ -164,7 +164,7 @@ exports.getPatientById = async (req, res, next) => {
     const { id } = req.params;
 
     const patient = await User.findOne({
-      where: { id, role: 'patient' },
+      where: { id, role: 'PATIENT' },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -172,7 +172,7 @@ exports.getPatientById = async (req, res, next) => {
           as: 'patientAppointments',
           include: [{
             model: User,
-            as: 'doctor',
+            as: 'DOCTOR',
             attributes: ['id', 'name', 'email'],
             include: [{
               model: DoctorProfile,
@@ -185,7 +185,7 @@ exports.getPatientById = async (req, res, next) => {
           as: 'patientPrescriptions',
           include: [{
             model: User,
-            as: 'doctor',
+            as: 'DOCTOR',
             attributes: ['id', 'name', 'email']
           }]
         },
@@ -219,7 +219,7 @@ exports.getDoctorById = async (req, res, next) => {
     const { id } = req.params;
 
     const doctor = await User.findOne({
-      where: { id, role: 'doctor' },
+      where: { id, role: 'DOCTOR' },
       attributes: { exclude: ['password'] },
       include: [
         {
@@ -231,7 +231,7 @@ exports.getDoctorById = async (req, res, next) => {
           as: 'doctorAppointments',
           include: [{
             model: User,
-            as: 'patient',
+            as: 'PATIENT',
             attributes: ['id', 'name', 'email']
           }]
         },
@@ -240,7 +240,7 @@ exports.getDoctorById = async (req, res, next) => {
           as: 'doctorPrescriptions',
           include: [{
             model: User,
-            as: 'patient',
+            as: 'PATIENT',
             attributes: ['id', 'name', 'email']
           }]
         }
@@ -292,14 +292,14 @@ exports.getPatientStats = async (req, res, next) => {
       // Total patients count
       User.count({
         where: { 
-          role: 'patient'
+          role: 'PATIENT'
         }
       }),
 
       // New patients today
       User.count({
         where: {
-          role: 'patient',
+          role: 'PATIENT',
           createdAt: {
             [Op.gte]: today
           }
@@ -309,7 +309,7 @@ exports.getPatientStats = async (req, res, next) => {
       // Active patients
       User.count({
         where: {
-          role: 'patient',
+          role: 'PATIENT',
           isActive: true
         }
       }),
@@ -323,7 +323,7 @@ exports.getPatientStats = async (req, res, next) => {
 
       // Gender distribution
       User.findAll({
-        where: { role: 'patient' },
+        where: { role: 'PATIENT' },
         attributes: [
           'gender',
           [sequelize.fn('COUNT', sequelize.col('id')), 'count']
@@ -334,7 +334,7 @@ exports.getPatientStats = async (req, res, next) => {
       // Weekly registration trend (last 7 days)
       User.findAll({
         where: {
-          role: 'patient',
+          role: 'PATIENT',
           createdAt: {
             [Op.gte]: new Date(new Date() - 7 * 24 * 60 * 60 * 1000)
           }
@@ -403,7 +403,7 @@ exports.getPatientByEmail = async (req, res, next) => {
     const patient = await User.findOne({
       where: {
         email: email.toLowerCase(),
-        role: 'patient'
+        role: 'PATIENT'
       },
       attributes: { exclude: ['password'] }
     });
@@ -441,7 +441,7 @@ exports.searchPatients = async (req, res, next) => {
     const patients = await User.findAll({
       where: {
         role: {
-          [Op.or]: [{ [Op.eq]: 'patient' }, { [Op.eq]: 'patient' }]
+          [Op.or]: [{ [Op.eq]: 'PATIENT' }, { [Op.eq]: 'PATIENT' }]
         },
         [Op.or]: [
           { name: { [Op.iLike]: `%${q}%` } },
@@ -478,8 +478,8 @@ exports.getAllStaff = async (req, res, next) => {
     const staff = await User.findAll({
       where: {
         [Op.and]: [
-          { role: { [Op.ne]: 'patient' } }, // handle one at a time instead of notIn
-          { role: { [Op.ne]: 'admin' } },
+          { role: { [Op.ne]: 'PATIENT' } }, // handle one at a time instead of notIn
+          { role: { [Op.ne]: 'ADMIN' } },
           { isActive: true }
         ]
       },
@@ -510,26 +510,24 @@ exports.getAllStaff = async (req, res, next) => {
 
 exports.getWaitingPatients = async (req, res, next) => {
   try {
-    // First get all patients who don't have an active triage assessment
     const waitingPatients = await User.findAll({
       where: { 
-        role: 'patient',
+        role: 'PATIENT',
         isActive: true 
       },
-      include: [
-        {
-          model: Triage,
-          as: 'triageAssessments',
-          required: false,
-          where: {
-            status: {
-              [Op.notIn]: ['COMPLETED', 'TRANSFERRED']
-            }
-          },
-          order: [['createdAt', 'DESC']],
-          limit: 1
-        }
-      ],
+      include: [{
+        model: Triage,
+        as: 'triageAssessments',
+        required: false,
+        where: {
+          status: {
+            [Op.notIn]: ['COMPLETED', 'TRANSFERRED']
+          }
+        },
+        separate: true,
+        limit: 1,
+        order: [['createdAt', 'DESC']]
+      }],
       attributes: ['id', 'name', 'registrationId', 'contactNumber', 'createdAt']
     });
 
@@ -602,7 +600,7 @@ exports.updateStaffStatus = async (req, res, next) => {
       where: { 
         id,
         role: {
-          [Op.notIn]: ['patient', 'admin']
+          [Op.notIn]: ['PATIENT', 'ADMIN']
         }
       }
     });
@@ -641,7 +639,7 @@ exports.deleteStaff = async (req, res, next) => {
       where: { 
         id,
         role: {
-          [Op.notIn]: ['patient', 'admin']
+          [Op.notIn]: ['PATIENT', 'ADMIN']
         }
       }
     });
@@ -683,7 +681,7 @@ exports.updateStaff = async (req, res, next) => {
       where: { 
         id,
         role: {
-          [Op.notIn]: ['patient', 'admin']
+          [Op.notIn]: ['PATIENT', 'ADMIN']
         }
       },
       include: [
@@ -710,7 +708,7 @@ exports.updateStaff = async (req, res, next) => {
     });
 
     // If staff is a doctor, update their profile
-    if (staff.role === 'doctor' && staff.DoctorProfile) {
+    if (staff.role === 'DOCTOR' && staff.DoctorProfile) {
       await staff.DoctorProfile.update({
         specialization
       });

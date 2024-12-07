@@ -23,7 +23,7 @@ const verifyAndFixCredentials = async () => {
       name: 'Dr. John Doe',
       email: 'doctor@zurihealth.com',
       password: hashedPassword,
-      role: 'doctor',
+      role: 'DOCTOR',
       isEmailVerified: true,
       specialization: 'General Medicine'
     });
