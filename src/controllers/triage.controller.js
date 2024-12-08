@@ -1,5 +1,5 @@
 // controllers/triage.controller.js
-const { Triage, User, Department,  } = require('../models');
+const { Triage, User, Department,  ConsultationQueue } = require('../models');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/database');
 
@@ -194,7 +194,9 @@ exports.updateTriageStatus = async (req, res, next) => {
 exports.getActiveTriages = async (req, res, next) => {
   try {
     const triages = await Triage.findAll({
-      where: { status: ['IN_PROGRESS', 'REASSESSED'] },
+      where: { 
+        status: ['IN_PROGRESS', 'REASSESSED']
+      },
       include: [
         {
           model: User,
@@ -211,24 +213,44 @@ exports.getActiveTriages = async (req, res, next) => {
     });
 
     // Calculate waiting time for each triage
-    const triagesWithWaitTime = triages.map(triage => {
+    const triagesWithWaitTime = await Promise.all(triages.map(async (triage) => {
       const waitingTime = Math.floor(
         (new Date() - new Date(triage.assessmentDateTime)) / (1000 * 60)
       );
-      return {
-        ...triage.toJSON(),
-        waitingTime
-      };
-    });
+
+      // Check if there's a consultation queue entry for this patient
+      const existingQueue = await sequelize.models.ConsultationQueue.findOne({
+        where: {
+          triageId: triage.id,
+          status: {
+            [Op.in]: ['WAITING', 'IN_PROGRESS']  // Removed WAITING_FOR_DOCTOR
+          }
+        }
+      });
+
+      // Only include triages that don't have active consultation queue entries
+      if (!existingQueue) {
+        return {
+          ...triage.toJSON(),
+          waitingTime
+        };
+      }
+      return null;
+    }));
  
+    // Filter out null values (patients that are already in consultation queue)
+    const filteredTriages = triagesWithWaitTime.filter(t => t !== null);
+
     res.json({ 
       success: true, 
-      triages: triagesWithWaitTime 
+      triages: filteredTriages 
     });
   } catch (error) {
+    console.error('Error in getActiveTriages:', error);
     next(error);
   }
 };
+
 
 exports.getTriageStats = async (req, res, next) => {
   try {
