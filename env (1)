@@ -1,0 +1,38 @@
+PORT=10000
+MONGODB_URI=mongodb+srv://isaac:20405011006%40Ki@zuri.tlu6z.mongodb.net/hospital-management?retryWrites=true&w=majority
+JWT_SECRET=your-very-secret-key-min-32-chars
+JWT_EXPIRE=7d
+EMAIL_SERVICE=gmail
+EMAIL_USERNAME=wambiriisaac@gmail.com
+EMAIL_PASSWORD=aamj zlnt jtrk exym
+EMAIL_FROM=wambiriisaac@gmail.com
+FRONTEND_URL=http://localhost:3000
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
+BACKEND_URL=https://your-backend-domain.onrender.com
+DATABASE_URL=postgresql://zurihealth_owner:Gqt8RyVAUwb6@ep-wandering-lab-a5b0n3ej.us-east-2.aws.neon.tech/zurihealth?sslmode=require
+DEBUG=true
+NODE_ENV=development
+JWT_EXPIRE=24h
+UPLOADTHING_TOKEN='eyJhcGlLZXkiOiJza19saXZlXzQ4ZDUxZTQ4NjljNzU4N2U2MTZlYjBhYmVhYmFmYzEyM2YzNWJkMjE0NWU4ZTkwODIzNmNmZDllMjc4M2YzZDIiLCJhcHBJZCI6IjRscGtwNDU2d2MiLCJyZWdpb25zIjpbInNlYTEiXX0='
+
+
+# Google Meet Integration
+GOOGLE_CLIENT_ID=your_client_id
+GOOGLE_CLIENT_SECRET=your_client_secret
+GOOGLE_REDIRECT_URI=your_redirect_uri
+GOOGLE_REFRESH_TOKEN=your_refresh_token
+
+# Zoom Integration
+ZOOM_API_KEY=xM5jK3WdRAKynVpTZ4zP3A
+ZOOM_API_SECRET=tnHPZqggVCxTFpkQoQq0vykMYBEVr82x
+ZOOM_ACCOUNT_ID=d5iz1EUqRQ-HP1bXk42tWw
+
+
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_REGION=
+AWS_S3_BUCKET=
+
+
+NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=pk_live_5f89282720bbfff3a2dc1c1af3d1b2298bbc86fd
+PAYSTACK_SECRET_KEY=sk_live_6d76760b73ee7b087e72823d166c4afc1ab06ed7

@@ -4,7 +4,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const { sequelize } = require('./models');
-
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./config/swagger');
 const routes = require('./routes/index.routes');
 const errorHandler = require('./middleware/error.middleware');
 
@@ -22,6 +23,14 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: "Zuri Health HMS API Documentation"
+}));
+
 
 // Health check endpoint
 app.get('/health', (req, res) => {
