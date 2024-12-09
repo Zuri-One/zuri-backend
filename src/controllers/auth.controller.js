@@ -138,6 +138,78 @@ const generateUniqueRegistrationId = async (name, attempt = 0) => {
 };
 
 
+
+exports.registerPatient = async (req, res, next) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // Basic validation
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        message: 'Please provide name, email and password'
+      });
+    }
+
+    // Check for existing email
+    const existingUser = await User.findOne({
+      where: { email: email.toLowerCase() }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        message: 'Email already registered'
+      });
+    }
+
+    // Generate registration ID
+    const registrationId = await generateUniqueRegistrationId(name);
+
+    // Generate verification code and token
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+
+    // Important: Use User.create() to properly trigger Sequelize hooks
+    const user = await User.create({
+      name,
+      email: email.toLowerCase(),
+      password, // The beforeSave hook will hash this
+      role: 'PATIENT',
+      registrationId,
+      emailVerificationCode: verificationCode,
+      emailVerificationToken: crypto
+        .createHash('sha256')
+        .update(verificationToken)
+        .digest('hex'),
+      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000)
+    });
+
+    console.log('Created user with hashed password:', user.password); // Add debugging
+
+    // Generate verification URL
+    const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
+
+    // Send verification email
+    await sendEmail({
+      to: user.email,
+      subject: 'Verify your email',
+      html: generateVerificationEmail(user.name, verificationUrl, verificationCode)
+    });
+
+    // Return success response
+    res.status(201).json({
+      message: 'Registration successful. Please verify your email.',
+      userId: user.id,
+      registrationId: user.registrationId
+    });
+
+  } catch (error) {
+    console.error('Patient registration error:', error);
+    console.error('Error details:', error.message);
+    next(error);
+  }
+};
+
+
 exports.register = async (req, res, next) => {
   console.log('Complete request body:', req.body);
   try {

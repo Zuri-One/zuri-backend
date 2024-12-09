@@ -10,7 +10,8 @@ const {
   enable2FA,
   verify2FA,
   verifyEmailWithCode,
-  staffLogin
+  staffLogin,
+  registerPatient
   
 } = require('../../controllers/auth.controller');
 const { authenticate } = require('../../middleware/auth.middleware');
@@ -157,6 +158,42 @@ router.post('/staff-login', staffLogin);
  *         description: Email already exists
  */
 router.post('/register', register);
+
+
+/**
+ * @swagger
+ * /api/v1/auth/registerPatient:
+ *   post:
+ *     summary: Register a new patient
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - email
+ *               - password
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 format: password
+ *     responses:
+ *       201:
+ *         description: Patient registration successful
+ *       400:
+ *         description: Invalid input data
+ *       409:
+ *         description: Email already exists
+ */
+router.post('/registerPatient', registerPatient); 
 
 /**
  * @swagger
