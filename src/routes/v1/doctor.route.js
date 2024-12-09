@@ -105,6 +105,8 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
 router.get('/availability/current', authenticate, authorize(['DOCTOR']), 
   doctorController.getCurrentAvailability);
 
+
+  
 /**
  * @swagger
  * /api/v1/doctors/availability/update:
@@ -315,5 +317,31 @@ router.get('/appointment-requests', authenticate, authorize(['DOCTOR']),
  */
 router.post('/appointment-requests/:id/:action', authenticate, authorize(['DOCTOR']), 
   doctorController.handleAppointmentRequest);
+
+
+  /**
+ * @swagger
+ * /api/v1/doctors/{id}/availability:
+ *   get:
+ *     summary: Get doctor's availability for a specific date
+ *     tags: [Doctors]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Doctor's availability retrieved successfully
+ */
+router.get('/:id/availability', authenticate, doctorController.getAvailability);
 
 module.exports = router;

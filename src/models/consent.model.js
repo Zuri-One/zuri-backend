@@ -9,7 +9,7 @@ class Consent extends Model {
       },
       medicalRecordId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true, // Changed to true since RECORDS_ACCESS won't need this
         references: {
           model: 'MedicalRecords',
           key: 'id'
@@ -30,7 +30,8 @@ class Consent extends Model {
           'DATA_SHARING',
           'RESEARCH',
           'PHOTOGRAPHY',
-          'TEACHING'
+          'TEACHING',
+          'RECORDS_ACCESS'
         ),
         allowNull: false
       },
@@ -49,7 +50,11 @@ class Consent extends Model {
         //   name: string,
         //   relationship: string (if not patient),
         //   contactInfo: string,
-        //   identificationNumber: string
+        //   identificationNumber: string,
+        //   doctorId: string (for RECORDS_ACCESS),
+        //   requestType: string (for RECORDS_ACCESS),
+        //   status: string (for RECORDS_ACCESS),
+        //   approvedAt: date (for RECORDS_ACCESS)
         // }
       },
       validFrom: {
@@ -62,7 +67,7 @@ class Consent extends Model {
         allowNull: true
       },
       status: {
-        type: DataTypes.ENUM('ACTIVE', 'WITHDRAWN', 'EXPIRED'),
+        type: DataTypes.ENUM('ACTIVE', 'WITHDRAWN', 'EXPIRED', 'PENDING'),
         defaultValue: 'ACTIVE'
       },
       withdrawalDate: {
@@ -83,7 +88,7 @@ class Consent extends Model {
       },
       signature: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: true  // Changed to true to accommodate PENDING status
       },
       attachments: {
         type: DataTypes.JSONB,
@@ -125,6 +130,23 @@ class Consent extends Model {
       this.withdrawalReason = reason;
       await this.save();
     }
+
+    // Check if has valid records access
+    static async hasValidAccess(doctorId, patientId) {
+      const consent = await this.findOne({
+        where: {
+          patientId,
+          consentType: 'RECORDS_ACCESS',
+          status: 'ACTIVE',
+          validUntil: {
+            [Op.gt]: new Date()
+          },
+          'consentorDetails.doctorId': doctorId,
+          'consentorDetails.status': 'APPROVED'
+        }
+      });
+      return !!consent;
+    }
   }
   
-  module.exports = Consent ;
+  module.exports = Consent;

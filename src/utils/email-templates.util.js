@@ -139,6 +139,29 @@ exports.generateVerificationEmail = (name, verificationUrl, verificationCode) =>
     `;
   };
 
+
+  const generateAccessRequestEmail = ({ patientName, doctorName, doctorSpecialization, consentId }) => {
+    return `
+      <h2>Medical Records Access Request</h2>
+      <p>Dear ${patientName},</p>
+      <p>Dr. ${doctorName} (${doctorSpecialization}) has requested access to your medical records.</p>
+      <p>Please log in to your dashboard to approve or reject this request.</p>
+      <p>Request ID: ${consentId}</p>
+      <p>This request will expire in 24 hours.</p>
+    `;
+  };
+  
+  const generateAccessResponseEmail = ({ doctorName, status, patientName }) => {
+    return `
+      <h2>Medical Records Access Request ${status}</h2>
+      <p>Dear Dr. ${doctorName},</p>
+      <p>Your request to access medical records for patient ${patientName} has been ${status.toLowerCase()}.</p>
+      ${status === 'APPROVED' 
+        ? '<p>You can now view the patient\'s records from your dashboard.</p>' 
+        : '<p>You may request access again if needed.</p>'
+      }
+    `;
+  };
   exports.generatePasswordResetEmail = (name, resetCode) => {
     return `
       <!DOCTYPE html>
@@ -395,6 +418,32 @@ const generateAppointmentUpdateEmail = (type, data) => {
   }
 };
 
+
+// const generateAccessRequestEmail = ({
+//   patientName,
+//   doctorName,
+//   doctorSpecialization,
+//   approvalLink,
+//   rejectLink,
+//   requestId
+// }) => {
+//   return `
+//     <h2>Medical Records Access Request</h2>
+//     <p>Dear ${patientName},</p>
+//     <p>Dr. ${doctorName} (${doctorSpecialization}) has requested access to your medical records.</p>
+//     <p>Please choose one of the following options:</p>
+//     <div>
+//       <a href="${approvalLink}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; margin: 10px;">
+//         Approve Access
+//       </a>
+//       <a href="${rejectLink}" style="background-color: #f44336; color: white; padding: 10px 20px; text-decoration: none; margin: 10px;">
+//         Deny Access
+//       </a>
+//     </div>
+//     <p>This request will expire in 24 hours.</p>
+//     <p>Request ID: ${requestId}</p>
+//   `;
+// };
 const generatePrescriptionEmail = (type, data) => {
   switch (type) {
     case 'new':
@@ -524,5 +573,7 @@ module.exports = {
   generateAppointmentCancellationEmail,
   generateAppointmentUpdateEmail, 
   generateVideoAppointmentEmail,
-  generatePrescriptionEmail
+  generatePrescriptionEmail,
+  generateAccessRequestEmail,
+  generateAccessResponseEmail
 };

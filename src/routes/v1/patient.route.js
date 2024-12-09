@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const patientController = require('../../controllers/patient.controller');
+const patientConsentController = require('../../controllers/patient-consent.controller');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
 /**
@@ -260,5 +261,26 @@ router.get('/test-results', patientController.getTestResults);
  *                     $ref: '#/components/schemas/HealthMetrics'
  */
 router.get('/health-metrics', patientController.getHealthMetrics);
+
+router.post(
+    '/:patientId/request-access',
+    authenticate,
+    // authorize(['DOCTOR']),
+    patientConsentController.requestAccess
+  );
+  
+  router.post(
+    '/consent/response/:token',
+    authenticate,
+    // authorize(['PATIENT']),
+    patientConsentController.handleAccessResponse
+  );
+  
+  router.get(
+    '/:patientId/access-status',
+    authenticate,
+    // authorize(['DOCTOR']),
+    patientConsentController.checkAccessStatus
+  );
 
 module.exports = router;
