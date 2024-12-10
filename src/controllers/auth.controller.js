@@ -168,11 +168,15 @@ exports.registerPatient = async (req, res, next) => {
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const verificationToken = crypto.randomBytes(32).toString('hex');
 
-    // Important: Use User.create() to properly trigger Sequelize hooks
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create user with hashed password
     const user = await User.create({
       name,
       email: email.toLowerCase(),
-      password, // The beforeSave hook will hash this
+      password: hashedPassword,
       role: 'PATIENT',
       registrationId,
       emailVerificationCode: verificationCode,
@@ -182,8 +186,6 @@ exports.registerPatient = async (req, res, next) => {
         .digest('hex'),
       emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000)
     });
-
-    console.log('Created user with hashed password:', user.password); // Add debugging
 
     // Generate verification URL
     const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
