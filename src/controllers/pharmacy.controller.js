@@ -30,52 +30,299 @@ const {
           maxStockLevel,
           unitPrice,
           prescriptionRequired,
-          ...otherDetails
+          storageConditions,
+          sideEffects,
+          contraindications,
+          dosageInstructions,
+          supplier,
+          packageSize,
+          location,
+          notes
         } = req.body;
-  
+    
+        // Validate required fields
+        if (!name || !category || !type || !strength || !expiryDate || !unitPrice) {
+          return res.status(400).json({
+            success: false,
+            message: 'Missing required fields'
+          });
+        }
+    
+        // Create medication
         const medication = await MedicationInventory.create({
           name,
           genericName,
-          category,
-          type,
+          category: category.toUpperCase(),
+          type: type.toUpperCase(),
           strength,
           manufacturer,
           batchNumber,
-          expiryDate,
-          currentStock,
-          minStockLevel,
-          maxStockLevel,
-          unitPrice,
-          prescriptionRequired,
-          ...otherDetails
+          expiryDate: new Date(expiryDate),
+          currentStock: parseInt(currentStock || 0),
+          minStockLevel: parseInt(minStockLevel || 10),
+          maxStockLevel: parseInt(maxStockLevel || 1000),
+          unitPrice: parseFloat(unitPrice),
+          prescriptionRequired: Boolean(prescriptionRequired),
+          storageConditions,
+          sideEffects,
+          contraindications,
+          interactions: [],
+          dosageInstructions,
+          isActive: true,
+          supplier,
+          packageSize,
+          location,
+          notes
         });
-  
-        // Create initial stock movement record
-        await StockMovement.create({
-          medicationId: medication.id,
-          type: 'RECEIVED',
-          quantity: currentStock,
-          batchNumber,
-          unitPrice,
-          totalPrice: currentStock * unitPrice,
-          performedBy: req.user.id,
-          sourceType: 'PURCHASE'
-        });
-  
-        // Check if stock level is below minimum
-        if (currentStock <= minStockLevel) {
-          await this.sendLowStockAlert(medication);
+    
+        if (medication) {
+          // Create stock movement record
+          await StockMovement.create({
+            medicationId: medication.id,
+            type: 'RECEIVED',
+            quantity: parseInt(currentStock || 0),
+            batchNumber,
+            unitPrice: parseFloat(unitPrice),
+            totalPrice: parseInt(currentStock || 0) * parseFloat(unitPrice),
+            performedBy: req.user.id,
+            sourceType: 'PURCHASE'
+          });
+    
+          // Check if stock level is below minimum
+          if (parseInt(currentStock || 0) <= parseInt(minStockLevel || 10)) {
+            await this.sendLowStockAlert(medication);
+          }
         }
-  
+    
         res.status(201).json({
           success: true,
           message: 'Medication added successfully',
           medication
         });
       } catch (error) {
+        console.error('Error adding medication:', error);
         next(error);
       }
     }
+
+    async getPharmacyStats(req, res, next) {
+      try {
+        const [
+          totalDispensed, 
+          pendingPrescriptions,
+          totalMedications,
+          criticalStock
+        ] = await Promise.all([
+          MedicationDispense.count({
+            where: { status: 'DISPENSED' }
+          }),
+          Prescription.count({
+            where: { status: 'pending' }
+          }),
+          MedicationInventory.count(),
+          MedicationInventory.count({
+            where: {
+              currentStock: {
+                [Op.lte]: sequelize.col('minStockLevel')
+              }
+            }
+          })
+        ]);
+    
+        const inventoryValue = await MedicationInventory.sum(
+          sequelize.literal('currentStock * unitPrice')
+        );
+    
+        res.json({
+          success: true,
+          stats: {
+            totalDispensed,
+            pendingPrescriptions,
+            totalMedications,
+            criticalStock,
+            inventoryValue: inventoryValue || 0
+          }
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+    
+    async getPendingDispenses(req, res, next) {
+      try {
+        const pendingDispenses = await MedicationDispense.findAll({
+          where: {
+            status: 'PENDING'
+          },
+          include: [
+            {
+              model: MedicationInventory,
+              attributes: ['id', 'name', 'strength', 'currentStock']
+            },
+            {
+              model: User,
+              as: 'PATIENT',
+              attributes: ['id', 'name', 'email']
+            },
+            {
+              model: Prescription,
+              include: [{
+                model: User,
+                as: 'DOCTOR',
+                attributes: ['id', 'name']
+              }]
+            }
+          ],
+          order: [['createdAt', 'DESC']]
+        });
+    
+        res.json({
+          success: true,
+          dispenses: pendingDispenses
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+    
+    async getInventoryMetrics(req, res, next) {
+      try {
+        const [
+          totalItems, 
+          lowStock,
+          expiringItems
+        ] = await Promise.all([
+          MedicationInventory.count(),
+          MedicationInventory.count({
+            where: {
+              currentStock: {
+                [Op.lte]: sequelize.col('minStockLevel')
+              }
+            }
+          }),
+          MedicationInventory.count({
+            where: {
+              expiryDate: {
+                [Op.lte]: new Date(Date.now() + (90 * 24 * 60 * 60 * 1000)) // 90 days
+              }
+            }
+          })
+        ]);
+    
+        const totalValue = await MedicationInventory.sum(
+          sequelize.literal('currentStock * unitPrice')
+        );
+    
+        const categoryDistribution = await MedicationInventory.findAll({
+          attributes: [
+            'category',
+            [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+          ],
+          group: ['category']
+        });
+    
+        res.json({
+          success: true,
+          metrics: {
+            totalItems,
+            lowStock,
+            expiringItems,
+            totalValue: totalValue || 0,
+            categoryDistribution
+          }
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+    
+    async validateDispense(req, res, next) {
+      try {
+        const {
+          medicationId,
+          quantity,
+          prescriptionId
+        } = req.body;
+    
+        const medication = await MedicationInventory.findByPk(medicationId);
+        
+        if (!medication) {
+          return res.status(404).json({
+            success: false,
+            message: 'Medication not found'
+          });
+        }
+    
+        const validationResults = {
+          hasStock: medication.currentStock >= quantity,
+          needsPrescription: medication.prescriptionRequired,
+          hasPrescription: Boolean(prescriptionId),
+          isExpired: medication.expiryDate < new Date(),
+          price: medication.unitPrice * quantity
+        };
+    
+        res.json({
+          success: true,
+          validation: validationResults
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+    
+    async getDailyDispensingSummary(req, res, next) {
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+    
+        const dispenses = await MedicationDispense.findAll({
+          where: {
+            dispensedAt: {
+              [Op.gte]: today
+            }
+          },
+          include: [
+            {
+              model: MedicationInventory,
+              attributes: ['name', 'category']
+            }
+          ]
+        });
+    
+        const summary = {
+          totalDispenses: dispenses.length,
+          totalValue: dispenses.reduce((sum, d) => sum + Number(d.totalPrice), 0),
+          byCategory: {},
+          byHour: {}
+        };
+    
+        dispenses.forEach(dispense => {
+          // Summarize by category
+          const category = dispense.MedicationInventory.category;
+          if (!summary.byCategory[category]) {
+            summary.byCategory[category] = { count: 0, value: 0 };
+          }
+          summary.byCategory[category].count++;
+          summary.byCategory[category].value += Number(dispense.totalPrice);
+    
+          // Summarize by hour
+          const hour = new Date(dispense.dispensedAt).getHours();
+          if (!summary.byHour[hour]) {
+            summary.byHour[hour] = { count: 0, value: 0 };
+          }
+          summary.byHour[hour].count++;
+          summary.byHour[hour].value += Number(dispense.totalPrice);
+        });
+    
+        res.json({
+          success: true,
+          summary
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+
   
     // Dispensing Management
     async dispenseMedication(req, res, next) {
@@ -406,6 +653,8 @@ const {
         next(error);
       }
     }
+
+    
   
     async getLowStockItems(req, res, next) {
       try {
@@ -621,6 +870,9 @@ const {
         next(error);
       }
     }
+
+
+    
   
     // Reports and Analytics
     async getInventoryReport(req, res, next) {
@@ -667,5 +919,7 @@ const {
       }
     }
   }
+
+
   
   module.exports = new PharmacyController();

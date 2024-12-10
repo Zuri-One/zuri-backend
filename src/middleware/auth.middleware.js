@@ -62,9 +62,23 @@ exports.hasPermission = (requiredPermissions) => {
       return next();
     }
 
-    const userPermissions = req.user.permissions || [];
+    // Get role-based permissions from User model
+    const rolePermissions = User.rolePermissions[req.user.role] || [];
+    
+    // Get custom permissions from user object
+    let customPermissions = [];
+    if (req.user.permissions) {
+      customPermissions = Array.isArray(req.user.permissions) 
+        ? req.user.permissions 
+        : Object.keys(req.user.permissions);
+    }
+
+    // Combine role-based and custom permissions
+    const allUserPermissions = [...new Set([...rolePermissions, ...customPermissions])];
+
+    // Check if user has all required permissions
     const hasPermission = requiredPermissions.every(
-      permission => userPermissions.includes(permission)
+      permission => allUserPermissions.includes(permission)
     );
 
     if (!hasPermission) {
