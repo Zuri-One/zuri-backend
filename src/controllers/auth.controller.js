@@ -141,74 +141,161 @@ const generateUniqueRegistrationId = async (name, attempt = 0) => {
 
 exports.registerPatient = async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const {
+      surname,
+      otherNames,
+      email,
+      password,
+      dateOfBirth,
+      gender,
+      telephone1,
+      telephone2,
+      postalAddress,
+      postalCode,
+      occupation,
+      idType,
+      idNumber,
+      nationality,
+      town,
+      areaOfResidence,
+      nextOfKin,
+      medicalHistory,
+      insuranceInfo
+    } = req.body;
 
-    // Basic validation
-    if (!name || !email || !password) {
+    // Basic validation for required fields
+    const requiredFields = [
+      'surname',
+      'otherNames',
+      'dateOfBirth',
+      'gender',
+      'telephone1',
+      'occupation',
+      'idType',
+      'nationality',
+      'town',
+      'areaOfResidence'
+    ];
+
+    const missingFields = requiredFields.filter(field => !req.body[field]);
+    if (missingFields.length > 0) {
       return res.status(400).json({
-        message: 'Please provide name, email and password'
+        message: `Missing required fields: ${missingFields.join(', ')}`
+      });
+    }
+
+    // Validate next of kin
+    if (!nextOfKin?.name || !nextOfKin?.relationship || !nextOfKin?.phone) {
+      return res.status(400).json({
+        message: 'Next of kin requires name, relationship and phone'
       });
     }
 
     // Check for existing email
-    const existingUser = await User.findOne({
-      where: { email: email.toLowerCase() }
+    if (email) {
+      const existingUser = await User.findOne({
+        where: { email: email.toLowerCase() }
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          message: 'Email already registered'
+        });
+      }
+    }
+
+    // Generate patient number
+    const patientNumber = await generatePatientNumber();
+
+    // Generate verification code and token if email is provided
+    let verificationCode, verificationToken, hashedPassword;
+    if (email && password) {
+      verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      verificationToken = crypto.randomBytes(32).toString('hex');
+      const salt = await bcrypt.genSalt(10);
+      hashedPassword = await bcrypt.hash(password, salt);
+    }
+
+    // Create user
+    const user = await User.create({
+      surname,
+      otherNames,
+      email: email?.toLowerCase(),
+      password: hashedPassword,
+      dateOfBirth,
+      gender,
+      telephone1,
+      telephone2,
+      postalAddress,
+      postalCode,
+      occupation,
+      idType,
+      idNumber,
+      nationality,
+      town,
+      areaOfResidence,
+      nextOfKin,
+      medicalHistory,
+      insuranceInfo,
+      role: 'PATIENT',
+      patientNumber,
+      emailVerificationCode: verificationCode,
+      emailVerificationToken: verificationToken ? crypto
+        .createHash('sha256')
+        .update(verificationToken)
+        .digest('hex') : null,
+      emailVerificationExpires: verificationToken ? 
+        new Date(Date.now() + 24 * 60 * 60 * 1000) : null
     });
 
-    if (existingUser) {
-      return res.status(400).json({
-        message: 'Email already registered'
+    // Send verification email if email is provided
+    if (email && verificationToken) {
+      const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
+      await sendEmail({
+        to: email,
+        subject: 'Verify your email',
+        html: generateVerificationEmail(user.otherNames, verificationUrl, verificationCode)
       });
     }
 
-    // Generate registration ID
-    const registrationId = await generateUniqueRegistrationId(name);
-
-    // Generate verification code and token
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create user with hashed password
-    const user = await User.create({
-      name,
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      role: 'PATIENT',
-      registrationId,
-      emailVerificationCode: verificationCode,
-      emailVerificationToken: crypto
-        .createHash('sha256')
-        .update(verificationToken)
-        .digest('hex'),
-      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000)
-    });
-
-    // Generate verification URL
-    const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
-
-    // Send verification email
-    await sendEmail({
-      to: user.email,
-      subject: 'Verify your email',
-      html: generateVerificationEmail(user.name, verificationUrl, verificationCode)
-    });
-
     // Return success response
     res.status(201).json({
-      message: 'Registration successful. Please verify your email.',
-      userId: user.id,
-      registrationId: user.registrationId
+      message: email ? 'Registration successful. Please verify your email.' : 'Registration successful',
+      patientNumber: user.patientNumber,
+      registrationDate: user.createdAt,
+      userId: user.id
     });
 
   } catch (error) {
     console.error('Patient registration error:', error);
-    console.error('Error details:', error.message);
     next(error);
   }
+};
+
+const generatePatientNumber = async () => {
+  const prefix = 'ZH';
+  const padLength = 6;
+
+  // Find the last patient number
+  const lastPatient = await User.findOne({
+    where: {
+      patientNumber: {
+        [Op.like]: `${prefix}%`
+      },
+      role: 'PATIENT'
+    },
+    order: [['patientNumber', 'DESC']]
+  });
+
+  let nextNumber = 1;
+  if (lastPatient && lastPatient.patientNumber) {
+    // Extract the number part and increment
+    const lastNumber = parseInt(lastPatient.patientNumber.substring(2));
+    nextNumber = lastNumber + 1;
+  }
+
+  // Pad with zeros
+  return `${prefix}${nextNumber.toString().padStart(padLength, '0')}`;
 };
 
 

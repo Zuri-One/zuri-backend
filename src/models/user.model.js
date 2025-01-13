@@ -10,16 +10,25 @@ class User extends Model {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
-    name: {
+    // Personal Information
+    surname: {
       type: DataTypes.STRING,
-      allowNull: true
+      allowNull: false
+    },
+    otherNames: {
+      type: DataTypes.STRING,
+      allowNull: false
     },
     gender: {
       type: DataTypes.STRING,
-      allowNull: true,
+      allowNull: false,
       validate: {
         isIn: [['MALE', 'FEMALE', 'OTHER']]
       }
+    },
+    dateOfBirth: {
+      type: DataTypes.DATE,
+      allowNull: false
     },
     bloodGroup: {
       type: DataTypes.STRING,
@@ -28,22 +37,77 @@ class User extends Model {
         isIn: [['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']]
       }
     },
+
+    // Contact Information
     email: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       unique: true,
       validate: {
-        isEmail: true,
-        notEmpty: true
+        isEmail: true
       }
     },
+    telephone1: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    telephone2: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    postalAddress: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    postalCode: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    town: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    areaOfResidence: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+
+    // Authentication
     password: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       validate: {
         len: [8, 100]
       }
     },
+
+    // Identification
+    idType: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      validate: {
+        isIn: [['NATIONAL_ID', 'PASSPORT', 'MILITARY_ID', 'ALIEN_ID']]
+      }
+    },
+    idNumber: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    nationality: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    occupation: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    patientNumber: {
+      type: DataTypes.STRING,
+      unique: true,
+      allowNull: true
+    },
+
+    // Role and Permissions
     role: {
       type: DataTypes.ENUM(
         'ADMIN',
@@ -68,6 +132,14 @@ class User extends Model {
       allowNull: false,
       defaultValue: 'PATIENT'
     },
+    permissions: {
+      type: DataTypes.JSONB,
+      defaultValue: {},
+      allowNull: true,
+      comment: 'Custom permissions for each role'
+    },
+
+    // Department Information
     departmentId: {
       type: DataTypes.UUID,
       allowNull: true,
@@ -75,16 +147,6 @@ class User extends Model {
         model: 'departments',
         key: 'id'
       }
-    },
-    specialization: {
-      type: DataTypes.ARRAY(DataTypes.STRING),
-      defaultValue: [],
-      allowNull: true
-    },
-    staffId: {
-      type: DataTypes.STRING,
-      unique: true,
-      allowNull: true
     },
     primaryDepartmentId: {
       type: DataTypes.UUID,
@@ -99,36 +161,17 @@ class User extends Model {
       defaultValue: [],
       allowNull: true
     },
-    designation: {
-      type: DataTypes.STRING,
+
+    // Staff Information
+    specialization: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      defaultValue: [],
       allowNull: true
     },
-    expertise: {
-      type: DataTypes.JSONB,
-      defaultValue: {},
-      // Structure: {
-      //   skills: [],
-      //   certifications: [],
-      //   specialProcedures: []
-      // }
-    },
-    dutySchedule: {
-      type: DataTypes.JSONB,
-      defaultValue: {},
-      // Structure: {
-      //   monday: { shifts: ['MORNING'], hours: '9:00-17:00' }
-      // }
-    },
-    emergencyContact: {
-      type: DataTypes.JSONB,
-      defaultValue: {},
-      allowNull: true,
-      // Structure: {
-      //   name: string,
-      //   relationship: string,
-      //   phone: string,
-      //   address: string
-      // }
+    staffId: {
+      type: DataTypes.STRING,
+      unique: true,
+      allowNull: true
     },
     employeeId: {
       type: DataTypes.STRING,
@@ -139,11 +182,71 @@ class User extends Model {
       type: DataTypes.STRING,
       allowNull: true
     },
+    designation: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     qualification: {
       type: DataTypes.JSONB,
       defaultValue: [],
       allowNull: true
     },
+    expertise: {
+      type: DataTypes.JSONB,
+      defaultValue: {},
+      allowNull: true
+    },
+    dutySchedule: {
+      type: DataTypes.JSONB,
+      defaultValue: {},
+      allowNull: true
+    },
+    workSchedule: {
+      type: DataTypes.JSONB,
+      defaultValue: {},
+      allowNull: true
+    },
+    joiningDate: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+
+    // Emergency Contact
+    nextOfKin: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      validate: {
+        hasRequiredFields(value) {
+          if (!value.name || !value.relationship || !value.phone) {
+            throw new Error('Next of kin requires name, relationship and phone');
+          }
+        }
+      }
+    },
+
+    // Medical Information
+    medicalHistory: {
+      type: DataTypes.JSONB,
+      defaultValue: {
+        existingConditions: [],
+        allergies: []
+      },
+      allowNull: true
+    },
+
+    // Insurance Information
+    insuranceInfo: {
+      type: DataTypes.JSONB,
+      defaultValue: {
+        scheme: null,
+        provider: null,
+        membershipNumber: null,
+        principalMember: null
+      },
+      allowNull: true
+    },
+
+    // Account Status and Security
     isEmailVerified: {
       type: DataTypes.BOOLEAN,
       defaultValue: false
@@ -188,41 +291,17 @@ class User extends Model {
       type: DataTypes.ENUM('active', 'suspended', 'on_leave', 'terminated'),
       defaultValue: 'active'
     },
-    workSchedule: {
-      type: DataTypes.JSONB,
-      defaultValue: {},
-      allowNull: true
-    },
-    contactNumber: {
-      type: DataTypes.STRING,
-      allowNull: true
-    },
-    joiningDate: {
-      type: DataTypes.DATE,
-      allowNull: true
-    },
-    nationalId: {
-      type: DataTypes.STRING,
-      unique: true,
-      allowNull: true
-    },
-    registrationId: {
-      type: DataTypes.STRING,
-      unique: true,
-      allowNull: true
-    },
-    permissions: {
-      type: DataTypes.JSONB,
-      defaultValue: {},
-      allowNull: true,
-      comment: 'Custom permissions for each role'
-    },
     loginAttempts: {
       type: DataTypes.INTEGER,
       defaultValue: 0
     },
     lockUntil: {
       type: DataTypes.DATE,
+      allowNull: true
+    },
+    registrationId: {
+      type: DataTypes.STRING,
+      unique: true,
       allowNull: true
     }
   };
@@ -304,12 +383,11 @@ class User extends Model {
     }
   }
 
-  
   generateAuthToken() {
     return jwt.sign(
       {
         id: this.id,
-        role: this.role,  // Keep original case
+        role: this.role,
         permissions: User.rolePermissions[this.role.toUpperCase()] || []
       },
       process.env.JWT_SECRET,
@@ -352,8 +430,6 @@ class User extends Model {
         foreignKey: 'departmentId',
         as: 'assignedDepartment'
       });
-
-     
       
       this.belongsTo(models.Department, {
         foreignKey: 'primaryDepartmentId',
@@ -404,9 +480,6 @@ class User extends Model {
         as: 'testResults',
         foreignKey: 'patientId'
       });
-
-
-      
     }
 
     if (models.Triage) {
@@ -432,15 +505,12 @@ class User extends Model {
       hooks: {
         beforeValidate: async (user) => {
           console.log('beforeValidate hook triggered');
-          // Normalize role case
           if (user.role) {
             user.role = user.role.toUpperCase();
           }
-          // Normalize gender case
           if (user.gender) {
             user.gender = user.gender.toUpperCase();
           }
-          // Normalize blood group case
           if (user.bloodGroup) {
             user.bloodGroup = user.bloodGroup.toUpperCase();
           }
@@ -472,6 +542,10 @@ class User extends Model {
           fields: ['email']
         },
         {
+          unique: true,
+          fields: ['patientNumber']
+        },
+        {
           fields: ['role']
         },
         {
@@ -491,7 +565,7 @@ class User extends Model {
         }
       ]
     });
-}
+  }
 }
 
 module.exports = User;

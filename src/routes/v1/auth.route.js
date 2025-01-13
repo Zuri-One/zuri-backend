@@ -173,27 +173,120 @@ router.post('/register', register);
  *           schema:
  *             type: object
  *             required:
- *               - name
- *               - email
- *               - password
+ *               - surname
+ *               - otherNames
+ *               - dateOfBirth
+ *               - gender
+ *               - telephone1
+ *               - occupation
+ *               - idType
+ *               - nationality
+ *               - town
+ *               - areaOfResidence
+ *               - nextOfKin
  *             properties:
- *               name:
+ *               surname:
  *                 type: string
+ *                 description: Patient's surname/last name
+ *               otherNames:
+ *                 type: string
+ *                 description: Patient's other names (first and middle names)
  *               email:
  *                 type: string
  *                 format: email
+ *                 description: Optional email address
  *               password:
  *                 type: string
  *                 format: password
+ *                 description: Required if email is provided
+ *               dateOfBirth:
+ *                 type: string
+ *                 format: date
+ *                 description: Patient's date of birth (YYYY-MM-DD)
+ *               gender:
+ *                 type: string
+ *                 enum: [MALE, FEMALE, OTHER]
+ *               telephone1:
+ *                 type: string
+ *                 description: Primary phone number
+ *               telephone2:
+ *                 type: string
+ *                 description: Secondary phone number (optional)
+ *               postalAddress:
+ *                 type: string
+ *               postalCode:
+ *                 type: string
+ *               occupation:
+ *                 type: string
+ *               idType:
+ *                 type: string
+ *                 enum: [NATIONAL_ID, PASSPORT, MILITARY_ID, ALIEN_ID]
+ *               idNumber:
+ *                 type: string
+ *               nationality:
+ *                 type: string
+ *               town:
+ *                 type: string
+ *               areaOfResidence:
+ *                 type: string
+ *               nextOfKin:
+ *                 type: object
+ *                 required:
+ *                   - name
+ *                   - relationship
+ *                   - phone
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   relationship:
+ *                     type: string
+ *                   phone:
+ *                     type: string
+ *               medicalHistory:
+ *                 type: object
+ *                 properties:
+ *                   existingConditions:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *                   allergies:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *               insuranceInfo:
+ *                 type: object
+ *                 properties:
+ *                   scheme:
+ *                     type: string
+ *                   provider:
+ *                     type: string
+ *                   membershipNumber:
+ *                     type: string
+ *                   principalMember:
+ *                     type: string
  *     responses:
  *       201:
  *         description: Patient registration successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 patientNumber:
+ *                   type: string
+ *                 registrationDate:
+ *                   type: string
+ *                   format: date-time
+ *                 userId:
+ *                   type: string
  *       400:
- *         description: Invalid input data
+ *         description: Invalid input data or missing required fields
  *       409:
  *         description: Email already exists
  */
-router.post('/registerPatient', registerPatient); 
+router.post('/registerPatient', registerPatient);
 
 /**
  * @swagger
