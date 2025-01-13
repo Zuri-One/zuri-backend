@@ -191,7 +191,7 @@ exports.registerPatient = async (req, res, next) => {
       });
     }
 
-    // Check for existing email
+    // Check for existing email if provided
     if (email) {
       const existingUser = await User.findOne({
         where: { email: email.toLowerCase() }
@@ -202,10 +202,32 @@ exports.registerPatient = async (req, res, next) => {
           message: 'Email already registered'
         });
       }
+
+      // Validate password if email is provided
+      if (!password) {
+        return res.status(400).json({
+          message: 'Password is required when email is provided'
+        });
+      }
     }
 
     // Generate patient number
-    const patientNumber = await generatePatientNumber();
+    const lastPatient = await User.findOne({
+      where: {
+        patientNumber: {
+          [Op.like]: 'ZH%'
+        },
+        role: 'PATIENT'
+      },
+      order: [['patientNumber', 'DESC']]
+    });
+
+    let nextNumber = 1;
+    if (lastPatient && lastPatient.patientNumber) {
+      const lastNumber = parseInt(lastPatient.patientNumber.substring(2));
+      nextNumber = lastNumber + 1;
+    }
+    const patientNumber = `ZH${nextNumber.toString().padStart(6, '0')}`;
 
     // Generate verification code and token if email is provided
     let verificationCode, verificationToken, hashedPassword;
@@ -223,7 +245,7 @@ exports.registerPatient = async (req, res, next) => {
       email: email?.toLowerCase(),
       password: hashedPassword,
       dateOfBirth,
-      gender,
+      gender: gender.toUpperCase(),
       telephone1,
       telephone2,
       postalAddress,
@@ -235,35 +257,63 @@ exports.registerPatient = async (req, res, next) => {
       town,
       areaOfResidence,
       nextOfKin,
-      medicalHistory,
-      insuranceInfo,
+      medicalHistory: medicalHistory || {
+        existingConditions: [],
+        allergies: []
+      },
+      insuranceInfo: insuranceInfo || {
+        scheme: null,
+        provider: null,
+        membershipNumber: null,
+        principalMember: null
+      },
       role: 'PATIENT',
       patientNumber,
       emailVerificationCode: verificationCode,
-      emailVerificationToken: verificationToken ? crypto
-        .createHash('sha256')
-        .update(verificationToken)
-        .digest('hex') : null,
+      emailVerificationToken: verificationToken ? 
+        crypto.createHash('sha256').update(verificationToken).digest('hex') 
+        : null,
       emailVerificationExpires: verificationToken ? 
-        new Date(Date.now() + 24 * 60 * 60 * 1000) : null
+        new Date(Date.now() + 24 * 60 * 60 * 1000) 
+        : null,
+      isActive: true,
+      status: 'active'
     });
 
-    // Send verification email if email is provided
+    // Try to send verification email if email is provided
     if (email && verificationToken) {
-      const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
-      await sendEmail({
-        to: email,
-        subject: 'Verify your email',
-        html: generateVerificationEmail(user.otherNames, verificationUrl, verificationCode)
-      });
+      try {
+        const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
+        await sendEmail({
+          to: user.email,
+          subject: 'Verify your email - Zuri Health',
+          html: generateVerificationEmail(
+            `${user.surname} ${user.otherNames}`,
+            verificationUrl,
+            verificationCode
+          )
+        });
+      } catch (emailError) {
+        console.error('Email error:', emailError);
+        // Continue without throwing error
+      }
     }
 
     // Return success response
     res.status(201).json({
-      message: email ? 'Registration successful. Please verify your email.' : 'Registration successful',
+      message: email ? 
+        'Registration successful. Please check your email for verification instructions.' : 
+        'Registration successful',
       patientNumber: user.patientNumber,
       registrationDate: user.createdAt,
-      userId: user.id
+      userId: user.id,
+      patientInfo: {
+        name: `${user.surname} ${user.otherNames}`,
+        gender: user.gender,
+        dateOfBirth: user.dateOfBirth,
+        nationality: user.nationality,
+        contact: user.telephone1
+      }
     });
 
   } catch (error) {
