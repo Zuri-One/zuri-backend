@@ -97,7 +97,7 @@ exports.verifyEmailWithCode = async (req, res, next) => {
       });
     }
 
-    user.isEmailVerified = true;
+    user.isEmailVerified = null;
     user.emailVerificationCode = null;
     user.emailVerificationToken = null;
     user.emailVerificationExpires = null;
@@ -176,6 +176,7 @@ exports.registerPatient = async (req, res, next) => {
       'town',
       'areaOfResidence'
     ];
+
 
     const missingFields = requiredFields.filter(field => !req.body[field]);
     if (missingFields.length > 0) {
