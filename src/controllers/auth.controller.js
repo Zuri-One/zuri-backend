@@ -144,8 +144,8 @@ exports.registerPatient = async (req, res, next) => {
     const {
       surname,
       otherNames,
-      email,
-      password,
+      email,             // Now optional
+      password,          // Now optional
       dateOfBirth,
       gender,
       telephone1,
@@ -177,7 +177,6 @@ exports.registerPatient = async (req, res, next) => {
       'areaOfResidence'
     ];
 
-
     const missingFields = requiredFields.filter(field => !req.body[field]);
     if (missingFields.length > 0) {
       return res.status(400).json({
@@ -192,7 +191,11 @@ exports.registerPatient = async (req, res, next) => {
       });
     }
 
-    // Check for existing email if provided
+    // Check for existing email only if email is provided
+    let hashedPassword = null;
+    let verificationCode = null;
+    let verificationToken = null;
+
     if (email) {
       const existingUser = await User.findOne({
         where: { email: email.toLowerCase() }
@@ -204,11 +207,12 @@ exports.registerPatient = async (req, res, next) => {
         });
       }
 
-      // Validate password if email is provided
-      if (!password) {
-        return res.status(400).json({
-          message: 'Password is required when email is provided'
-        });
+      // Validate password only if email is provided
+      if (password) {
+        const salt = await bcrypt.genSalt(10);
+        hashedPassword = await bcrypt.hash(password, salt);
+        verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        verificationToken = crypto.randomBytes(32).toString('hex');
       }
     }
 
@@ -229,15 +233,6 @@ exports.registerPatient = async (req, res, next) => {
       nextNumber = lastNumber + 1;
     }
     const patientNumber = `ZH${nextNumber.toString().padStart(6, '0')}`;
-
-    // Generate verification code and token if email is provided
-    let verificationCode, verificationToken, hashedPassword;
-    if (email && password) {
-      verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-      verificationToken = crypto.randomBytes(32).toString('hex');
-      const salt = await bcrypt.genSalt(10);
-      hashedPassword = await bcrypt.hash(password, salt);
-    }
 
     // Create user
     const user = await User.create({
@@ -281,7 +276,7 @@ exports.registerPatient = async (req, res, next) => {
       status: 'active'
     });
 
-    // Try to send verification email if email is provided
+    // Send verification email only if email and password are provided
     if (email && verificationToken) {
       try {
         const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
