@@ -41,10 +41,16 @@ class User extends Model {
     // Contact Information
     email: {
       type: DataTypes.STRING,
-      allowNull: true,
+      allowNull: true,  // Changed from false to true
       unique: true,
       validate: {
-        isEmail: true
+        isEmail: true,
+        // Only validate if value is provided
+        isEmailValid(value) {
+          if (value !== null && value !== undefined && !validator.isEmail(value)) {
+            throw new Error('Invalid email format');
+          }
+        }
       }
     },
     telephone1: {
@@ -72,15 +78,21 @@ class User extends Model {
       allowNull: false
     },
 
-    // Authentication
+    
     password: {
       type: DataTypes.STRING,
       allowNull: true,
       validate: {
-        len: [8, 100]
+        passwordLength(value) {
+          // Only validate password length if password is provided
+          if (value !== null && value !== undefined && (value.length < 8 || value.length > 100)) {
+            throw new Error('Password must be between 8 and 100 characters long');
+          }
+        }
       }
     },
 
+    
     // Identification
     idType: {
       type: DataTypes.STRING,
