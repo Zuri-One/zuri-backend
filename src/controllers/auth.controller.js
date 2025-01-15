@@ -603,7 +603,7 @@ exports.verifyEmail = async (req, res, next) => {
       });
     }
 
-    user.isEmailVerified = true;
+    user.isEmailVerified = null;
     user.emailVerificationToken = null;
     user.emailVerificationExpires = null;
     await user.save();
