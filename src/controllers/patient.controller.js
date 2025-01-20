@@ -435,6 +435,107 @@ exports.getAllPatients = async (req, res, next) => {
   }
 };
 
+
+exports.searchPatients = async (req, res, next) => {
+  try {
+    const { searchTerm } = req.query;
+
+    if (!searchTerm) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search term is required'
+      });
+    }
+
+    // Search using either phone, patient number, or email
+    const patients = await Patient.findAll({
+      where: {
+        [Op.or]: [
+          { telephone1: searchTerm },
+          { patientNumber: searchTerm },
+          { email: searchTerm }
+        ]
+      },
+      attributes: {
+        exclude: [
+          'password',
+          'resetPasswordToken',
+          'resetPasswordExpires',
+          'emailVerificationToken',
+          'emailVerificationCode',
+          'emailVerificationExpires',
+          'twoFactorSecret'
+        ]
+      }
+    });
+
+    // Format the response similar to getPatientDetails
+    const formattedPatients = patients.map(patient => ({
+      personalInfo: {
+        id: patient.id,
+        patientNumber: patient.patientNumber,
+        surname: patient.surname,
+        otherNames: patient.otherNames,
+        fullName: `${patient.surname} ${patient.otherNames}`,
+        sex: patient.sex,
+        dateOfBirth: patient.dateOfBirth,
+        age: moment().diff(moment(patient.dateOfBirth), 'years'),
+        nationality: patient.nationality,
+        occupation: patient.occupation
+      },
+      contactInfo: {
+        telephone1: patient.telephone1,
+        telephone2: patient.telephone2 || null,
+        email: patient.email || null,
+        residence: patient.residence,
+        town: patient.town,
+        postalAddress: patient.postalAddress || null,
+        postalCode: patient.postalCode || null
+      },
+      identification: {
+        idType: patient.idType,
+        idNumber: patient.idNumber || null
+      },
+      emergencyContact: patient.nextOfKin,
+      medicalInfo: {
+        medicalHistory: patient.medicalHistory || {
+          existingConditions: [],
+          allergies: []
+        },
+        insuranceInfo: patient.insuranceInfo || {
+          scheme: null,
+          provider: null,
+          membershipNumber: null,
+          principalMember: null
+        }
+      },
+      status: {
+        isEmergency: patient.isEmergency,
+        isRevisit: patient.isRevisit,
+        currentStatus: patient.status,
+        isActive: patient.isActive
+      },
+      registrationInfo: {
+        registeredOn: moment(patient.createdAt).format('MMMM Do YYYY, h:mm:ss a'),
+        registrationNotes: patient.registrationNotes || null,
+        lastUpdated: moment(patient.updatedAt).format('MMMM Do YYYY, h:mm:ss a'),
+        paymentScheme: patient.paymentScheme
+      }
+    }));
+
+    res.json({
+      success: true,
+      count: formattedPatients.length,
+      patients: formattedPatients
+    });
+
+  } catch (error) {
+    console.error('Error searching patients:', error);
+    next(error);
+  }
+};
+
+
 exports.getPatientRegistrations = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;

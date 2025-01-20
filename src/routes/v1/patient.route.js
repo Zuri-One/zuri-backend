@@ -399,6 +399,125 @@ router.get('/all',
   patientController.getAllPatients
 );
 
+/**
+ * @swagger
+ * /api/v1/patient/search:
+ *   get:
+ *     summary: Search patients by phone number, patient number, or email
+ *     tags: [Patient Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: searchTerm
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Phone number, patient number, or email to search for
+ *     responses:
+ *       200:
+ *         description: Search results retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 count:
+ *                   type: integer
+ *                 patients:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       personalInfo:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           patientNumber:
+ *                             type: string
+ *                           surname:
+ *                             type: string
+ *                           otherNames:
+ *                             type: string
+ *                           fullName:
+ *                             type: string
+ *                           sex:
+ *                             type: string
+ *                           dateOfBirth:
+ *                             type: string
+ *                           age:
+ *                             type: integer
+ *                           nationality:
+ *                             type: string
+ *                           occupation:
+ *                             type: string
+ *                       contactInfo:
+ *                         type: object
+ *                         properties:
+ *                           telephone1:
+ *                             type: string
+ *                           telephone2:
+ *                             type: string
+ *                           email:
+ *                             type: string
+ *                           residence:
+ *                             type: string
+ *                           town:
+ *                             type: string
+ *                           postalAddress:
+ *                             type: string
+ *                           postalCode:
+ *                             type: string
+ *                       identification:
+ *                         type: object
+ *                         properties:
+ *                           idType:
+ *                             type: string
+ *                           idNumber:
+ *                             type: string
+ *                       emergencyContact:
+ *                         type: object
+ *                       medicalInfo:
+ *                         type: object
+ *                         properties:
+ *                           medicalHistory:
+ *                             type: object
+ *                           insuranceInfo:
+ *                             type: object
+ *                       status:
+ *                         type: object
+ *                         properties:
+ *                           isEmergency:
+ *                             type: boolean
+ *                           isRevisit:
+ *                             type: boolean
+ *                           currentStatus:
+ *                             type: string
+ *                           isActive:
+ *                             type: boolean
+ *                       registrationInfo:
+ *                         type: object
+ *                         properties:
+ *                           registeredOn:
+ *                             type: string
+ *                           registrationNotes:
+ *                             type: string
+ *                           lastUpdated:
+ *                             type: string
+ *                           paymentScheme:
+ *                             type: object
+ *       400:
+ *         description: Search term is required
+ */
+router.get('/search', 
+  authenticate, 
+  // authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']), 
+  patientController.searchPatients
+);
+
 router.post(
     '/:patientId/request-access',
     authenticate,
