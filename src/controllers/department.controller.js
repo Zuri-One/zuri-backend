@@ -61,24 +61,76 @@ exports.createDepartment = async (req, res, next) => {
 
 exports.getDepartments = async (req, res, next) => {
   try {
-    console.log('Fetching departments...');
     const departments = await Department.findAll({
       include: [{
         model: User,
         as: 'headOfDepartment',
-        attributes: ['id', 'name', 'email'],
+        attributes: ['id', 'surname', 'otherNames', 'email'], // Updated attributes
         required: false
       }],
       order: [['name', 'ASC']]
     });
 
-    console.log('Found departments:', departments.length);
+    // Format response to include full name
+    const formattedDepartments = departments.map(dept => ({
+      ...dept.toJSON(),
+      headOfDepartment: dept.headOfDepartment ? {
+        ...dept.headOfDepartment.toJSON(),
+        fullName: `${dept.headOfDepartment.surname} ${dept.headOfDepartment.otherNames}`
+      } : null
+    }));
+
     res.json({
       success: true,
-      departments
+      departments: formattedDepartments
     });
   } catch (error) {
-    console.error('Error in getDepartments:', error);
+    next(error);
+  }
+};
+
+// Update getDoctorsByDepartment function
+exports.getDoctorsByDepartment = async (req, res, next) => {
+  try {
+    const { departmentId } = req.params;
+
+    const doctors = await User.findAll({
+      where: {
+        departmentId,
+        role: 'DOCTOR',
+        isActive: true
+      },
+      attributes: [
+        'id', 
+        'surname', 
+        'otherNames',
+        'specialization',
+        'licenseNumber',
+        'qualification'
+      ],
+      include: [{
+        model: DoctorAvailability,
+        attributes: ['weeklySchedule', 'isAcceptingAppointments']
+      }],
+      order: [['surname', 'ASC']]
+    });
+
+    // Format response to include full name and availability
+    const formattedDoctors = doctors.map(doctor => ({
+      id: doctor.id,
+      fullName: `${doctor.surname} ${doctor.otherNames}`,
+      specialization: doctor.specialization,
+      licenseNumber: doctor.licenseNumber,
+      qualification: doctor.qualification,
+      isAvailable: doctor.DoctorAvailability?.isAcceptingAppointments || false,
+      schedule: doctor.DoctorAvailability?.weeklySchedule || {}
+    }));
+
+    res.json({
+      success: true,
+      doctors: formattedDoctors
+    });
+  } catch (error) {
     next(error);
   }
 };
@@ -266,28 +318,32 @@ exports.assignStaffToDepartment = async (req, res, next) => {
   }
 };
 
-exports.getDoctorsByDepartment = async (req, res, next) => {
-  try {
-    const { departmentId } = req.params;
+async function calculateEstimatedWaitTime(departmentId) {
+  const lastFiveCompletedPatients = await DepartmentQueue.findAll({
+    where: {
+      departmentId,
+      status: ['COMPLETED', 'TRANSFERRED'],
+      endTime: { [Op.not]: null },
+      startTime: { [Op.not]: null }
+    },
+    order: [['endTime', 'DESC']],
+    limit: 5
+  });
 
-    const doctors = await User.findAll({
-      where: {
-        departmentId,
-        role: 'DOCTOR',
-        isActive: true
-      },
-      attributes: ['id', 'name', 'specialization'],
-      order: [['name', 'ASC']]
-    });
-
-    res.json({
-      success: true,
-      doctors
-    });
-  } catch (error) {
-    next(error);
+  if (lastFiveCompletedPatients.length === 0) {
+    return 30; // Default 30 minutes if no historical data
   }
-};
+
+  // Calculate average wait time
+  const totalWaitTime = lastFiveCompletedPatients.reduce((sum, patient) => {
+    const waitTime = Math.floor(
+      (new Date(patient.endTime) - new Date(patient.startTime)) / (1000 * 60)
+    );
+    return sum + waitTime;
+  }, 0);
+
+  return Math.floor(totalWaitTime / lastFiveCompletedPatients.length);
+}
 
 
 exports.updateDepartmentResources = async (req, res, next) => {

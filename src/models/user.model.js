@@ -1,7 +1,6 @@
 const { Model, DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 
 class User extends Model {
   static schema = {
@@ -30,22 +29,14 @@ class User extends Model {
       type: DataTypes.DATE,
       allowNull: false
     },
-    bloodGroup: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      validate: {
-        isIn: [['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']]
-      }
-    },
 
     // Contact Information
     email: {
       type: DataTypes.STRING,
-      allowNull: true,  // Changed from false to true
+      allowNull: true,
       unique: true,
       validate: {
         isEmail: true,
-        // Only validate if value is provided
         isEmailValid(value) {
           if (value !== null && value !== undefined && !validator.isEmail(value)) {
             throw new Error('Invalid email format');
@@ -78,13 +69,12 @@ class User extends Model {
       allowNull: false
     },
 
-    
+    // Authentication
     password: {
       type: DataTypes.STRING,
       allowNull: true,
       validate: {
         passwordLength(value) {
-          // Only validate password length if password is provided
           if (value !== null && value !== undefined && (value.length < 8 || value.length > 100)) {
             throw new Error('Password must be between 8 and 100 characters long');
           }
@@ -92,7 +82,6 @@ class User extends Model {
       }
     },
 
-    
     // Identification
     idType: {
       type: DataTypes.STRING,
@@ -108,15 +97,6 @@ class User extends Model {
     nationality: {
       type: DataTypes.STRING,
       allowNull: false
-    },
-    occupation: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    patientNumber: {
-      type: DataTypes.STRING,
-      unique: true,
-      allowNull: true
     },
 
     // Role and Permissions
@@ -137,12 +117,10 @@ class User extends Model {
         'SURGEON',
         'ANESTHESIOLOGIST',
         'EMERGENCY_PHYSICIAN',
-        'PATIENT',
         'WARD_MANAGER',
         'BILLING_STAFF'
       ),
-      allowNull: false,
-      defaultValue: 'PATIENT'
+      allowNull: false
     },
     permissions: {
       type: DataTypes.JSONB,
@@ -223,41 +201,6 @@ class User extends Model {
       allowNull: true
     },
 
-    // Emergency Contact
-    nextOfKin: {
-      type: DataTypes.JSONB,
-      allowNull: false,
-      validate: {
-        hasRequiredFields(value) {
-          if (!value.name || !value.relationship || !value.phone) {
-            throw new Error('Next of kin requires name, relationship and phone');
-          }
-        }
-      }
-    },
-
-    // Medical Information
-    medicalHistory: {
-      type: DataTypes.JSONB,
-      defaultValue: {
-        existingConditions: [],
-        allergies: []
-      },
-      allowNull: true
-    },
-
-    // Insurance Information
-    insuranceInfo: {
-      type: DataTypes.JSONB,
-      defaultValue: {
-        scheme: null,
-        provider: null,
-        membershipNumber: null,
-        principalMember: null
-      },
-      allowNull: true
-    },
-
     // Account Status and Security
     isEmailVerified: {
       type: DataTypes.BOOLEAN,
@@ -309,11 +252,6 @@ class User extends Model {
     },
     lockUntil: {
       type: DataTypes.DATE,
-      allowNull: true
-    },
-    registrationId: {
-      type: DataTypes.STRING,
-      unique: true,
       allowNull: true
     }
   };
@@ -383,14 +321,10 @@ class User extends Model {
 
   async comparePassword(candidatePassword) {
     try {
-      console.log('Comparing passwords for:', this.email);
-      console.log('Stored hash:', this.password);
       const isMatch = await bcrypt.compare(candidatePassword, this.password);
-      console.log('Password match result:', isMatch);
       return isMatch;
     } catch (error) {
-      console.error('Password comparison error:', error);
-      console.error('Error details:', error.message);
+      console.error('Password comparison error:', error.message);
       return false;
     }
   }
@@ -423,7 +357,7 @@ class User extends Model {
     } else {
       this.loginAttempts += 1;
       if (this.loginAttempts >= 5) {
-        this.lockUntil = Date.now() + (60 * 60 * 1000); // Lock for 1 hour
+        this.lockUntil = Date.now() + (60 * 60 * 1000);
       }
     }
     await this.save();
@@ -452,13 +386,6 @@ class User extends Model {
     // Appointment associations
     if (models.Appointment) {
       this.hasMany(models.Appointment, { 
-        as: 'patientAppointments',
-        foreignKey: 'patientId',
-        onDelete: 'NO ACTION',
-        onUpdate: 'CASCADE'
-      });
-      
-      this.hasMany(models.Appointment, { 
         as: 'doctorAppointments',
         foreignKey: 'doctorId',
         onDelete: 'NO ACTION',
@@ -476,30 +403,12 @@ class User extends Model {
     // Prescription associations
     if (models.Prescription) {
       this.hasMany(models.Prescription, {
-        as: 'patientPrescriptions',
-        foreignKey: 'patientId'
-      });
-
-      this.hasMany(models.Prescription, {
         as: 'doctorPrescriptions',
         foreignKey: 'doctorId'
       });
     }
 
-    // TestResult association
-    if (models.TestResult) {
-      this.hasMany(models.TestResult, {
-        as: 'testResults',
-        foreignKey: 'patientId'
-      });
-    }
-
     if (models.Triage) {
-      this.hasMany(models.Triage, {
-        foreignKey: 'patientId',
-        as: 'triageAssessments'
-      });
-  
       this.hasMany(models.Triage, {
         foreignKey: 'assessedBy',
         as: 'assessedTriages'
@@ -516,46 +425,24 @@ class User extends Model {
       paranoid: false,
       hooks: {
         beforeValidate: async (user) => {
-          console.log('beforeValidate hook triggered');
           if (user.role) {
             user.role = user.role.toUpperCase();
           }
           if (user.gender) {
             user.gender = user.gender.toUpperCase();
           }
-          if (user.bloodGroup) {
-            user.bloodGroup = user.bloodGroup.toUpperCase();
-          }
-        },
-        beforeCreate: async (user) => {
-          console.log('beforeCreate hook triggered');
         },
         beforeSave: async (user) => {
-          console.log('beforeSave hook triggered');
           if (user.changed('password')) {
-            console.log('Password change detected for:', user.email);
-            console.log('Original password:', user.password);
             const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(user.password, salt);
-            user.password = hashedPassword;
-            console.log('New hashed password:', hashedPassword);
-          } else {
-            console.log('No password change detected');
+            user.password = await bcrypt.hash(user.password, salt);
           }
-        },
-        afterSave: async (user) => {
-          console.log('afterSave hook triggered');
-          console.log('Final stored password:', user.password);
         }
       },
       indexes: [
         {
           unique: true,
           fields: ['email']
-        },
-        {
-          unique: true,
-          fields: ['patientNumber']
         },
         {
           fields: ['role']

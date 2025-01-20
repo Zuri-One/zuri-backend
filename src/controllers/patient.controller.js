@@ -1,7 +1,9 @@
 // src/controllers/patient.controller.js
 const { Op } = require('sequelize');
-const { User, Appointment, DoctorProfile, DoctorAvailability, TestResult, HealthMetric } = require('../models');
+const { User, Appointment, DoctorProfile, DoctorAvailability, TestResult, HealthMetric, Patient } = require('../models');
 const moment = require('moment');
+const { validate: isUUID } = require('uuid');
+
 
 exports.getPatientDashboard = async (req, res, next) => {
   try {
@@ -333,4 +335,347 @@ exports.getAppointmentHistory = async (req, res, next) => {
 
 
 
+};
+
+exports.getAllPatients = async (req, res, next) => {
+  try {
+    const { page, limit, noPagination } = req.query;
+    
+    // Base query options
+    const queryOptions = {
+      attributes: [
+        'id',
+        'patientNumber',
+        'surname',
+        'otherNames',
+        'sex',
+        'dateOfBirth',
+        'telephone1',
+        'email',
+        'nationality',
+        'residence',
+        'town',
+        'isEmergency',
+        'isRevisit',
+        'status',
+        'createdAt'
+      ],
+      order: [['createdAt', 'DESC']]
+    };
+
+    // If pagination is explicitly disabled or not specified
+    if (noPagination === 'true') {
+      const patients = await Patient.findAll(queryOptions);
+      return res.json({
+        success: true,
+        data: {
+          patients: patients.map(patient => ({
+            id: patient.id,
+            patientNumber: patient.patientNumber,
+            fullName: `${patient.surname} ${patient.otherNames}`,
+            age: moment().diff(moment(patient.dateOfBirth), 'years'),
+            sex: patient.sex,
+            contact: patient.telephone1,
+            email: patient.email || 'N/A',
+            location: `${patient.residence}, ${patient.town}`,
+            status: patient.status,
+            isEmergency: patient.isEmergency,
+            isRevisit: patient.isRevisit,
+            registeredOn: moment(patient.createdAt).format('MMMM Do YYYY')
+          })),
+          total: patients.length
+        }
+      });
+    }
+
+    // Pagination options
+    const currentPage = parseInt(page) || 1;
+    const itemsPerPage = Math.min(parseInt(limit) || 10, 100); // Max 100 items per page
+    
+    // Add pagination to query
+    const { count, rows: patients } = await Patient.findAndCountAll({
+      ...queryOptions,
+      offset: (currentPage - 1) * itemsPerPage,
+      limit: itemsPerPage
+    });
+
+    // Calculate total pages
+    const totalPages = Math.ceil(count / itemsPerPage);
+
+    // Format response
+    res.json({
+      success: true,
+      data: {
+        patients: patients.map(patient => ({
+          id: patient.id,
+          patientNumber: patient.patientNumber,
+          fullName: `${patient.surname} ${patient.otherNames}`,
+          age: moment().diff(moment(patient.dateOfBirth), 'years'),
+          sex: patient.sex,
+          contact: patient.telephone1,
+          email: patient.email || 'N/A',
+          location: `${patient.residence}, ${patient.town}`,
+          status: patient.status,
+          isEmergency: patient.isEmergency,
+          isRevisit: patient.isRevisit,
+          registeredOn: moment(patient.createdAt).format('MMMM Do YYYY')
+        })),
+        pagination: {
+          total: count,
+          pages: totalPages,
+          page: currentPage,
+          limit: itemsPerPage
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching patients:', error);
+    next(error);
+  }
+};
+
+exports.getPatientRegistrations = async (req, res, next) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    if (!startDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Start date is required'
+      });
+    }
+
+    // Parse dates
+    const start = moment(startDate).startOf('day');
+    const end = endDate ? moment(endDate).endOf('day') : moment(startDate).endOf('day');
+
+    // Validate dates
+    if (!start.isValid() || !end.isValid()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format. Please use YYYY-MM-DD'
+      });
+    }
+
+    // Ensure start date is not after end date
+    if (start.isAfter(end)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Start date cannot be after end date'
+      });
+    }
+
+    const patients = await Patient.findAll({
+      where: {
+        createdAt: {
+          [Op.between]: [start.toDate(), end.toDate()]
+        }
+      },
+      attributes: [
+        'id', 
+        'patientNumber',
+        'surname',
+        'otherNames',
+        'sex',
+        'dateOfBirth',
+        'telephone1',
+        'email',
+        'nationality',
+        'residence',
+        'town',
+        'isEmergency',
+        'status',
+        'createdAt'
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Format the response
+    const formattedPatients = patients.map(patient => ({
+      id: patient.id,
+      patientNumber: patient.patientNumber,
+      fullName: `${patient.surname} ${patient.otherNames}`,
+      sex: patient.sex,
+      age: moment().diff(moment(patient.dateOfBirth), 'years'),
+      contact: patient.telephone1,
+      email: patient.email || 'N/A',
+      nationality: patient.nationality,
+      location: `${patient.residence}, ${patient.town}`,
+      isEmergency: patient.isEmergency,
+      status: patient.status,
+      registrationDate: moment(patient.createdAt).format('MMMM Do YYYY, h:mm:ss a')
+    }));
+
+    // Get registration statistics
+    const stats = {
+      totalRegistrations: patients.length,
+      emergencyCases: patients.filter(p => p.isEmergency).length,
+      byGender: {
+        male: patients.filter(p => p.sex === 'MALE').length,
+        female: patients.filter(p => p.sex === 'FEMALE').length,
+        other: patients.filter(p => p.sex === 'OTHER').length
+      }
+    };
+
+    res.json({
+      success: true,
+      dateRange: {
+        from: start.format('MMMM Do YYYY'),
+        to: end.format('MMMM Do YYYY')
+      },
+      stats,
+      patients: formattedPatients
+    });
+
+  } catch (error) {
+    console.error('Error fetching patient registrations:', error);
+    next(error);
+  }
+};
+
+
+exports.getPatientDetails = async (req, res, next) => {
+  try {
+    const { identifier } = req.params;
+
+    // Build where clause based on identifier type
+    const whereClause = isUUID(identifier) 
+      ? { id: identifier }
+      : { patientNumber: identifier };
+
+    const patient = await Patient.findOne({
+      where: whereClause,
+      attributes: {
+        exclude: [
+          'password',
+          'resetPasswordToken',
+          'resetPasswordExpires',
+          'emailVerificationToken',
+          'emailVerificationCode',
+          'emailVerificationExpires',
+          'twoFactorSecret'
+        ]
+      }
+    });
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    }
+
+    // Format the response
+    const formattedPatient = {
+      personalInfo: {
+        id: patient.id,
+        patientNumber: patient.patientNumber,
+        surname: patient.surname,
+        otherNames: patient.otherNames,
+        fullName: `${patient.surname} ${patient.otherNames}`,
+        sex: patient.sex,
+        dateOfBirth: patient.dateOfBirth,
+        age: moment().diff(moment(patient.dateOfBirth), 'years'),
+        nationality: patient.nationality,
+        occupation: patient.occupation
+      },
+      contactInfo: {
+        telephone1: patient.telephone1,
+        telephone2: patient.telephone2 || null,
+        email: patient.email || null,
+        residence: patient.residence,
+        town: patient.town,
+        postalAddress: patient.postalAddress || null,
+        postalCode: patient.postalCode || null
+      },
+      identification: {
+        idType: patient.idType,
+        idNumber: patient.idNumber || null
+      },
+      emergencyContact: patient.nextOfKin,
+      medicalInfo: {
+        medicalHistory: patient.medicalHistory || {
+          existingConditions: [],
+          allergies: []
+        },
+        insuranceInfo: patient.insuranceInfo || {
+          scheme: null,
+          provider: null,
+          membershipNumber: null,
+          principalMember: null
+        }
+      },
+      status: {
+        isEmergency: patient.isEmergency,
+        isRevisit: patient.isRevisit,
+        currentStatus: patient.status,
+        isActive: patient.isActive
+      },
+      registrationInfo: {
+        registeredOn: moment(patient.createdAt).format('MMMM Do YYYY, h:mm:ss a'),
+        registrationNotes: patient.registrationNotes || null,
+        lastUpdated: moment(patient.updatedAt).format('MMMM Do YYYY, h:mm:ss a'),
+        paymentScheme: patient.paymentScheme
+      }
+    };
+
+    res.json({
+      success: true,
+      patient: formattedPatient
+    });
+
+  } catch (error) {
+    console.error('Error fetching patient details:', error);
+    next(error);
+  }
+};
+
+// Optional: Add a summary function for dashboard widgets
+exports.getRegistrationSummary = async (req, res, next) => {
+  try {
+    const today = moment().startOf('day');
+    const thisWeekStart = moment().startOf('week');
+    const thisMonthStart = moment().startOf('month');
+
+    const [todayCount, weekCount, monthCount] = await Promise.all([
+      // Today's registrations
+      Patient.count({
+        where: {
+          createdAt: {
+            [Op.between]: [today.toDate(), moment().endOf('day').toDate()]
+          }
+        }
+      }),
+      // This week's registrations
+      Patient.count({
+        where: {
+          createdAt: {
+            [Op.between]: [thisWeekStart.toDate(), moment().endOf('day').toDate()]
+          }
+        }
+      }),
+      // This month's registrations
+      Patient.count({
+        where: {
+          createdAt: {
+            [Op.between]: [thisMonthStart.toDate(), moment().endOf('day').toDate()]
+          }
+        }
+      })
+    ]);
+
+    res.json({
+      success: true,
+      registrations: {
+        today: todayCount,
+        thisWeek: weekCount,
+        thisMonth: monthCount
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching registration summary:', error);
+    next(error);
+  }
 };

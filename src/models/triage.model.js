@@ -12,7 +12,7 @@ class Triage extends Model {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'Users',
+        model: 'Patients',
         key: 'id'
       }
     },
@@ -150,17 +150,17 @@ class Triage extends Model {
   };
 
   static associate(models) {
-    this.belongsTo(models.User, {
+    this.belongsTo(models.Patient, {
       foreignKey: 'patientId',
-      as: 'PATIENT'
+      as: 'PATIENT'  // Changed to uppercase to match conventions
     });
     this.belongsTo(models.User, {
       foreignKey: 'assessedBy',
-      as: 'nurse'
+      as: 'NURSE'    // Changed to uppercase to match our role conventions
     });
     this.belongsTo(models.Department, {
       foreignKey: 'referredToDepartment',
-      as: 'referredDepartment'
+      as: 'referredDepartment'  // This can stay camelCase as it's not a role
     });
     this.hasMany(models.TriageNote, {
       foreignKey: 'triageId'

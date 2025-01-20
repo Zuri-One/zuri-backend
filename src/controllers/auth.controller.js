@@ -1,6 +1,7 @@
 // src/controllers/auth.controller.js
 const crypto = require('crypto');
-const { User } = require('../models');
+const { User, Department } = require('../models');
+const {Patient} = require('../models');
 const sendEmail = require('../utils/email.util');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -22,46 +23,89 @@ exports.staffLogin = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
+    // Find user and include department information
     const user = await User.findOne({ 
       where: { 
-        email: email.toLowerCase() 
-      } 
+        email: email.toLowerCase(),
+        role: {
+          [Op.notIn]: ['PATIENT', 'ADMIN']  // Exclude patients and admin
+        },
+        isActive: true,  // Only active users can login
+        status: 'active' // Only users with active status
+      },
+      include: [
+        {
+          model: Department,
+          as: 'assignedDepartment',
+          attributes: ['id', 'name']
+        },
+        {
+          model: Department,
+          as: 'primaryDepartment',
+          attributes: ['id', 'name']
+        }
+      ]
     });
 
-    
-    if (!user || user.role === 'PATIENT' || user.role === 'ADMIN') {
+    if (!user) {
       return res.status(401).json({
         message: 'Invalid credentials'
       });
     }
 
+    // Check account lock
+    if (user.isAccountLocked()) {
+      return res.status(401).json({
+        message: 'Account is locked. Please try again later.'
+      });
+    }
+
+    // Verify password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      // Add some logging here to debug password issues
-      console.log('Password match failed for user:', email);
+      // Increment login attempts
+      await user.incrementLoginAttempts();
+      
       return res.status(401).json({
         message: 'Invalid credentials'
       });
     }
 
+    // Reset login attempts on successful login
+    await user.resetLoginAttempts();
+
+    // Generate authentication token
     const token = user.generateAuthToken();
+    
+    // Update last login
     user.lastLogin = new Date();
     await user.save();
 
-    // Make sure this matches your frontend ROLE_REDIRECTS
+    // Format the response
     res.json({
       token,
       user: {
         id: user.id,
-        name: user.name,
+        fullName: `${user.surname} ${user.otherNames}`,
         email: user.email,
-        role: user.role,  // Will be lowercase from DB
-        department: user.department,
-        permissions: User.rolePermissions[user.role.toUpperCase()] || []
+        role: user.role,
+        department: user.assignedDepartment ? {
+          id: user.assignedDepartment.id,
+          name: user.assignedDepartment.name
+        } : null,
+        primaryDepartment: user.primaryDepartment ? {
+          id: user.primaryDepartment.id,
+          name: user.primaryDepartment.name
+        } : null,
+        permissions: User.rolePermissions[user.role] || [],
+        employeeId: user.employeeId,
+        designation: user.designation,
+        specialization: user.specialization,
+        lastLogin: user.lastLogin
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Staff login error:', error);
     next(error);
   }
 };
@@ -144,10 +188,10 @@ exports.registerPatient = async (req, res, next) => {
     const {
       surname,
       otherNames,
-      email,             // Now optional
-      password,          // Now optional
+      email,
+      password,
       dateOfBirth,
-      gender,
+      sex,
       telephone1,
       telephone2,
       postalAddress,
@@ -157,10 +201,11 @@ exports.registerPatient = async (req, res, next) => {
       idNumber,
       nationality,
       town,
-      areaOfResidence,
+      residence,
       nextOfKin,
-      medicalHistory,
-      insuranceInfo
+      paymentScheme,
+      isEmergency,
+      registrationNotes
     } = req.body;
 
     // Basic validation for required fields
@@ -168,13 +213,15 @@ exports.registerPatient = async (req, res, next) => {
       'surname',
       'otherNames',
       'dateOfBirth',
-      'gender',
+      'sex',
       'telephone1',
       'occupation',
       'idType',
       'nationality',
       'town',
-      'areaOfResidence'
+      'residence',
+      'nextOfKin',
+      'paymentScheme'
     ];
 
     const missingFields = requiredFields.filter(field => !req.body[field]);
@@ -185,9 +232,20 @@ exports.registerPatient = async (req, res, next) => {
     }
 
     // Validate next of kin
-    if (!nextOfKin?.name || !nextOfKin?.relationship || !nextOfKin?.phone) {
+    if (!nextOfKin?.name || !nextOfKin?.relationship || !nextOfKin?.contact) {
       return res.status(400).json({
-        message: 'Next of kin requires name, relationship and phone'
+        message: 'Next of kin requires name, relationship and contact number'
+      });
+    }
+
+    // Check for existing telephone number
+    const existingPhone = await Patient.findOne({
+      where: { telephone1 }
+    });
+
+    if (existingPhone) {
+      return res.status(400).json({
+        message: 'Phone number already registered'
       });
     }
 
@@ -197,7 +255,7 @@ exports.registerPatient = async (req, res, next) => {
     let verificationToken = null;
 
     if (email) {
-      const existingUser = await User.findOne({
+      const existingUser = await Patient.findOne({
         where: { email: email.toLowerCase() }
       });
 
@@ -216,13 +274,12 @@ exports.registerPatient = async (req, res, next) => {
       }
     }
 
-    // Generate patient number
-    const lastPatient = await User.findOne({
+    // Generate patient number (keeping existing logic)
+    const lastPatient = await Patient.findOne({
       where: {
         patientNumber: {
           [Op.like]: 'ZH%'
-        },
-        role: 'PATIENT'
+        }
       },
       order: [['patientNumber', 'DESC']]
     });
@@ -234,14 +291,14 @@ exports.registerPatient = async (req, res, next) => {
     }
     const patientNumber = `ZH${nextNumber.toString().padStart(6, '0')}`;
 
-    // Create user
-    const user = await User.create({
+    // Create patient with updated model fields
+    const patient = await Patient.create({
       surname,
       otherNames,
       email: email?.toLowerCase(),
       password: hashedPassword,
       dateOfBirth,
-      gender: gender.toUpperCase(),
+      sex: sex.toUpperCase(),
       telephone1,
       telephone2,
       postalAddress,
@@ -251,20 +308,14 @@ exports.registerPatient = async (req, res, next) => {
       idNumber,
       nationality,
       town,
-      areaOfResidence,
+      residence,
       nextOfKin,
-      medicalHistory: medicalHistory || {
-        existingConditions: [],
-        allergies: []
-      },
-      insuranceInfo: insuranceInfo || {
-        scheme: null,
-        provider: null,
-        membershipNumber: null,
-        principalMember: null
-      },
-      role: 'PATIENT',
       patientNumber,
+      isEmergency: isEmergency || false,
+      isRevisit: false,
+      status: 'WAITING',
+      registrationNotes,
+      paymentScheme,
       emailVerificationCode: verificationCode,
       emailVerificationToken: verificationToken ? 
         crypto.createHash('sha256').update(verificationToken).digest('hex') 
@@ -272,8 +323,7 @@ exports.registerPatient = async (req, res, next) => {
       emailVerificationExpires: verificationToken ? 
         new Date(Date.now() + 24 * 60 * 60 * 1000) 
         : null,
-      isActive: true,
-      status: 'active'
+      isActive: true
     });
 
     // Send verification email only if email and password are provided
@@ -281,10 +331,10 @@ exports.registerPatient = async (req, res, next) => {
       try {
         const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
         await sendEmail({
-          to: user.email,
+          to: patient.email,
           subject: 'Verify your email - Zuri Health',
           html: generateVerificationEmail(
-            `${user.surname} ${user.otherNames}`,
+            `${patient.surname} ${patient.otherNames}`,
             verificationUrl,
             verificationCode
           )
@@ -300,15 +350,15 @@ exports.registerPatient = async (req, res, next) => {
       message: email ? 
         'Registration successful. Please check your email for verification instructions.' : 
         'Registration successful',
-      patientNumber: user.patientNumber,
-      registrationDate: user.createdAt,
-      userId: user.id,
+      patientNumber: patient.patientNumber,
+      registrationDate: patient.createdAt,
+      patientId: patient.id,
       patientInfo: {
-        name: `${user.surname} ${user.otherNames}`,
-        gender: user.gender,
-        dateOfBirth: user.dateOfBirth,
-        nationality: user.nationality,
-        contact: user.telephone1
+        name: `${patient.surname} ${patient.otherNames}`,
+        sex: patient.sex,
+        dateOfBirth: patient.dateOfBirth,
+        nationality: patient.nationality,
+        contact: patient.telephone1
       }
     });
 
@@ -346,60 +396,106 @@ const generatePatientNumber = async () => {
 
 
 exports.register = async (req, res, next) => {
-  console.log('Complete request body:', req.body);
   try {
     const {
-      name,
+      surname,
+      otherNames,
       email,
       password,
       role,
-      department,
+      departmentId,
+      primaryDepartmentId,
       employeeId,
       licenseNumber,
       specialization,
       qualification,
-      contactNumber,
+      telephone1,
+      telephone2,
       gender,
-      bloodGroup,
       dateOfBirth,
-      emergencyContact,
-      medicalHistory,
-      insuranceInfo,
-      nationalId  // Add this field
+      postalAddress,
+      postalCode,
+      town,
+      areaOfResidence,
+      idType,
+      idNumber,
+      nationality,
+      designation,
+      expertise,
+      dutySchedule,
+      workSchedule
     } = req.body;
 
-    console.log('Incoming registration data:', {
-      role,
-      normalizedRole: role ? role.toUpperCase() : 'PATIENT'
-    });
+    // Validate required fields
+    const requiredFields = [
+      'surname',
+      'otherNames',
+      'email',
+      'password',
+      'role',
+      'employeeId',
+      'telephone1',
+      'gender',
+      'dateOfBirth',
+      'town',
+      'areaOfResidence',
+      'idType',
+      'nationality'
+    ];
 
+    const missingFields = requiredFields.filter(field => !req.body[field]);
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: `Missing required fields: ${missingFields.join(', ')}`
+      });
+    }
+
+    // Validate role
     const validRoles = [
-      'PATIENT',
       'DOCTOR',
       'NURSE',
       'LAB_TECHNICIAN',
       'PHARMACIST',
       'RADIOLOGIST',
       'PHYSIOTHERAPIST',
-      'NUTRITIONIST',
-      'RECEPTIONIST',
+      'CARDIOLOGIST',
+      'NEUROLOGIST',
+      'PEDIATRICIAN',
+      'PSYCHIATRIST',
+      'SURGEON',
+      'ANESTHESIOLOGIST',
+      'EMERGENCY_PHYSICIAN',
+      'WARD_MANAGER',
       'BILLING_STAFF',
-      'MEDICAL_ASSISTANT',
-      'WARD_MANAGER'
+      'RECEPTIONIST'
     ];
 
-    if (role && role !== 'PATIENT' && !validRoles.includes(role)) {
+    if (!validRoles.includes(role.toUpperCase())) {
       return res.status(400).json({
         message: 'Invalid role specified'
       });
     }
 
-    // Check for existing email or nationalId (for patients)
+    // Check for medical roles that require license
+    const medicalRoles = [
+      'DOCTOR', 'NURSE', 'LAB_TECHNICIAN', 'PHARMACIST',
+      'RADIOLOGIST', 'PHYSIOTHERAPIST', 'CARDIOLOGIST',
+      'NEUROLOGIST', 'PEDIATRICIAN', 'PSYCHIATRIST',
+      'SURGEON', 'ANESTHESIOLOGIST', 'EMERGENCY_PHYSICIAN'
+    ];
+
+    if (medicalRoles.includes(role.toUpperCase()) && !licenseNumber) {
+      return res.status(400).json({
+        message: 'License number is required for medical professionals'
+      });
+    }
+
+    // Check for existing email or employeeId
     const existingUser = await User.findOne({
       where: {
         [Op.or]: [
           { email: email.toLowerCase() },
-          ...(!role || role === 'PATIENT' ? [{ nationalId }] : [])
+          { employeeId }
         ]
       }
     });
@@ -408,112 +504,77 @@ exports.register = async (req, res, next) => {
       return res.status(400).json({
         message: existingUser.email === email.toLowerCase() ? 
           'Email already registered' : 
-          'National ID already registered'
+          'Employee ID already registered'
       });
     }
 
-    if (role !== 'PATIENT') {
-      if (!employeeId) {
-        return res.status(400).json({
-          message: 'Employee ID is required for staff registration'
-        });
-      }
-
-      if (['DOCTOR', 'DOCTOR', 'DOCTOR', 'LAB_TECHNICIAN'].includes(role)) {
-        if (!licenseNumber) {
-          return res.status(400).json({
-            message: 'License number is required for medical professionals'
-          });
-        }
-      }
-    }
-
-    let normalizedRole = role ? role : 'PATIENT';
-    
-    // If it's a patient registration, require National ID
-    if ((!role || normalizedRole === 'PATIENT') && !nationalId) {
-      return res.status(400).json({
-        message: 'National ID is required for patient registration'
-      });
-    }
-
-    // Generate registration ID for patients
-    const registrationId = (!role || normalizedRole === 'PATIENT') ? 
-    await generateUniqueRegistrationId(name) : 
-    null;
-    
-    // These special cases should also be lowercase
-    if (normalizedRole === 'lab_technician') {
-      normalizedRole = 'lab_technician';
-    } else if (normalizedRole === 'billing_staff') {
-      normalizedRole = 'billing_staff';
-    } else if (normalizedRole === 'ward_manager') {
-      normalizedRole = 'ward_manager';
-    } else if (normalizedRole === 'medical_assistant') {
-      normalizedRole = 'medical_assistant';
-    }
-
-    console.log('Attempting to create user with role:', normalizedRole);
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-    console.log('Password hashed successfully');
-
+    // Generate verification code and token
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const verificationToken = crypto.randomBytes(32).toString('hex');
+    
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    try {
-      user = await User.create({
-        name,
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        role: normalizedRole,  // Let the hook handle the case conversion
-        department,
-        employeeId,
-        licenseNumber,
-        specialization,
-        qualification,
-        contactNumber,
-        gender,             // Let the hook handle the case conversion
-        bloodGroup,         // Let the hook handle the case conversion
-        dateOfBirth,
-        emergencyContact,
-        medicalHistory,
-        insuranceInfo,
-        nationalId,         // Add the new field
-        registrationId,     // Add the registration ID
-        emailVerificationCode: verificationCode,
-        emailVerificationToken: crypto
-          .createHash('sha256')
-          .update(verificationToken)
-          .digest('hex'),
-        emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        joiningDate: normalizedRole !== 'PATIENT' ? new Date() : null
-      });
-    } catch (createError) {
-      console.error('User creation error:', createError);
-      return res.status(400).json({
-        message: 'Invalid role or data format',
-        error: createError.message
-      });
-    }
+    // Create staff user
+    const user = await User.create({
+      surname,
+      otherNames,
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      role: role.toUpperCase(),
+      departmentId,
+      primaryDepartmentId,
+      employeeId,
+      licenseNumber,
+      specialization: specialization ? Array.isArray(specialization) ? specialization : [specialization] : [],
+      qualification: qualification || [],
+      telephone1,
+      telephone2,
+      gender: gender.toUpperCase(),
+      dateOfBirth,
+      postalAddress,
+      postalCode,
+      town,
+      areaOfResidence,
+      idType,
+      idNumber,
+      nationality,
+      designation,
+      expertise: expertise || {},
+      dutySchedule: dutySchedule || {},
+      workSchedule: workSchedule || {},
+      joiningDate: new Date(),
+      emailVerificationCode: verificationCode,
+      emailVerificationToken: crypto
+        .createHash('sha256')
+        .update(verificationToken)
+        .digest('hex'),
+      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      isActive: true,
+      status: 'active'
+    });
 
+    // Send verification email
     const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
-
     await sendEmail({
       to: user.email,
-      subject: 'Verify your email',
-      html: generateVerificationEmail(user.name, verificationUrl, verificationCode)
+      subject: 'Verify your email - Zuri Health Staff',
+      html: generateVerificationEmail(
+        `${user.surname} ${user.otherNames}`,
+        verificationUrl,
+        verificationCode
+      )
     });
 
     res.status(201).json({
-      message: 'Registration successful. Please verify your email.',
+      message: 'Staff registration successful. Please verify email to continue.',
       userId: user.id,
-      ...((!role || normalizedRole === 'PATIENT') && {
-        registrationId: user.registrationId
-      })
+      employeeId: user.employeeId
     });
+
   } catch (error) {
+    console.error('Staff registration error:', error);
     next(error);
   }
 };

@@ -262,6 +262,143 @@ router.get('/test-results', patientController.getTestResults);
  */
 router.get('/health-metrics', patientController.getHealthMetrics);
 
+/**
+ * @swagger
+ * /api/v1/patient/registrations:
+ *   get:
+ *     summary: Get patient registrations within a date range
+ *     tags: [Patient Portal]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         required: true
+ *         description: Start date (YYYY-MM-DD)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date (YYYY-MM-DD). If not provided, defaults to startDate
+ *     responses:
+ *       200:
+ *         description: Patient registrations retrieved successfully
+ */
+router.get('/registrations', 
+  authenticate, 
+  // authorize(['ADMIN', 'RECEPTIONIST']), 
+  patientController.getPatientRegistrations
+);
+
+
+/**
+ * @swagger
+ * /api/v1/patient/details/{identifier}:
+ *   get:
+ *     summary: Get patient details by ID or patient number
+ *     tags: [Patient Portal]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: identifier
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Patient ID (UUID) or patient number (e.g., ZH000001)
+ *     responses:
+ *       200:
+ *         description: Patient details retrieved successfully
+ *       404:
+ *         description: Patient not found
+ */
+router.get('/details/:identifier', 
+  authenticate, 
+  // authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']), 
+  patientController.getPatientDetails
+);
+
+/**
+ * @swagger
+ * /api/v1/patient/all:
+ *   get:
+ *     summary: Get all patients with optional pagination
+ *     tags: [Patient Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Page number for pagination (optional)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Number of records per page (optional, default 10)
+ *       - in: query
+ *         name: noPagination
+ *         schema:
+ *           type: boolean
+ *         description: If true, returns all records without pagination
+ *     responses:
+ *       200:
+ *         description: List of patients retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     patients:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           patientNumber:
+ *                             type: string
+ *                           fullName:
+ *                             type: string
+ *                           age:
+ *                             type: integer
+ *                           sex:
+ *                             type: string
+ *                           contact:
+ *                             type: string
+ *                           status:
+ *                             type: string
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         total:
+ *                           type: integer
+ *                         pages:
+ *                           type: integer
+ *                         page:
+ *                           type: integer
+ *                         limit:
+ *                           type: integer
+ */
+router.get('/all', 
+  authenticate, 
+  // authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']), 
+  patientController.getAllPatients
+);
+
 router.post(
     '/:patientId/request-access',
     authenticate,

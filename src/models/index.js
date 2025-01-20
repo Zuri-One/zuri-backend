@@ -2,11 +2,14 @@
 const { sequelize } = require('../config/database');
 const { DataTypes } = require('sequelize');
 const path = require('path');
+const DepartmentQueue = require('./department-queue.model');
+const Examination = require('./examination.model');
 
 // Import all models
 const models = {
   Department: require(path.join(__dirname, 'department.model')),
   User: require(path.join(__dirname, 'user.model')),
+  Patient: require(path.join(__dirname, 'patient.model')),
   Appointment: require(path.join(__dirname, 'appointment.model')),
   DoctorAvailability: require(path.join(__dirname, 'doctor-availability.model')),
   DoctorProfile: require(path.join(__dirname, 'doctor-profile.model')),
@@ -31,6 +34,8 @@ const models = {
   TriageNote: require(path.join(__dirname, 'triage-note.model')), 
   Billing: require(path.join(__dirname, 'billing.model')),
   ConsultationQueue: require(path.join(__dirname, 'consultation-queue.model')),
+  DepartmentQueue: require(path.join(__dirname, 'department-queue.model')),
+  Examination: require(path.join(__dirname, 'examination.model')),
 
 };
 
@@ -69,7 +74,7 @@ const modelInitializationOrder = [
   'Department',  // Initialize Department first
   'Triage',
   'User',        // Then User
-
+  'Patient', 
   'DoctorProfile',
   'Appointment',
   'ProgressNote',   
@@ -92,7 +97,9 @@ const modelInitializationOrder = [
   'DocumentShare',
   'TriageNote',
   'Billing',
-  'ConsultationQueue'
+  'ConsultationQueue',
+  'DepartmentQueue',
+  'Examination'
 ];
 
 // Initialize models in order
