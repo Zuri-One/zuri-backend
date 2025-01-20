@@ -13,6 +13,15 @@ exports.createExamination = async (req, res, next) => {
       nursingNotes
     } = req.body;
 
+    console.log('Received examination data:', {
+      patientId,
+      triageId,
+      generalExamination,
+      systemicExaminations,
+      proceduresPerformed,
+      nursingNotes
+    });
+
     // Calculate BMI
     const weight = generalExamination.weight;
     const height = generalExamination.height;
@@ -34,7 +43,12 @@ exports.createExamination = async (req, res, next) => {
       examination
     });
   } catch (error) {
-    next(error);
+    console.error('Examination creation error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Database error occurred',
+      error: process.env.NODE_ENV === 'development' ? error : undefined
+    });
   }
 };
 
