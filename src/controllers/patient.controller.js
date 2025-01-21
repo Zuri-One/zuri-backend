@@ -1,6 +1,6 @@
 // src/controllers/patient.controller.js
 const { Op } = require('sequelize');
-const { User, Appointment, DoctorProfile, DoctorAvailability, TestResult, HealthMetric, Patient } = require('../models');
+const { User, Appointment, DoctorProfile, DoctorAvailability, TestResult, HealthMetric, Patient, DepartmentQueue, Department } = require('../models');
 const moment = require('moment');
 const { validate: isUUID } = require('uuid');
 
@@ -447,29 +447,69 @@ exports.searchPatients = async (req, res, next) => {
       });
     }
 
-    // Search using either phone, patient number, or email
+    // Build the search conditions
+    const searchConditions = {
+      [Op.or]: [
+        // Partial match for patient number
+        {
+          patientNumber: {
+            [Op.iLike]: `${searchTerm}%` // Will match any patientNumber starting with the search term
+          }
+        },
+        // Partial match for phone number
+        {
+          telephone1: {
+            [Op.iLike]: `${searchTerm}%`
+          }
+        },
+        // Partial match for email
+        {
+          email: {
+            [Op.iLike]: `${searchTerm}%`
+          }
+        },
+        // Add name search
+        {
+          [Op.or]: [
+            {
+              surname: {
+                [Op.iLike]: `%${searchTerm}%`
+              }
+            },
+            {
+              otherNames: {
+                [Op.iLike]: `%${searchTerm}%`
+              }
+            }
+          ]
+        }
+      ]
+    };
+
     const patients = await Patient.findAll({
-      where: {
-        [Op.or]: [
-          { telephone1: searchTerm },
-          { patientNumber: searchTerm },
-          { email: searchTerm }
-        ]
-      },
-      attributes: {
-        exclude: [
-          'password',
-          'resetPasswordToken',
-          'resetPasswordExpires',
-          'emailVerificationToken',
-          'emailVerificationCode',
-          'emailVerificationExpires',
-          'twoFactorSecret'
-        ]
-      }
+      where: searchConditions,
+      include: [{
+        model: DepartmentQueue,
+        as: 'DepartmentQueues',
+        required: false,
+        include: [{
+          model: Department,
+          attributes: ['name', 'code']
+        }],
+        where: {
+          status: {
+            [Op.notIn]: ['COMPLETED', 'TRANSFERRED', 'CANCELLED']
+          }
+        },
+        order: [['createdAt', 'DESC']],
+        limit: 1,
+        separate: true
+      }],
+      order: [['patientNumber', 'ASC']], // Order results by patient number
+      limit: 50 // Limit to prevent overload
     });
 
-    // Format the response similar to getPatientDetails
+    // Format the response
     const formattedPatients = patients.map(patient => ({
       personalInfo: {
         id: patient.id,
@@ -488,45 +528,39 @@ exports.searchPatients = async (req, res, next) => {
         telephone2: patient.telephone2 || null,
         email: patient.email || null,
         residence: patient.residence,
-        town: patient.town,
-        postalAddress: patient.postalAddress || null,
-        postalCode: patient.postalCode || null
-      },
-      identification: {
-        idType: patient.idType,
-        idNumber: patient.idNumber || null
-      },
-      emergencyContact: patient.nextOfKin,
-      medicalInfo: {
-        medicalHistory: patient.medicalHistory || {
-          existingConditions: [],
-          allergies: []
-        },
-        insuranceInfo: patient.insuranceInfo || {
-          scheme: null,
-          provider: null,
-          membershipNumber: null,
-          principalMember: null
-        }
+        town: patient.town
       },
       status: {
         isEmergency: patient.isEmergency,
         isRevisit: patient.isRevisit,
         currentStatus: patient.status,
-        isActive: patient.isActive
+        isActive: patient.isActive,
+        currentQueue: patient.DepartmentQueues?.[0] ? {
+          department: patient.DepartmentQueues[0].Department.name,
+          status: patient.DepartmentQueues[0].status,
+          queueNumber: patient.DepartmentQueues[0].queueNumber
+        } : null
       },
       registrationInfo: {
-        registeredOn: moment(patient.createdAt).format('MMMM Do YYYY, h:mm:ss a'),
-        registrationNotes: patient.registrationNotes || null,
-        lastUpdated: moment(patient.updatedAt).format('MMMM Do YYYY, h:mm:ss a'),
-        paymentScheme: patient.paymentScheme
+        registeredOn: moment(patient.createdAt).format('MMMM Do YYYY'),
+        lastUpdated: moment(patient.updatedAt).format('MMMM Do YYYY')
       }
     }));
 
+    // Add search summary to response
     res.json({
       success: true,
       count: formattedPatients.length,
-      patients: formattedPatients
+      searchTerm,
+      patients: formattedPatients,
+      summary: {
+        total: formattedPatients.length,
+        searchCriteria: searchTerm,
+        patientNumberRange: formattedPatients.length > 0 ? {
+          start: formattedPatients[0].personalInfo.patientNumber,
+          end: formattedPatients[formattedPatients.length - 1].personalInfo.patientNumber
+        } : null
+      }
     });
 
   } catch (error) {

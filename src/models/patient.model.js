@@ -329,25 +329,33 @@ class Patient extends Model {
         onUpdate: 'CASCADE'
       });
     }
-
+  
     if (models.Prescription) {
       this.hasMany(models.Prescription, {
         as: 'prescriptions',
         foreignKey: 'patientId'
       });
     }
-
+  
     if (models.TestResult) {
       this.hasMany(models.TestResult, {
         as: 'testResults',
         foreignKey: 'patientId'
       });
     }
-
+  
     if (models.Triage) {
       this.hasMany(models.Triage, {
         foreignKey: 'patientId',
         as: 'triageAssessments'
+      });
+    }
+  
+    // Add this association
+    if (models.DepartmentQueue) {
+      this.hasMany(models.DepartmentQueue, {
+        foreignKey: 'patientId',
+        as: 'DepartmentQueues'  // This alias is important for your queries
       });
     }
   }

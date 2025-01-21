@@ -1,4 +1,3 @@
-// src/controllers/queue.controller.js
 const { DepartmentQueue, Patient, Department, User, Triage } = require('../models');
 const { Op } = require('sequelize');
 
@@ -8,13 +7,37 @@ exports.addToQueue = async (req, res, next) => {
       patientId,
       departmentId,
       assignedToId,
-      priority,
+      priority = 3,
       notes,
-      source,
+      source = 'RECEPTION',
       triageId
     } = req.body;
 
-    // Validate patient exists
+    // Check if patient is already in any active queue
+    const existingQueue = await DepartmentQueue.findOne({
+      where: {
+        patientId,
+        status: {
+          [Op.notIn]: ['COMPLETED', 'TRANSFERRED', 'CANCELLED']
+        }
+      },
+      include: [
+        {
+          model: Department,
+          attributes: ['name']
+        }
+      ]
+    });
+
+    if (existingQueue) {
+      return res.status(400).json({
+        success: false,
+        message: `Patient is already in ${existingQueue.Department.name} queue`,
+        currentQueue: existingQueue
+      });
+    }
+
+    // Validate patient exists and check their current status
     const patient = await Patient.findByPk(patientId);
     if (!patient) {
       return res.status(404).json({
@@ -32,129 +55,154 @@ exports.addToQueue = async (req, res, next) => {
       });
     }
 
-    // Get the last queue number for the department
-    const lastQueue = await DepartmentQueue.findOne({
-      where: {
-        departmentId,
-        createdAt: {
-          [Op.gte]: new Date().setHours(0, 0, 0, 0)
-        }
-      },
-      order: [['queueNumber', 'DESC']]
-    });
+    // Start transaction
+    const transaction = await DepartmentQueue.sequelize.transaction();
 
-    const queueNumber = lastQueue ? lastQueue.queueNumber + 1 : 1;
+    try {
+      // Get the last queue number for the department today
+      const lastQueue = await DepartmentQueue.findOne({
+        where: {
+          departmentId,
+          createdAt: {
+            [Op.gte]: new Date().setHours(0, 0, 0, 0)
+          }
+        },
+        order: [['queueNumber', 'DESC']],
+        transaction
+      });
 
-    // Calculate estimated wait time based on last 5 patients
-    const lastFiveCompletedPatients = await DepartmentQueue.findAll({
-      where: {
-        departmentId,
-        status: ['COMPLETED', 'TRANSFERRED'],
-        endTime: { [Op.not]: null },
-        startTime: { [Op.not]: null }
-      },
-      order: [['endTime', 'DESC']],
-      limit: 5
-    });
+      const queueNumber = lastQueue ? lastQueue.queueNumber + 1 : 1;
 
-    let estimatedWaitTime = 30; // Default 30 minutes
-    if (lastFiveCompletedPatients.length > 0) {
-      const totalWaitTime = lastFiveCompletedPatients.reduce((sum, patient) => {
-        const waitTime = Math.floor(
-          (new Date(patient.endTime) - new Date(patient.startTime)) / (1000 * 60)
-        );
-        return sum + waitTime;
-      }, 0);
-      estimatedWaitTime = Math.floor(totalWaitTime / lastFiveCompletedPatients.length);
-    }
+      // Calculate estimated wait time based on last 5 patients
+      const lastFiveCompletedPatients = await DepartmentQueue.findAll({
+        where: {
+          departmentId,
+          status: ['COMPLETED', 'TRANSFERRED'],
+          endTime: { [Op.not]: null },
+          startTime: { [Op.not]: null }
+        },
+        order: [['endTime', 'DESC']],
+        limit: 5,
+        transaction
+      });
 
-    // Get number of patients currently waiting
-    const waitingPatients = await DepartmentQueue.count({
-      where: {
-        departmentId,
-        status: 'WAITING',
-        createdAt: {
-          [Op.gte]: new Date().setHours(0, 0, 0, 0)
-        }
+      let estimatedWaitTime = 30; // Default 30 minutes
+      if (lastFiveCompletedPatients.length > 0) {
+        const totalWaitTime = lastFiveCompletedPatients.reduce((sum, patient) => {
+          const waitTime = Math.floor(
+            (new Date(patient.endTime) - new Date(patient.startTime)) / (1000 * 60)
+          );
+          return sum + waitTime;
+        }, 0);
+        estimatedWaitTime = Math.floor(totalWaitTime / lastFiveCompletedPatients.length);
       }
-    });
 
-    // Adjust estimated wait time based on queue position
-    estimatedWaitTime = estimatedWaitTime * (waitingPatients + 1);
-
-    // Create queue entry
-    const queueEntry = await DepartmentQueue.create({
-      patientId,
-      departmentId,
-      assignedToId,
-      queueNumber,
-      priority: priority || 3,
-      notes,
-      source,
-      triageId,
-      status: 'WAITING',
-      estimatedWaitTime,
-      startTime: null,
-      endTime: null,
-      actualWaitTime: null
-    });
-
-    // Update patient status based on department type
-    let patientStatus;
-    switch (department.code) {
-      case 'EMERG':
-        patientStatus = 'WAITING_EMERGENCY';
-        break;
-      case 'LAB':
-        patientStatus = 'WAITING_LABORATORY';
-        break;
-      case 'RAD':
-        patientStatus = 'WAITING_RADIOLOGY';
-        break;
-      case 'PHAR':
-        patientStatus = 'WAITING_PHARMACY';
-        break;
-      default:
-        patientStatus = source === 'TRIAGE' ? 'IN_TRIAGE' : 'WAITING';
-    }
-
-    await patient.update({
-      status: patientStatus
-    });
-
-    // Fetch complete queue entry with associations
-    const completeQueueEntry = await DepartmentQueue.findByPk(queueEntry.id, {
-      include: [
-        {
-          model: Patient,
-          attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'sex', 'dateOfBirth', 'isEmergency']
+      // Get number of patients currently waiting
+      const waitingPatients = await DepartmentQueue.count({
+        where: {
+          departmentId,
+          status: 'WAITING',
+          createdAt: {
+            [Op.gte]: new Date().setHours(0, 0, 0, 0)
+          }
         },
-        {
-          model: Department,
-          attributes: ['id', 'name', 'code']
-        },
-        {
-          model: User,
-          as: 'assignedStaff',
-          attributes: ['id', 'surname', 'otherNames']
-        },
-        {
-          model: Triage,
-          attributes: ['id', 'category', 'priorityScore']
+        transaction
+      });
+
+      // Adjust estimated wait time based on queue position and priority
+      estimatedWaitTime = Math.floor(estimatedWaitTime * (waitingPatients + 1) * (priority / 3));
+
+      // Create queue entry
+      const queueEntry = await DepartmentQueue.create({
+        patientId,
+        departmentId,
+        assignedToId,
+        queueNumber,
+        priority,
+        notes,
+        source,
+        triageId,
+        status: 'WAITING',
+        estimatedWaitTime,
+        startTime: null,
+        endTime: null,
+        actualWaitTime: null
+      }, { transaction });
+
+      // Update patient status based on department type
+      let patientStatus;
+      switch (department.code) {
+        case 'EMERG':
+          patientStatus = 'WAITING_EMERGENCY';
+          break;
+        case 'LAB':
+          patientStatus = 'WAITING_LABORATORY';
+          break;
+        case 'RAD':
+          patientStatus = 'WAITING_RADIOLOGY';
+          break;
+        case 'PHAR':
+          patientStatus = 'WAITING_PHARMACY';
+          break;
+        default:
+          patientStatus = source === 'TRIAGE' ? 'IN_TRIAGE' : 'WAITING';
+      }
+
+      // Update patient record
+      await patient.update({
+        status: patientStatus,
+        isRevisit: true, // Mark as revisit
+        lastDepartmentId: departmentId,
+        lastQueueTime: new Date()
+      }, { transaction });
+
+      await transaction.commit();
+
+      // Fetch complete queue entry with associations
+      const completeQueueEntry = await DepartmentQueue.findByPk(queueEntry.id, {
+        include: [
+          {
+            model: Patient,
+            attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'sex', 'dateOfBirth', 'isEmergency']
+          },
+          {
+            model: Department,
+            attributes: ['id', 'name', 'code']
+          },
+          {
+            model: User,
+            as: 'assignedStaff',
+            attributes: ['id', 'surname', 'otherNames']
+          },
+          {
+            model: Triage,
+            attributes: ['id', 'category', 'priorityScore']
+          }
+        ]
+      });
+
+      res.status(201).json({
+        success: true,
+        message: `Successfully added to ${department.name} queue`,
+        data: {
+          queueEntry: completeQueueEntry,
+          estimatedWaitTime,
+          position: waitingPatients + 1
         }
-      ]
-    });
+      });
 
-    res.status(201).json({
-      success: true,
-      data: completeQueueEntry
-    });
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
 
   } catch (error) {
     console.error('Error in addToQueue:', error);
     next(error);
   }
 };
+
+
 exports.getDepartmentQueue = async (req, res, next) => {
   try {
     const { departmentId } = req.params;
