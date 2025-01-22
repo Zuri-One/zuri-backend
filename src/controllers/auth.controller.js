@@ -555,30 +555,38 @@ exports.register = async (req, res, next) => {
       status: 'active'
     });
 
-    // Send verification email
-    const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
-    await sendEmail({
-      to: user.email,
-      subject: 'Verify your email - Zuri Health Staff',
-      html: generateVerificationEmail(
-        `${user.surname} ${user.otherNames}`,
-        verificationUrl,
-        verificationCode
-      )
-    });
-
+    // Log registration success and return response immediately
+    console.log(`Staff registration successful for ${email}`);
+    
     res.status(201).json({
-      message: 'Staff registration successful. Please verify email to continue.',
+      message: 'Staff registration successful',
       userId: user.id,
       employeeId: user.employeeId
     });
+
+    // Attempt to send verification email asynchronously
+    try {
+      const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
+      await sendEmail({
+        to: user.email,
+        subject: 'Verify your email - Zuri Health Staff',
+        html: generateVerificationEmail(
+          `${user.surname} ${user.otherNames}`,
+          verificationUrl,
+          verificationCode
+        )
+      });
+      console.log(`Verification email sent to ${email}`);
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      // Email failure doesn't affect registration success
+    }
 
   } catch (error) {
     console.error('Staff registration error:', error);
     next(error);
   }
 };
-
 
 // Update login controller to handle role-specific logic
 exports.login = async (req, res, next) => {

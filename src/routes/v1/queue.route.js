@@ -34,6 +34,21 @@ router.get('/patient/:patientId/history',
     queueController.getPatientQueueHistory
   );
 
+
+
+  router.get('/doctor-queue', 
+    authenticate, 
+    authorize(['DOCTOR']), 
+    queueController.getDoctorDepartmentQueue
+  );
+
+
+  router.post('/consultation/:queueId', 
+    authenticate, 
+    authorize(['DOCTOR']), 
+    queueController.submitConsultation
+  );
+  
 /**
  * @swagger
  * /api/v1/queue/department/{departmentId}:

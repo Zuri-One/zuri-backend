@@ -246,6 +246,161 @@ exports.getDepartmentQueue = async (req, res, next) => {
   }
 };
 
+
+exports.getDoctorDepartmentQueue = async (req, res, next) => {
+  try {
+    const doctorId = req.user.id;
+
+    // Get doctor's department
+    const doctor = await User.findByPk(doctorId, {
+      attributes: ['departmentId']
+    });
+
+    if (!doctor || !doctor.departmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Doctor not assigned to any department'
+      });
+    }
+
+    const queue = await DepartmentQueue.findAll({
+      where: {
+        departmentId: doctor.departmentId,
+        status: {
+          [Op.in]: ['WAITING', 'IN_PROGRESS']
+        }
+      },
+      include: [
+        {
+          model: Patient,
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'sex', 
+                      'dateOfBirth', 'isEmergency', 'occupation', 'status']
+        },
+        {
+          model: Department,
+          attributes: ['id', 'name', 'code']
+        },
+        {
+          model: User,
+          as: 'assignedStaff',
+          attributes: ['id', 'surname', 'otherNames']
+        }
+      ],
+      order: [
+        ['priority', 'ASC'],
+        ['createdAt', 'ASC']
+      ]
+    });
+
+    res.json({
+      success: true,
+      data: queue
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+exports.submitConsultation = async (req, res, next) => {
+  try {
+    const doctorId = req.user.id;
+    const { queueId } = req.params;
+    const {
+      complaints,
+      hpi,
+      medicalHistory,
+      familySocialHistory,
+      allergies,
+      impressions,
+      diagnosis,
+      notes
+    } = req.body;
+
+    // Validate queue entry exists and belongs to doctor's department
+    const queueEntry = await DepartmentQueue.findOne({
+      where: {
+        id: queueId,
+        status: 'IN_PROGRESS'
+      },
+      include: [{
+        model: Patient
+      }]
+    });
+
+    if (!queueEntry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid queue entry or consultation not in progress'
+      });
+    }
+
+    // Start transaction
+    const transaction = await DepartmentQueue.sequelize.transaction();
+
+    try {
+      // Create medical record
+      const medicalRecord = await MedicalRecord.create({
+        patientId: queueEntry.patientId,
+        doctorId,
+        queueEntryId: queueId,
+        complaints,
+        hpi,
+        medicalHistory,
+        familySocialHistory,
+        allergies,
+        impressions,
+        diagnosis,
+        notes
+      }, { transaction });
+
+      // Update queue entry status
+      await queueEntry.update({
+        status: 'COMPLETED',
+        endTime: new Date(),
+        actualWaitTime: Math.floor(
+          (new Date() - new Date(queueEntry.startTime)) / (1000 * 60)
+        )
+      }, { transaction });
+
+      // Update patient status
+      await queueEntry.Patient.update({
+        status: 'CONSULTATION_COMPLETE'
+      }, { transaction });
+
+      await transaction.commit();
+
+      // Fetch complete record with associations
+      const completeRecord = await MedicalRecord.findByPk(medicalRecord.id, {
+        include: [
+          {
+            model: Patient,
+            attributes: ['id', 'patientNumber', 'surname', 'otherNames']
+          },
+          {
+            model: User,
+            as: 'doctor',
+            attributes: ['id', 'surname', 'otherNames']
+          }
+        ]
+      });
+
+      res.status(201).json({
+        success: true,
+        data: completeRecord
+      });
+
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.updateQueueStatus = async (req, res, next) => {
   try {
     const { queueId } = req.params;
