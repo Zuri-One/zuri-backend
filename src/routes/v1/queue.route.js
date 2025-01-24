@@ -43,6 +43,13 @@ router.get('/patient/:patientId/history',
   );
 
 
+  router.get('/lab-queue', 
+    authenticate, 
+    authorize(['LAB_TECHNICIAN']), 
+    queueController.getLabQueue
+  );
+
+
   router.post('/consultation/:queueId', 
     authenticate, 
     authorize(['DOCTOR']), 

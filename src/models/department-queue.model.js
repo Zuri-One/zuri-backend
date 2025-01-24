@@ -106,8 +106,12 @@ class DepartmentQueue extends Model {
     this.belongsTo(models.Triage, {
       foreignKey: 'triageId'
     });
+    
+    this.hasOne(models.LabTest, {
+      foreignKey: 'queueEntryId',
+      as: 'labTest'
+    });
   }
-
   calculateWaitTime() {
     if (this.startTime) {
       return Math.floor(

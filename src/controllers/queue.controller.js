@@ -1,4 +1,4 @@
-const { DepartmentQueue, Patient, Department, User, Triage } = require('../models');
+const { DepartmentQueue, Patient, Department, User, Triage, MedicalRecord, LabTest  } = require('../models');
 const { Op } = require('sequelize');
 
 exports.addToQueue = async (req, res, next) => {
@@ -303,6 +303,106 @@ exports.getDoctorDepartmentQueue = async (req, res, next) => {
 };
 
 
+exports.getLabQueue = async (req, res, next) => {
+  try {
+    const labTechnician = await User.findByPk(req.user.id, {
+      attributes: ['departmentId'] 
+    });
+ 
+    const queue = await DepartmentQueue.findAll({
+      where: {
+        departmentId: labTechnician.departmentId,
+        status: {
+          [Op.in]: ['WAITING', 'IN_PROGRESS']
+        }
+      },
+      include: [
+        {
+          model: Patient,
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'sex', 'dateOfBirth', 'isEmergency']
+        },
+        {
+          model: User,
+          as: 'assignedStaff',
+          attributes: ['id', 'surname', 'otherNames']  
+        },
+        {
+          model: Triage,
+          attributes: ['id', 'category', 'priorityScore']
+        }
+      ],
+      order: [
+        ['priority', 'ASC'],
+        ['createdAt', 'ASC'] 
+      ]
+    });
+ 
+    res.json({
+      success: true,
+      data: queue
+    });
+ 
+  } catch (error) {
+    next(error);
+  }
+ };
+
+exports.getLabDepartmentQueue = async (req, res, next) => {
+  try {
+    const staffId = req.user.id;
+    const staff = await User.findByPk(staffId, {
+      attributes: ['departmentId', 'role']
+    });
+
+    const includeModels = [
+      {
+        model: Patient,
+        attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'sex', 'dateOfBirth', 'isEmergency']
+      },
+      {
+        model: Department,
+        attributes: ['id', 'name', 'code']
+      }
+    ];
+
+    // Add LabTest association for lab technicians
+    if (staff.role === 'LAB_TECHNICIAN') {
+      includeModels.push({
+        model: LabTest,
+        as: 'labTest',
+        required: true,
+        include: [{
+          model: User,
+          as: 'requestedBy',
+          attributes: ['id', 'surname', 'otherNames']
+        }]
+      });
+    }
+
+    const queue = await DepartmentQueue.findAll({
+      where: {
+        departmentId: staff.departmentId,
+        status: {
+          [Op.in]: ['WAITING', 'IN_PROGRESS']
+        }
+      },
+      include: includeModels,
+      order: [
+        ['priority', 'ASC'],
+        ['createdAt', 'ASC']
+      ]
+    });
+
+    res.json({
+      success: true,
+      data: queue
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.submitConsultation = async (req, res, next) => {
   try {
     const doctorId = req.user.id;
@@ -352,22 +452,15 @@ exports.submitConsultation = async (req, res, next) => {
         allergies,
         impressions,
         diagnosis,
-        notes
+        notes,
+        status: 'ACTIVE'
       }, { transaction });
 
-      // Update queue entry status
-      await queueEntry.update({
-        status: 'COMPLETED',
-        endTime: new Date(),
-        actualWaitTime: Math.floor(
-          (new Date() - new Date(queueEntry.startTime)) / (1000 * 60)
-        )
-      }, { transaction });
-
-      // Update patient status
-      await queueEntry.Patient.update({
-        status: 'CONSULTATION_COMPLETE'
-      }, { transaction });
+      // Keep the queue entry in IN_PROGRESS status for department transfer
+      // Don't update the queue entry status to COMPLETED yet
+      
+      // The patient status stays as IN_CONSULTATION
+      // Don't update patient status yet - will be updated during department transfer
 
       await transaction.commit();
 
@@ -388,15 +481,18 @@ exports.submitConsultation = async (req, res, next) => {
 
       res.status(201).json({
         success: true,
+        message: 'Medical record saved successfully. Please assign the patient to the next department.',
         data: completeRecord
       });
 
     } catch (error) {
       await transaction.rollback();
+      console.error('Transaction error:', error);
       throw error;
     }
 
   } catch (error) {
+    console.error('Error in submitConsultation:', error);
     next(error);
   }
 };

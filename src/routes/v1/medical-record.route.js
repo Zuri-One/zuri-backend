@@ -16,4 +16,10 @@ router.get('/patient/:patientId',
   medicalRecordController.getPatientMedicalHistory
 );
 
+router.get('/patient/:patientId', 
+  authenticate, 
+  authorize(['DOCTOR', 'NURSE']), 
+  medicalRecordController.getPatientMedicalHistory
+);
+
 module.exports = router;

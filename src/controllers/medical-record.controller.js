@@ -2,6 +2,45 @@
 const { MedicalRecord, Patient, User, DepartmentQueue } = require('../models');
 const { Op } = require('sequelize');
 
+
+exports.getPatientMedicalHistory = async (req, res, next) => {
+  try {
+    const { patientId } = req.params;
+
+    // Validate patient exists
+    const patient = await Patient.findByPk(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    }
+
+    // Fetch all medical records for the patient
+    const records = await MedicalRecord.findAll({
+      where: { patientId },
+      include: [
+        {
+          model: User,
+          as: 'doctor',
+          attributes: ['id', 'surname', 'otherNames']
+        }
+      ],
+      order: [['createdAt', 'DESC']] // Most recent first
+    });
+
+    res.json({
+      success: true,
+      data: records
+    });
+
+  } catch (error) {
+    console.error('Error fetching medical history:', error);
+    next(error);
+  }
+};
+
+
 exports.createMedicalRecord = async (req, res, next) => {
   try {
     const {

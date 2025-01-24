@@ -11,11 +11,11 @@ class LabTest extends Model {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'Users',
+        model: 'Patients',
         key: 'id'
       }
     },
-    referringDoctorId: {
+    requestedById: {
       type: DataTypes.UUID,
       allowNull: false,
       references: {
@@ -23,17 +23,27 @@ class LabTest extends Model {
         key: 'id'
       }
     },
-    technicianId: {
+    assignedToId: {
       type: DataTypes.UUID,
+      allowNull: true,
       references: {
         model: 'Users',
         key: 'id'
       }
     },
-    verifiedById: {
+    laboratoryId: {
       type: DataTypes.UUID,
+      allowNull: true,
       references: {
-        model: 'Users',
+        model: 'Laboratories', 
+        key: 'id'
+      }
+    },
+    queueEntryId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'DepartmentQueues',
         key: 'id'
       }
     },
@@ -41,177 +51,146 @@ class LabTest extends Model {
       type: DataTypes.STRING,
       allowNull: false
     },
-    testCategory: {
-      type: DataTypes.ENUM(
-        'HEMATOLOGY',
-        'BIOCHEMISTRY',
-        'MICROBIOLOGY',
-        'IMMUNOLOGY',
-        'URINALYSIS',
-        'IMAGING',
-        'PATHOLOGY',
-        'MOLECULAR',
-        'SEROLOGY',
-        'TOXICOLOGY'
-      ),
-      allowNull: false
-    },
     priority: {
-      type: DataTypes.ENUM('ROUTINE', 'URGENT', 'STAT'),
-      defaultValue: 'ROUTINE'
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'NORMAL',
+      validate: {
+        isIn: [['NORMAL', 'URGENT']]
+      }
     },
     status: {
-      type: DataTypes.ENUM(
-        'ORDERED',
-        'SPECIMEN_COLLECTED',
-        'RECEIVED',
-        'IN_PROGRESS',
-        'COMPLETED',
-        'VERIFIED',
-        'CANCELLED',
-        'REJECTED'
-      ),
-      defaultValue: 'ORDERED'
-    },
-    specimenCollectedAt: DataTypes.DATE,
-    specimenReceivedAt: DataTypes.DATE,
-    testStartedAt: DataTypes.DATE,
-    testCompletedAt: DataTypes.DATE,
-    verifiedAt: DataTypes.DATE,
-    specimenType: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: false,
+      defaultValue: 'PENDING',
+      validate: {
+        isIn: [['PENDING', 'SAMPLE_COLLECTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']]
+      }
     },
-    specimenId: {
+    sampleId: {
       type: DataTypes.STRING,
+      allowNull: true,
       unique: true
+    },
+    sampleCollectionDate: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    sampleCollectedById: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'Users',
+        key: 'id'
+      }
+    },
+    resultDate: {
+      type: DataTypes.DATE,
+      allowNull: true
     },
     results: {
       type: DataTypes.JSONB,
-      defaultValue: {}
+      allowNull: true
     },
-    normalRanges: {
+    referenceRange: {
       type: DataTypes.JSONB,
-      defaultValue: {}
-    },
-    units: {
-      type: DataTypes.JSONB,
-      defaultValue: {}
-    },
-    interpretation: DataTypes.TEXT,
-    comments: DataTypes.TEXT,
-    technicianNotes: DataTypes.TEXT,
-    attachments: {
-      type: DataTypes.ARRAY(DataTypes.JSONB),
-      defaultValue: []
-    },
-    isAbnormal: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
+      allowNull: true
     },
     isCritical: {
       type: DataTypes.BOOLEAN,
-      defaultValue: false
-    },
-    criticalValueNotified: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
-    },
-    notifiedTo: DataTypes.STRING,
-    notifiedAt: DataTypes.DATE,
-    rejectionReason: DataTypes.TEXT,
-    qualityControl: {
-      type: DataTypes.JSONB,
-      defaultValue: {}
-    },
-    instrumentUsed: DataTypes.STRING,
-    methodUsed: DataTypes.STRING,
-    costCode: DataTypes.STRING,
-    insuranceCode: DataTypes.STRING,
-    billingStatus: {
-      type: DataTypes.ENUM('PENDING', 'BILLED', 'PAID', 'INSURANCE'),
-      defaultValue: 'PENDING'
-    },
-    price: {
-      type: DataTypes.DECIMAL(10, 2),
+      defaultValue: false,
       allowNull: false
+    },
+    notes: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    paymentStatus: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'PENDING',
+      validate: {
+        isIn: [['PENDING', 'PAID', 'WAIVED']]
+      }
+    },
+    expectedCompletionDate: {
+      type: DataTypes.DATE,
+      allowNull: true
     }
   };
 
   static associate(models) {
-    this.belongsTo(models.User, {
+    this.belongsTo(models.Patient, {
       foreignKey: 'patientId',
-      as: 'PATIENT'
+      as: 'patient'
     });
+
     this.belongsTo(models.User, {
-      foreignKey: 'referringDoctorId',
-      as: 'referringDoctor'
+      foreignKey: 'requestedById',
+      as: 'requestedBy'
     });
+
     this.belongsTo(models.User, {
-      foreignKey: 'technicianId',
-      as: 'technician'
+      foreignKey: 'assignedToId',
+      as: 'assignedTo'
     });
+
     this.belongsTo(models.User, {
-      foreignKey: 'verifiedById',
-      as: 'verifier'
+      foreignKey: 'sampleCollectedById',
+      as: 'sampleCollector'
+    });
+
+    this.belongsTo(models.DepartmentQueue, {
+      foreignKey: 'queueEntryId',
+      as: 'queueEntry'
     });
   }
 
-  // Instance methods
-  async updateStatus(newStatus, userId) {
-    const statusTimestamps = {
-      SPECIMEN_COLLECTED: 'specimenCollectedAt',
-      RECEIVED: 'specimenReceivedAt',
-      IN_PROGRESS: 'testStartedAt',
-      COMPLETED: 'testCompletedAt',
-      VERIFIED: 'verifiedAt'
-    };
-
-    if (statusTimestamps[newStatus]) {
-      this[statusTimestamps[newStatus]] = new Date();
-    }
-
-    if (newStatus === 'VERIFIED') {
-      this.verifiedById = userId;
-    }
-
-    this.status = newStatus;
-    await this.save();
-  }
-
-  async markCritical(notifiedTo, userId) {
-    this.isCritical = true;
-    this.criticalValueNotified = true;
-    this.notifiedTo = notifiedTo;
-    this.notifiedAt = new Date();
-    await this.save();
-  }
-
-  generateReportData() {
-    return {
-      testInfo: {
-        id: this.id,
-        type: this.testType,
-        category: this.testCategory,
-        specimenType: this.specimenType,
-        specimenId: this.specimenId,
-        collectedAt: this.specimenCollectedAt,
-        completedAt: this.testCompletedAt
+  static initModel(sequelize) {
+    return this.init(this.schema, {
+      sequelize,
+      modelName: 'LabTest',
+      tableName: 'LabTests',
+      timestamps: true,
+      hooks: {
+        beforeCreate: async (test) => {
+          if (!test.sampleId) {
+            // Generate unique sample ID
+            const date = new Date();
+            const year = date.getFullYear().toString().slice(-2);
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const count = await this.count({
+              where: sequelize.where(
+                sequelize.fn('date_part', 'year', sequelize.col('createdAt')),
+                date.getFullYear()
+              )
+            });
+            test.sampleId = `LAB${year}${month}${(count + 1).toString().padStart(4, '0')}`;
+          }
+        }
       },
-      results: this.results,
-      normalRanges: this.normalRanges,
-      units: this.units,
-      interpretation: this.interpretation,
-      comments: this.comments,
-      flags: {
-        isAbnormal: this.isAbnormal,
-        isCritical: this.isCritical
-      },
-      verification: this.verifiedById ? {
-        verifiedAt: this.verifiedAt,
-        verifierId: this.verifiedById
-      } : null
-    };
+      indexes: [
+        {
+          fields: ['patientId']
+        },
+        {
+          fields: ['queueEntryId']
+        },
+        {
+          fields: ['requestedById']
+        },
+        {
+          fields: ['assignedToId']
+        },
+        {
+          fields: ['status']
+        },
+        {
+          fields: ['sampleId'],
+          unique: true
+        }
+      ]
+    });
   }
 }
 
