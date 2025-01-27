@@ -1,17 +1,18 @@
 const { Model, DataTypes } = require('sequelize');
 
 class StockMovement extends Model {
-    static schema = {
+  static initModel(sequelize) {
+    return this.init({
       id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true
       },
-      medicationId: {
+      medication_id: {  // Changed to match DB column name
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: 'MedicationInventory',
+          model: 'medications',
           key: 'id'
         }
       },
@@ -23,70 +24,48 @@ class StockMovement extends Model {
         type: DataTypes.INTEGER,
         allowNull: false
       },
-      batchNumber: {
+      batch_number: {  // Changed to match DB column name
         type: DataTypes.STRING,
         allowNull: true
       },
-      unitPrice: {
+      unit_price: {  // Changed to match DB column name
         type: DataTypes.DECIMAL(10, 2),
-        allowNull: true
+        allowNull: false
       },
-      totalPrice: {
+      total_price: {  // Changed to match DB column name
         type: DataTypes.DECIMAL(10, 2),
-        allowNull: true
+        allowNull: false
       },
       reason: {
         type: DataTypes.TEXT,
         allowNull: true
       },
-      performedBy: {
+      performed_by: {  // Changed to match DB column name
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: 'Users',
+          model: 'users',
           key: 'id'
         }
       },
-      verifiedBy: {
+      source_type: {  // Changed to match DB column name
+        type: DataTypes.STRING(50),
+        allowNull: true
+      },
+      source_id: {  // Changed to match DB column name
         type: DataTypes.UUID,
-        allowNull: true,
-        references: {
-          model: 'Users',
-          key: 'id'
-        }
-      },
-      sourceDocument: {
-        type: DataTypes.STRING,
-        allowNull: true
-      },
-      sourceType: {
-        type: DataTypes.ENUM('PURCHASE', 'PRESCRIPTION', 'RETURN', 'EXPIRY', 'ADJUSTMENT'),
-        allowNull: true
-      },
-      sourceId: {
-        type: DataTypes.UUID,
-        allowNull: true
-      },
-      notes: {
-        type: DataTypes.TEXT,
         allowNull: true
       }
-    };
-  
-    static associate(models) {
-      this.belongsTo(models.MedicationInventory, {
-        foreignKey: 'medicationId'
-      });
-      this.belongsTo(models.User, {
-        as: 'performer',
-        foreignKey: 'performedBy'
-      });
-      this.belongsTo(models.User, {
-        as: 'verifier',
-        foreignKey: 'verifiedBy'
-      });
-    }
+    }, {
+      sequelize,
+      modelName: 'StockMovement',
+      tableName: 'stock_movements',
+      underscored: true,  // Added to handle snake_case column names
+      timestamps: true,
+      createdAt: 'created_at',  // Specify the actual column names
+      updatedAt: 'updated_at'
+    });
   }
-  
+}
 
   module.exports = StockMovement;

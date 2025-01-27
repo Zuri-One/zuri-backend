@@ -1,11 +1,12 @@
-// controllers/pharmacy.controller.js
 const { 
     MedicationInventory, 
+    Medication,
     StockMovement, 
     MedicationDispense,
     LabTest,
     Prescription,
-    User 
+    User, 
+    sequelize
   } = require('../models');
   const { Op } = require('sequelize');
   const { sendEmail } = require('../utils/email.util');
@@ -14,94 +15,218 @@ const {
   
   class PharmacyController {
     // Inventory Management
-    async addMedication(req, res, next) {
+
+    async searchMedications(req, res, next) {
       try {
-        const {
-          name,
-          genericName,
-          category,
-          type,
-          strength,
-          manufacturer,
+        const { 
+          search, 
+          category, 
           batchNumber,
-          expiryDate,
-          currentStock,
-          minStockLevel,
-          maxStockLevel,
-          unitPrice,
-          prescriptionRequired,
-          storageConditions,
-          sideEffects,
-          contraindications,
-          dosageInstructions,
-          supplier,
-          packageSize,
-          location,
-          notes
-        } = req.body;
-    
-        // Validate required fields
-        if (!name || !category || !type || !strength || !expiryDate || !unitPrice) {
-          return res.status(400).json({
-            success: false,
-            message: 'Missing required fields'
-          });
+          page = 1, 
+          limit = 10 
+        } = req.query;
+        
+        const whereClause = { isActive: true };
+        
+        if (search) {
+          whereClause[Op.or] = [
+            { name: { [Op.iLike]: `%${search}%` } },
+            { genericName: { [Op.iLike]: `%${search}%` } }
+          ];
+        }
+        
+        if (batchNumber) {
+          whereClause.batchNumber = batchNumber;
+        }
+        
+        if (category) {
+          whereClause.category = category.toUpperCase();
         }
     
-        // Create medication
-        const medication = await MedicationInventory.create({
-          name,
-          genericName,
-          category: category.toUpperCase(),
-          type: type.toUpperCase(),
-          strength,
-          manufacturer,
-          batchNumber,
-          expiryDate: new Date(expiryDate),
-          currentStock: parseInt(currentStock || 0),
-          minStockLevel: parseInt(minStockLevel || 10),
-          maxStockLevel: parseInt(maxStockLevel || 1000),
-          unitPrice: parseFloat(unitPrice),
-          prescriptionRequired: Boolean(prescriptionRequired),
-          storageConditions,
-          sideEffects,
-          contraindications,
-          interactions: [],
-          dosageInstructions,
-          isActive: true,
-          supplier,
-          packageSize,
-          location,
-          notes
+        const { count, rows: medications } = await MedicationInventory.findAndCountAll({
+          where: whereClause,
+          limit: parseInt(limit),
+          offset: (parseInt(page) - 1) * parseInt(limit),
+          order: [['name', 'ASC']],
+          attributes: {
+            include: [
+              [
+                sequelize.literal(`
+                  CASE 
+                    WHEN current_stock <= min_stock_level THEN true 
+                    ELSE false 
+                  END
+                `),
+                'isLowStock'
+              ]
+            ]
+          }
         });
     
-        if (medication) {
-          // Create stock movement record
-          await StockMovement.create({
-            medicationId: medication.id,
-            type: 'RECEIVED',
-            quantity: parseInt(currentStock || 0),
-            batchNumber,
-            unitPrice: parseFloat(unitPrice),
-            totalPrice: parseInt(currentStock || 0) * parseFloat(unitPrice),
-            performedBy: req.user.id,
-            sourceType: 'PURCHASE'
-          });
+        res.json({
+          success: true,
+          count,
+          pages: Math.ceil(count / limit),
+          currentPage: parseInt(page),
+          medications
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
     
-          // Check if stock level is below minimum
-          if (parseInt(currentStock || 0) <= parseInt(minStockLevel || 10)) {
-            await this.sendLowStockAlert(medication);
+    async getMedicationsByBatchNumber(req, res, next) {
+      try {
+        const { batchNumber } = req.params;
+        
+        const medication = await MedicationInventory.findOne({
+          where: { 
+            batchNumber,
+            isActive: true 
           }
+        });
+    
+        if (!medication) {
+          return res.status(404).json({
+            success: false,
+            message: 'Medication not found'
+          });
         }
     
-        res.status(201).json({
+        res.json({
           success: true,
-          message: 'Medication added successfully',
           medication
         });
       } catch (error) {
-        console.error('Error adding medication:', error);
         next(error);
+      }
+    }
+    
+    async getExpiringMedications(req, res, next) {
+      try {
+        const daysThreshold = parseInt(req.query.days) || 90; // Default 90 days
+        const thresholdDate = new Date();
+        thresholdDate.setDate(thresholdDate.getDate() + daysThreshold);
+    
+        const medications = await MedicationInventory.findAll({
+          where: {
+            isActive: true,
+            expiryDate: {
+              [Op.lte]: thresholdDate
+            },
+            currentStock: {
+              [Op.gt]: 0
+            }
+          },
+          order: [['expiryDate', 'ASC']]
+        });
+    
+        res.json({
+          success: true,
+          medications
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+    
+    async addMedication(req, res, next) {
+      let transaction;
+      
+      try {
+        console.log('Checking for existing batch number:', req.body.batchNumber);
+        
+        // First check if batch number exists
+        const existingMedication = await Medication.findOne({
+          where: { batchNumber: req.body.batchNumber }
+        });
+    
+        if (existingMedication) {
+          return res.status(400).json({
+            success: false,
+            message: `Medication with batch number ${req.body.batchNumber} already exists`
+          });
+        }
+    
+        console.log('Starting transaction');
+        transaction = await sequelize.transaction();
+    
+        try {
+          console.log('Creating medication with data:', req.body);
+          const medication = await Medication.create({
+            name: req.body.name,
+            genericName: req.body.genericName,
+            batchNumber: req.body.batchNumber,
+            category: req.body.category.toUpperCase(),
+            type: req.body.type.toUpperCase(),
+            strength: req.body.strength,
+            manufacturer: req.body.manufacturer || '',
+            currentStock: parseInt(req.body.currentStock || 0),
+            minStockLevel: parseInt(req.body.minStockLevel || 10),
+            maxStockLevel: parseInt(req.body.maxStockLevel || 1000),
+            unitPrice: parseFloat(req.body.unitPrice),
+            expiryDate: new Date(req.body.expiryDate),
+            imageUrl: req.body.imageUrl,
+            prescriptionRequired: Boolean(req.body.prescriptionRequired),
+            location: req.body.location,
+            notes: req.body.notes || '',
+            isActive: true
+          }, { transaction });
+    
+          if (parseInt(req.body.currentStock) > 0) {
+            console.log('Creating stock movement');
+            await StockMovement.create({
+              medicationId: medication.id,
+              type: 'RECEIVED',
+              quantity: parseInt(req.body.currentStock),
+              batchNumber: req.body.batchNumber,
+              unitPrice: parseFloat(req.body.unitPrice),
+              totalPrice: parseInt(req.body.currentStock) * parseFloat(req.body.unitPrice),
+              performedBy: req.user?.id || null,
+              sourceType: 'INITIAL'
+            }, { transaction });
+          }
+    
+          console.log('Committing transaction');
+          await transaction.commit();
+    
+          return res.status(201).json({
+            success: true,
+            message: 'Medication added successfully',
+            medication
+          });
+    
+        } catch (innerError) {
+          console.error('Error during medication creation:', innerError);
+          if (transaction) await transaction.rollback();
+          throw innerError;
+        }
+      } catch (error) {
+        console.error('Outer error handler:', error);
+        if (transaction) await transaction.rollback();
+    
+        // Handle specific errors
+        if (error.name === 'SequelizeValidationError') {
+          return res.status(400).json({
+            success: false,
+            message: 'Validation error',
+            errors: error.errors.map(e => e.message)
+          });
+        }
+    
+        if (error.name === 'SequelizeUniqueConstraintError') {
+          return res.status(400).json({
+            success: false,
+            message: 'A medication with this batch number already exists'
+          });
+        }
+    
+        // For any other error
+        return res.status(500).json({
+          success: false,
+          message: 'An error occurred while adding the medication',
+          error: error.message
+        });
       }
     }
 

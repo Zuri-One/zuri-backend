@@ -38,17 +38,17 @@ class Pharmacy extends Model {
     });
   }
 
-  static associate(models) {
-    // Only create associations for models that exist
-    if (models.Medication) {
-      this.hasMany(models.Medication, { foreignKey: 'pharmacyId' });
-    }
+  // static associate(models) {
+  //   // Only create associations for models that exist
+  //   if (models.Medication) {
+  //     this.hasMany(models.Medication, { foreignKey: 'pharmacyId' });
+  //   }
     
-    // Check if PrescriptionFill exists before creating association
-    if (models.PrescriptionFill) {
-      this.hasMany(models.PrescriptionFill, { foreignKey: 'pharmacyId' });
-    }
-  }
+  //   // Check if PrescriptionFill exists before creating association
+  //   if (models.PrescriptionFill) {
+  //     this.hasMany(models.PrescriptionFill, { foreignKey: 'pharmacyId' });
+  //   }
+  // }
 }
 
 module.exports = Pharmacy;
