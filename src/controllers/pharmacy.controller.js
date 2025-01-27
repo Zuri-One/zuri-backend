@@ -1,5 +1,4 @@
 const { 
-    MedicationInventory, 
     Medication,
     StockMovement, 
     MedicationDispense,
@@ -43,7 +42,7 @@ const {
           whereClause.category = category.toUpperCase();
         }
     
-        const { count, rows: medications } = await MedicationInventory.findAndCountAll({
+        const { count, rows: medications } = await Medication.findAndCountAll({
           where: whereClause,
           limit: parseInt(limit),
           offset: (parseInt(page) - 1) * parseInt(limit),
@@ -79,7 +78,7 @@ const {
       try {
         const { batchNumber } = req.params;
         
-        const medication = await MedicationInventory.findOne({
+        const medication = await Medication.findOne({
           where: { 
             batchNumber,
             isActive: true 
@@ -108,7 +107,7 @@ const {
         const thresholdDate = new Date();
         thresholdDate.setDate(thresholdDate.getDate() + daysThreshold);
     
-        const medications = await MedicationInventory.findAll({
+        const medications = await Medication.findAll({
           where: {
             isActive: true,
             expiryDate: {
@@ -136,69 +135,101 @@ const {
       try {
         transaction = await sequelize.transaction();
     
-        try {
-          // Create medication directly specifying all fields
-          const medication = await Medication.create({
-            name: req.body.name,
-            genericName: req.body.genericName,
-            batchNumber: req.body.batchNumber,
-            category: req.body.category.toUpperCase(),
-            type: req.body.type.toUpperCase(),
-            strength: req.body.strength,
-            manufacturer: req.body.manufacturer || '',
-            currentStock: parseInt(req.body.currentStock || 0),
-            minStockLevel: parseInt(req.body.minStockLevel || 10),
-            maxStockLevel: parseInt(req.body.maxStockLevel || 1000),
-            unitPrice: parseFloat(req.body.unitPrice),
-            expiryDate: new Date(req.body.expiryDate),
-            imageUrl: req.body.imageUrl,
-            prescriptionRequired: Boolean(req.body.prescriptionRequired),
-            location: req.body.location,
-            notes: req.body.notes || ''
-          }, {
-            transaction,
-            returning: true // Make sure we get all fields back
+        // Validate required fields
+        const requiredFields = ['name', 'batchNumber', 'category', 'type', 'strength', 'unitPrice', 'expiryDate'];
+        const missingFields = requiredFields.filter(field => !req.body[field]);
+        
+        if (missingFields.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: `Missing required fields: ${missingFields.join(', ')}`
           });
-    
-          // Create initial stock movement if there's initial stock
-          if (parseInt(req.body.currentStock) > 0) {
-            await StockMovement.create({
-              medicationId: medication.id,
-              type: 'RECEIVED',
-              quantity: parseInt(req.body.currentStock),
-              batchNumber: req.body.batchNumber,
-              unitPrice: parseFloat(req.body.unitPrice),
-              totalPrice: parseInt(req.body.currentStock) * parseFloat(req.body.unitPrice),
-              performedBy: req.user?.id || null,
-              sourceType: 'INITIAL'
-            }, { transaction });
-          }
-    
-          await transaction.commit();
-    
-          return res.status(201).json({
-            success: true,
-            message: 'Medication added successfully',
-            medication
-          });
-    
-        } catch (error) {
-          if (transaction) await transaction.rollback();
-          
-          if (error.name === 'SequelizeUniqueConstraintError') {
-            return res.status(400).json({
-              success: false,
-              message: 'A medication with this batch number already exists'
-            });
-          }
-          
-          throw error;
         }
+    
+        // Process and validate the medication data
+        const medicationData = {
+          name: req.body.name.trim(),
+          genericName: req.body.genericName?.trim(),
+          batchNumber: req.body.batchNumber.trim(),
+          category: req.body.category?.toUpperCase(),
+          type: req.body.type?.toUpperCase(),
+          strength: req.body.strength.trim(),
+          manufacturer: req.body.manufacturer?.trim() || '',
+          currentStock: parseInt(req.body.currentStock || 0),
+          minStockLevel: parseInt(req.body.minStockLevel || 10),
+          maxStockLevel: parseInt(req.body.maxStockLevel || 1000),
+          unitPrice: parseFloat(req.body.unitPrice),
+          expiryDate: new Date(req.body.expiryDate),
+          imageUrl: req.body.imageUrl?.trim(),
+          prescriptionRequired: Boolean(req.body.prescriptionRequired),
+          location: req.body.location?.trim(),
+          notes: req.body.notes?.trim() || '',
+          isActive: true
+        };
+    
+        // Create the medication record
+        const medication = await Medication.create(medicationData, {
+          transaction,
+          returning: true
+        });
+    
+        // Create initial stock movement record if there's initial stock
+        if (medicationData.currentStock > 0) {
+          const stockMovementData = {
+            medication_id: medication.id,  // Changed to snake_case
+            type: 'RECEIVED',
+            quantity: medicationData.currentStock,
+            batch_number: medicationData.batchNumber,  // Changed to snake_case
+            unit_price: medicationData.unitPrice,      // Changed to snake_case
+            total_price: medicationData.currentStock * medicationData.unitPrice,  // Changed to snake_case
+            performed_by: req.user?.id,    // Changed to snake_case
+            source_type: 'INITIAL',        // Changed to snake_case
+            reason: 'Initial stock entry'
+          };
+    
+          // Log the stock movement data for debugging
+          console.log('Creating stock movement with data:', stockMovementData);
+    
+          if (!stockMovementData.performed_by) {
+            throw new Error('User ID is required for stock movement');
+          }
+    
+          await StockMovement.create(stockMovementData, { 
+            transaction,
+            returning: true
+          });
+        }
+    
+        // Commit the transaction
+        await transaction.commit();
+    
+        // Send success response
+        return res.status(201).json({
+          success: true,
+          message: 'Medication added successfully',
+          medication: medication.toJSON()
+        });
+    
       } catch (error) {
-        return res.status(500).json({
+        // Rollback transaction on error
+        if (transaction) await transaction.rollback();
+    
+        // Log the error details
+        console.error('Error adding medication:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+    
+        // Send error response
+        return res.status(error.name === 'SequelizeValidationError' ? 400 : 500).json({
           success: false,
-          message: 'Error adding medication',
-          error: error.message
+          message: error.message || 'Error adding medication',
+          error: {
+            name: error.name,
+            message: error.message,
+            ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+          }
         });
       }
     }
@@ -217,8 +248,8 @@ const {
           Prescription.count({
             where: { status: 'pending' }
           }),
-          MedicationInventory.count(),
-          MedicationInventory.count({
+          Medication.count(),
+          Medication.count({
             where: {
               currentStock: {
                 [Op.lte]: sequelize.col('minStockLevel')
@@ -227,7 +258,7 @@ const {
           })
         ]);
     
-        const inventoryValue = await MedicationInventory.sum(
+        const inventoryValue = await Medication.sum(
           sequelize.literal('currentStock * unitPrice')
         );
     
@@ -254,7 +285,7 @@ const {
           },
           include: [
             {
-              model: MedicationInventory,
+              model: Medication,
               attributes: ['id', 'name', 'strength', 'currentStock']
             },
             {
@@ -290,15 +321,15 @@ const {
           lowStock,
           expiringItems
         ] = await Promise.all([
-          MedicationInventory.count(),
-          MedicationInventory.count({
+          Medication.count(),
+          Medication.count({
             where: {
               currentStock: {
                 [Op.lte]: sequelize.col('minStockLevel')
               }
             }
           }),
-          MedicationInventory.count({
+          Medication.count({
             where: {
               expiryDate: {
                 [Op.lte]: new Date(Date.now() + (90 * 24 * 60 * 60 * 1000)) // 90 days
@@ -307,11 +338,11 @@ const {
           })
         ]);
     
-        const totalValue = await MedicationInventory.sum(
+        const totalValue = await Medication.sum(
           sequelize.literal('currentStock * unitPrice')
         );
     
-        const categoryDistribution = await MedicationInventory.findAll({
+        const categoryDistribution = await Medication.findAll({
           attributes: [
             'category',
             [sequelize.fn('COUNT', sequelize.col('id')), 'count']
@@ -342,7 +373,7 @@ const {
           prescriptionId
         } = req.body;
     
-        const medication = await MedicationInventory.findByPk(medicationId);
+        const medication = await Medication.findByPk(medicationId);
         
         if (!medication) {
           return res.status(404).json({
@@ -381,7 +412,7 @@ const {
           },
           include: [
             {
-              model: MedicationInventory,
+              model: Medication,
               attributes: ['name', 'category']
             }
           ]
@@ -396,7 +427,7 @@ const {
     
         dispenses.forEach(dispense => {
           // Summarize by category
-          const category = dispense.MedicationInventory.category;
+          const category = dispense.Medication.category;
           if (!summary.byCategory[category]) {
             summary.byCategory[category] = { count: 0, value: 0 };
           }
@@ -441,7 +472,7 @@ const {
   
         try {
           // Check medication availability
-          const medication = await MedicationInventory.findByPk(medicationId, { transaction });
+          const medication = await Medication.findByPk(medicationId, { transaction });
           
           if (!medication || medication.currentStock < quantity) {
             await transaction.rollback();
@@ -543,7 +574,7 @@ const {
           expiryDate 
         } = req.body;
   
-        const medication = await MedicationInventory.findByPk(id);
+        const medication = await Medication.findByPk(id);
         
         if (!medication) {
           return res.status(404).json({
@@ -683,7 +714,7 @@ const {
         if (category) whereClause.category = category;
         if (type) whereClause.type = type;
   
-        const { count, rows: medications } = await MedicationInventory.findAndCountAll({
+        const { count, rows: medications } = await Medication.findAndCountAll({
           where: whereClause,
           limit: parseInt(limit),
           offset: (parseInt(page) - 1) * parseInt(limit),
@@ -706,7 +737,7 @@ const {
       try {
         const { id } = req.params;
         
-        const medication = await MedicationInventory.findOne({
+        const medication = await Medication.findOne({
           where: { id, isActive: true }
         });
   
@@ -731,7 +762,7 @@ const {
         const { id } = req.params;
         const updateData = req.body;
   
-        const medication = await MedicationInventory.findByPk(id);
+        const medication = await Medication.findByPk(id);
   
         if (!medication) {
           return res.status(404).json({
@@ -756,7 +787,7 @@ const {
   
     async getLowStockItems(req, res, next) {
       try {
-        const medications = await MedicationInventory.findAll({
+        const medications = await Medication.findAll({
           where: {
             isActive: true,
             currentStock: {
@@ -779,7 +810,7 @@ const {
         const threeMonthsFromNow = new Date();
         threeMonthsFromNow.setMonth(threeMonthsFromNow.getMonth() + 3);
   
-        const medications = await MedicationInventory.findAll({
+        const medications = await Medication.findAll({
           where: {
             isActive: true,
             expiryDate: {
@@ -818,7 +849,7 @@ const {
           where: whereClause,
           include: [
             {
-              model: MedicationInventory,
+              model: Medication,
               attributes: ['name', 'type', 'strength']
             },
             {
@@ -857,7 +888,7 @@ const {
           where: { id },
           include: [
             {
-              model: MedicationInventory,
+              model: Medication,
               attributes: ['name', 'type', 'strength']
             },
             {
@@ -909,7 +940,7 @@ const {
           },
           include: [
             {
-              model: MedicationInventory,
+              model: Medication,
               attributes: ['name', 'category', 'type']
             }
           ]
@@ -927,7 +958,7 @@ const {
         // Process dispenses for detailed statistics
         dispenses.forEach(dispense => {
           // By category
-          const category = dispense.MedicationInventory.category;
+          const category = dispense.Medication.category;
           if (!report.byCategory[category]) {
             report.byCategory[category] = {
               count: 0,
@@ -938,7 +969,7 @@ const {
           report.byCategory[category].value += parseFloat(dispense.totalPrice);
   
           // By medication
-          const medName = dispense.MedicationInventory.name;
+          const medName = dispense.Medication.name;
           if (!report.byMedication[medName]) {
             report.byMedication[medName] = {
               count: 0,
@@ -985,7 +1016,7 @@ const {
           },
           include: [
             {
-              model: MedicationInventory,
+              model: Medication,
               attributes: ['name', 'category', 'currentStock']
             }
           ]

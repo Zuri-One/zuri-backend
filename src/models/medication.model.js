@@ -2,7 +2,7 @@ const { Model, DataTypes } = require('sequelize');
 
 class Medication extends Model {
   static initModel(sequelize) {
-    return this.init({
+    const model = super.init({
       id: {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
@@ -56,7 +56,7 @@ class Medication extends Model {
         defaultValue: 1000
       },
       unitPrice: {
-        type: DataTypes.DECIMAL(10, 2),
+        type: DataTypes.DECIMAL,  // Changed from DECIMAL(10,2)
         allowNull: false
       },
       expiryDate: {
@@ -82,30 +82,27 @@ class Medication extends Model {
       notes: {
         type: DataTypes.TEXT,
         allowNull: true
-      },
-      createdAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
-      },
-      updatedAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW
       }
     }, {
       sequelize,
       modelName: 'Medication',
       tableName: 'Medications',
       timestamps: true,
-      underscored: false  // Changed to false since we're using camelCase
+      underscored: false,
+      freezeTableName: true
     });
+
+    // Log the initialized attributes
+    console.log('Medication model initialized with attributes:', 
+      Object.keys(model.rawAttributes));
+
+    return model;
   }
 
   static associate(models) {
     if (models.StockMovement) {
-      this.hasMany(models.StockMovement, { 
-        foreignKey: 'medicationId',  // Changed to camelCase
+      this.hasMany(models.StockMovement, {
+        foreignKey: 'medicationId',
         as: 'stockMovements'
       });
     }

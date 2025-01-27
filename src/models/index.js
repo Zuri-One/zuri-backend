@@ -2,8 +2,6 @@
 const { sequelize } = require('../config/database');
 const { DataTypes } = require('sequelize');
 const path = require('path');
-const DepartmentQueue = require('./department-queue.model');
-const Examination = require('./examination.model');
 
 // Import all models
 const models = {
@@ -22,8 +20,6 @@ const models = {
   LabTest: require(path.join(__dirname, 'lab-test.model')),
   LabTestTemplate: require(path.join(__dirname, 'lab-test-template.model')),
   Laboratory: require(path.join(__dirname, 'laboratory.model')),
-  // MedicationInventory: require(path.join(__dirname, 'medication-inventory.model')),
-  // MedicationDispense: require(path.join(__dirname, 'medication-dispense.model')),
   StockMovement: require(path.join(__dirname, 'stock-movement.model')),
   Pharmacy: require(path.join(__dirname, 'pharmacy.model')),
   MedicalDocument: require(path.join(__dirname, 'medical-document.model')), 
@@ -36,19 +32,29 @@ const models = {
   ConsultationQueue: require(path.join(__dirname, 'consultation-queue.model')),
   DepartmentQueue: require(path.join(__dirname, 'department-queue.model')),
   Examination: require(path.join(__dirname, 'examination.model')),
-
 };
 
-// Initialize models - Modified initialization function
+// Enhanced initialization function that supports multiple patterns
 const initializeModel = (Model) => {
   try {
+    // Log the initialization attempt
+    console.log(`Attempting to initialize model: ${Model.name}`);
+    
+    // For models using initModel pattern (like Medication)
+    if (typeof Model.initModel === 'function') {
+      console.log(`Using initModel pattern for ${Model.name}`);
+      return Model.initModel(sequelize);
+    }
+    
     // For models using MedicalDocument's initialize pattern
-    if (Model.initialize) {
+    if (typeof Model.initialize === 'function') {
+      console.log(`Using initialize pattern for ${Model.name}`);
       return Model.initialize(sequelize);
     }
     
     // For models using schema pattern
     if (Model.schema) {
+      console.log(`Using schema pattern for ${Model.name}`);
       return Model.init(Model.schema, { 
         sequelize,
         modelName: Model.name,
@@ -56,12 +62,17 @@ const initializeModel = (Model) => {
         paranoid: false
       });
     }
-    
-    // For traditional Sequelize models
-    if (Model.init) {
-      return Model.initModel(sequelize);
+
+    // For traditional Sequelize models using init
+    if (typeof Model.init === 'function') {
+      console.log(`Using traditional init pattern for ${Model.name}`);
+      return Model.init(Model.getAttributes(), {
+        sequelize,
+        modelName: Model.name
+      });
     }
 
+    // If no valid initialization pattern is found
     throw new Error(`Model ${Model.name} does not have a valid initialization pattern`);
   } catch (error) {
     console.error(`Error initializing model ${Model.name}:`, error);
@@ -69,16 +80,16 @@ const initializeModel = (Model) => {
   }
 };
 
-// Initialize models in specific order
+// Specific initialization order to handle dependencies
 const modelInitializationOrder = [
-  'Department',  // Initialize Department first
+  'Department',
   'Triage',
-  'User',        // Then User
-  'Patient', 
+  'User',
+  'Patient',
   'DoctorProfile',
   'Appointment',
-  'ProgressNote',   
-  'Consent', 
+  'ProgressNote',
+  'Consent',
   'DoctorAvailability',
   'TestResult',
   'HealthMetric',
@@ -89,8 +100,6 @@ const modelInitializationOrder = [
   'LabTest',
   'LabTestTemplate',
   'Laboratory',
-  // 'MedicationInventory',
-  // 'MedicationDispense',
   'StockMovement',
   'Pharmacy',
   'MedicalDocument',
@@ -102,7 +111,7 @@ const modelInitializationOrder = [
   'Examination'
 ];
 
-// Initialize models in order
+// Initialize models in order with enhanced error handling
 const initializedModels = modelInitializationOrder.reduce((acc, modelName) => {
   const Model = models[modelName];
   if (!Model) {
@@ -111,8 +120,19 @@ const initializedModels = modelInitializationOrder.reduce((acc, modelName) => {
   }
 
   try {
+    // Initialize the model
     acc[modelName] = initializeModel(Model);
+    
+    // Verify initialization
+    if (!acc[modelName]) {
+      throw new Error(`Model ${modelName} initialization returned null or undefined`);
+    }
+
+    // Log successful initialization and available attributes
     console.log(`Successfully initialized model: ${modelName}`);
+    console.log(`${modelName} attributes:`, 
+      Object.keys(acc[modelName].rawAttributes || {}));
+    
     return acc;
   } catch (error) {
     console.error(`Failed to initialize model ${modelName}:`, error);
@@ -120,12 +140,16 @@ const initializedModels = modelInitializationOrder.reduce((acc, modelName) => {
   }
 }, {});
 
-// Create associations after all models are initialized
+
 Object.keys(initializedModels).forEach(modelName => {
   if (typeof initializedModels[modelName].associate === 'function') {
     try {
       initializedModels[modelName].associate(initializedModels);
       console.log(`Successfully created associations for model: ${modelName}`);
+      
+      // Log the associations
+      console.log(`${modelName} associations:`, 
+        Object.keys(initializedModels[modelName].associations || {}));
     } catch (error) {
       console.error(`Failed to create associations for model ${modelName}:`, error);
       throw error;
@@ -133,14 +157,17 @@ Object.keys(initializedModels).forEach(modelName => {
   }
 });
 
+// Add sequelize instance
+initializedModels.sequelize = sequelize;
+
+// Final verification of initialized models
 Object.keys(initializedModels).forEach(modelName => {
-  const model = initializedModels[modelName];
-  console.log(`${modelName} associations:`, 
-    Object.keys(model.associations || {})
-  );
+  if (modelName !== 'sequelize') {
+    const model = initializedModels[modelName];
+    if (!model || !model.rawAttributes) {
+      console.warn(`Warning: Model ${modelName} may not be properly initialized`);
+    }
+  }
 });
 
-module.exports = {
-  sequelize,
-  ...initializedModels
-};
+module.exports = initializedModels;

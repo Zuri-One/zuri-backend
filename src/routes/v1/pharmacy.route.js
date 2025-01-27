@@ -140,8 +140,8 @@ router.post(
 */
 router.get(
  '/inventory',
- authorize(['PHARMACIST', 'DOCTOR', 'NURSE']),
- hasPermission(['view_pharmacy_inventory']),
+//  authorize(['PHARMACIST', 'DOCTOR', 'NURSE']),
+//  hasPermission(['view_pharmacy_inventory']),
  pharmacyController.getInventory
 );
 
