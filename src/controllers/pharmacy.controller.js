@@ -134,25 +134,10 @@ const {
       let transaction;
       
       try {
-        console.log('Checking for existing batch number:', req.body.batchNumber);
-        
-        // First check if batch number exists
-        const existingMedication = await Medication.findOne({
-          where: { batchNumber: req.body.batchNumber }
-        });
-    
-        if (existingMedication) {
-          return res.status(400).json({
-            success: false,
-            message: `Medication with batch number ${req.body.batchNumber} already exists`
-          });
-        }
-    
-        console.log('Starting transaction');
         transaction = await sequelize.transaction();
     
         try {
-          console.log('Creating medication with data:', req.body);
+          // Create medication directly specifying all fields
           const medication = await Medication.create({
             name: req.body.name,
             genericName: req.body.genericName,
@@ -169,12 +154,14 @@ const {
             imageUrl: req.body.imageUrl,
             prescriptionRequired: Boolean(req.body.prescriptionRequired),
             location: req.body.location,
-            notes: req.body.notes || '',
-            isActive: true
-          }, { transaction });
+            notes: req.body.notes || ''
+          }, {
+            transaction,
+            returning: true // Make sure we get all fields back
+          });
     
+          // Create initial stock movement if there's initial stock
           if (parseInt(req.body.currentStock) > 0) {
-            console.log('Creating stock movement');
             await StockMovement.create({
               medicationId: medication.id,
               type: 'RECEIVED',
@@ -187,7 +174,6 @@ const {
             }, { transaction });
           }
     
-          console.log('Committing transaction');
           await transaction.commit();
     
           return res.status(201).json({
@@ -196,35 +182,22 @@ const {
             medication
           });
     
-        } catch (innerError) {
-          console.error('Error during medication creation:', innerError);
+        } catch (error) {
           if (transaction) await transaction.rollback();
-          throw innerError;
+          
+          if (error.name === 'SequelizeUniqueConstraintError') {
+            return res.status(400).json({
+              success: false,
+              message: 'A medication with this batch number already exists'
+            });
+          }
+          
+          throw error;
         }
       } catch (error) {
-        console.error('Outer error handler:', error);
-        if (transaction) await transaction.rollback();
-    
-        // Handle specific errors
-        if (error.name === 'SequelizeValidationError') {
-          return res.status(400).json({
-            success: false,
-            message: 'Validation error',
-            errors: error.errors.map(e => e.message)
-          });
-        }
-    
-        if (error.name === 'SequelizeUniqueConstraintError') {
-          return res.status(400).json({
-            success: false,
-            message: 'A medication with this batch number already exists'
-          });
-        }
-    
-        // For any other error
         return res.status(500).json({
           success: false,
-          message: 'An error occurred while adding the medication',
+          message: 'Error adding medication',
           error: error.message
         });
       }
