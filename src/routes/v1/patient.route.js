@@ -322,6 +322,11 @@ router.get('/details/:identifier',
   patientController.getPatientDetails
 );
 
+
+
+router.patch('/:id/emergency', authenticate, patientController.updateEmergencyStatus);
+
+
 /**
  * @swagger
  * /api/v1/patient/all:

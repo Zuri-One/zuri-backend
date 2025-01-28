@@ -257,6 +257,65 @@ router.get('/active', triageController.getActiveTriages);
 router.get('/:id', triageController.getTriageById);
 router.put('/:id', triageController.updateTriageAssessment);
 
+
+/**
+ * @swagger
+ * /api/v1/triage/patient/{patientId}/examinations:
+ *   get:
+ *     summary: Get all examinations for a specific patient
+ *     tags: [Triage]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: patientId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The patient's ID
+ *     responses:
+ *       200:
+ *         description: List of patient examinations retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       examinationDateTime:
+ *                         type: string
+ *                         format: date-time
+ *                       examiner:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                       generalExamination:
+ *                         type: object
+ *                       systemicExaminations:
+ *                         type: array
+ *                       proceduresPerformed:
+ *                         type: array
+ *                       nursingNotes:
+ *                         type: string
+ *                       triage:
+ *                         type: object
+ *                         nullable: true
+ */
+router.get('/patient/:patientId/examinations', authenticate, triageController.getPatientExaminations);
+
+
 /**
  * @swagger
  * /api/v1/triage/{id}/reassess:

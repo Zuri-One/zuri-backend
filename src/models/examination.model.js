@@ -51,7 +51,6 @@ class Examination extends Model {
             'weight',
             'height',
             'bmi',
-            'headCircumference',
             'pulseRate',
             'spo2'
           ];

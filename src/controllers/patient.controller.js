@@ -242,6 +242,30 @@ exports.getPatientAppointments = async (req, res, next) => {
   }
 };
 
+exports.updateEmergencyStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { isEmergency } = req.body;
+
+    const patient = await Patient.findByPk(id);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    }
+
+    await patient.update({ isEmergency });
+
+    res.json({
+      success: true,
+      message: 'Emergency status updated successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.getHealthMetrics = async (req, res, next) => {
   try {
     const metrics = await HealthMetric.findAll({

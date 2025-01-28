@@ -9,7 +9,7 @@ const patientRoutes = require('./patient.route');
 const appointmentRoutes = require('./appointment.route');
 const meetingRoutes = require('./meetings.route');
 const userRoutes = (require('./users.route'))
-const prescriptionRoutes = (require('./medication.route'))
+const prescriptionRoutes = (require('./prescription.route'))
 const recordRoutes = (require('./medical-record.route'))
 const labRoutes = (require('./lab.route'))
 const labTemplateRoutes = require('./lab-template.route'); 
@@ -26,6 +26,7 @@ const examinationRoutes = require('./examination.route');
 // const consentRoutes = require('./consent.route');
 const departmentRoutes = require('./department.route');
 const triageRoutes = require('./triage.route');
+const medicationRoutes = require('./medication.route')
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -35,12 +36,13 @@ router.use('/appointments', appointmentRoutes);
 router.use('/meetings', meetingRoutes);
 router.use('/users', userRoutes);
 router.use('/video', videoRoutes);
-router.use('/prescription', prescriptionRoutes);
+router.use('/prescriptions', prescriptionRoutes);
 router.use('/records', recordRoutes);
 router.use('/labs', labRoutes);
 router.use('/lab-templates', labTemplateRoutes);
 router.use('/pharmacy', pharmacyRoutes);
 router.use('/medical-records', uploadRoutes);
+router.use('/medication', medicationRoutes);
 // router.use('/consultation-queue', consultationQueueRoutes);
 router.use('/billing', billingRoutes);
 router.use('/queue', queueRoutes);

@@ -69,8 +69,9 @@ class Prescription extends Model {
       foreignKey: 'appointmentId'
     });
     this.belongsToMany(models.Medication, {
-      through: 'PrescriptionMedications',
-      foreignKey: 'prescriptionId'
+      through: models.PrescriptionMedications,  
+      foreignKey: 'prescriptionId',
+      otherKey: 'MedicationId'
     });
   }
 }

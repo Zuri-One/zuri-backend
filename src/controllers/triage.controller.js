@@ -51,6 +51,58 @@ const determineRecommendedAction = (category) => {
   }
 };
 
+
+exports.getPatientExaminations = async (req, res, next) => {
+  try {
+    const { patientId } = req.params;
+
+    // Fetch examinations with associated examiner details
+    const examinations = await sequelize.models.Examination.findAll({
+      where: { patientId },
+      include: [
+        {
+          model: sequelize.models.User,
+          as: 'examiner',
+          attributes: ['id', 'surname', 'otherNames']
+        },
+        {
+          model: sequelize.models.Triage,
+          as: 'triage',
+          attributes: ['id', 'category', 'priorityScore']
+        }
+      ],
+      order: [['examinationDateTime', 'DESC']], // Most recent first
+    });
+
+    // Format the response
+    const formattedExaminations = examinations.map(exam => ({
+      id: exam.id,
+      examinationDateTime: exam.examinationDateTime,
+      examiner: {
+        id: exam.examiner.id,
+        name: `${exam.examiner.surname} ${exam.examiner.otherNames}`
+      },
+      generalExamination: exam.generalExamination,
+      systemicExaminations: exam.systemicExaminations,
+      proceduresPerformed: exam.proceduresPerformed,
+      nursingNotes: exam.nursingNotes,
+      triage: exam.triage ? {
+        category: exam.triage.category,
+        priorityScore: exam.triage.priorityScore
+      } : null
+    }));
+
+    res.json({
+      success: true,
+      data: formattedExaminations
+    });
+  } catch (error) {
+    console.error('Error fetching patient examinations:', error);
+    next(error);
+  }
+};
+
+
 exports.assignPatient = async (req, res, next) => {
   try {
     const { id } = req.params;
