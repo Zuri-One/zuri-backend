@@ -1,5 +1,4 @@
-// src/controllers/lab-test.controller.js
-const { LabTest, User } = require('../models');
+const { LabTest, User, Patient, DepartmentQueue} = require('../models');
 const { Op } = require('sequelize');
 const { generateLabReport } = require('../utils/pdf.util');
 const sendEmail = require('../utils/email.util');
@@ -7,92 +6,105 @@ const sendEmail = require('../utils/email.util');
 const labTestController = {
   // Create new lab test
   createLabTest: async (req, res, next) => {
+    console.log('========= LAB TEST CREATION START =========');
+    console.log('Received lab test request:', req.body);
+    console.log('User making request:', {
+      userId: req.user.id,
+      role: req.user.role
+    });
+  
     try {
       const {
         patientId,
+        queueEntryId,
         testType,
-        testCategory,
         priority,
-        specimenType,
-        notes,
-        price
+        notes
       } = req.body;
-
+  
+      console.log('Processing lab test creation with data:', {
+        patientId,
+        queueEntryId,
+        testType,
+        priority,
+        notes,
+        requestedById: req.user.id
+      });
+  
       const labTest = await LabTest.create({
         patientId,
-        referringDoctorId: req.user.id,
+        queueEntryId,
+        requestedById: req.user.id,
         testType,
-        testCategory,
-        priority,
-        specimenType,
+        priority: priority || 'NORMAL',
         notes,
-        price,
-        status: 'ORDERED'
+        status: 'PENDING'
       });
-
+  
+      console.log('Lab test created successfully:', {
+        testId: labTest.id,
+        patientId: labTest.patientId,
+        status: labTest.status
+      });
+  
       res.status(201).json({
         success: true,
         message: 'Lab test ordered successfully',
         labTest
       });
+  
+      console.log('========= LAB TEST CREATION COMPLETE =========');
     } catch (error) {
+      console.error('Lab test creation error:', error);
+      console.error('Stack trace:', error.stack);
+      console.log('========= LAB TEST CREATION FAILED =========');
       next(error);
     }
   },
 
   // Get all lab tests
-getLabTests: async (req, res, next) => {
-  try {
-    const {
-      status,
-      priority,
-      category,
-      startDate,
-      endDate,
-      page = 1,
-      limit = 10
-    } = req.query;
-
-    const whereClause = {};
-
-    if (status) {
-      // Handle CRITICAL status differently
-      if (status === 'CRITICAL') {
-        whereClause.isCritical = true;
-      } else {
-        whereClause.status = status;
-      }
-    }
-
-    if (priority) whereClause.priority = priority;
-    if (category) whereClause.testCategory = category;
-
-    if (startDate || endDate) {
-      whereClause.createdAt = {};
-      if (startDate) whereClause.createdAt[Op.gte] = new Date(startDate);
-      if (endDate) whereClause.createdAt[Op.lte] = new Date(endDate);
-    }
-
+  getLabTests: async (req, res, next) => {
     try {
+      const {
+        status,
+        priority,
+        patientId,
+        page = 1,
+        limit = 10
+      } = req.query;
+  
+      const whereClause = {};
+  
+      if (status) whereClause.status = status;
+      if (priority) whereClause.priority = priority;
+      if (patientId) whereClause.patientId = patientId;
+  
+      console.log('Query params:', { status, priority, patientId });
+      console.log('Where clause:', whereClause);
+  
       const { count, rows: labTests } = await LabTest.findAndCountAll({
         where: whereClause,
         include: [
           {
-            model: User,
-            as: 'PATIENT',
-            attributes: ['id', 'name', 'email']
+            model: Patient,
+            as: 'patient',
+            attributes: ['id', 'patientNumber', 'surname', 'otherNames']
           },
           {
             model: User,
-            as: 'referringDoctor',
-            attributes: ['id', 'name', 'email']
+            as: 'requestedBy',
+            attributes: ['id', 'surname', 'otherNames']
+          },
+          {
+            model: DepartmentQueue,
+            as: 'queueEntry'
           }
         ],
         limit: parseInt(limit),
         offset: (parseInt(page) - 1) * parseInt(limit),
         order: [['createdAt', 'DESC']]
       });
-
+  
       res.json({
         success: true,
         count,
@@ -100,21 +112,16 @@ getLabTests: async (req, res, next) => {
         currentPage: parseInt(page),
         labTests
       });
-    } catch (queryError) {
-      console.error('Query Error:', queryError);
-      // Return empty results instead of error
-      res.json({
-        success: true,
-        count: 0,
-        pages: 0,
-        currentPage: parseInt(page),
-        labTests: []
+  
+    } catch (error) {
+      console.error('Lab tests fetch error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack
       });
+      next(error);
     }
-  } catch (error) {
-    next(error);
-  }
-},
+  },
 
   // Get pending tests
   getPendingTests: async (req, res, next) => {

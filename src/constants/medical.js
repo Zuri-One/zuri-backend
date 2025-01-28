@@ -1,10 +1,10 @@
 // constants/medical.js
 const PROCEDURES = [
-    {
-      id: 'ECG',
-      name: 'Electrocardiogram',
-      category: 'Cardiac'
-    },
+    // {
+    //   id: 'ECG',
+    //   name: 'Electrocardiogram',
+    //   category: 'Cardiac'
+    // },
     {
       id: 'BLOOD_DRAW',
       name: 'Blood Sample Collection',

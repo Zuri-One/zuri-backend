@@ -12,6 +12,7 @@ const userRoutes = (require('./users.route'))
 const prescriptionRoutes = (require('./prescription.route'))
 const recordRoutes = (require('./medical-record.route'))
 const labRoutes = (require('./lab.route'))
+const labTestRoutes = (require('./lab-test.route'))
 const labTemplateRoutes = require('./lab-template.route'); 
 const pharmacyRoutes = require('./pharmacy.route'); 
 const uploadRoutes = require('./medical-records.route'); 
@@ -39,6 +40,7 @@ router.use('/video', videoRoutes);
 router.use('/prescriptions', prescriptionRoutes);
 router.use('/records', recordRoutes);
 router.use('/labs', labRoutes);
+router.use('/lab-test', labTestRoutes);
 router.use('/lab-templates', labTemplateRoutes);
 router.use('/pharmacy', pharmacyRoutes);
 router.use('/medical-records', uploadRoutes);
