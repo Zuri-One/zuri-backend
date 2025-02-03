@@ -564,6 +564,37 @@ exports.register = async (req, res, next) => {
       employeeId: user.employeeId
     });
 
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: 'Welcome to Zuri Health - Registration Successful',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Welcome to Zuri Health!</h2>
+            <p>Dear ${user.surname} ${user.otherNames},</p>
+            <p>Your staff account has been successfully created with the following details:</p>
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p><strong>Email:</strong> ${user.email}</p>
+              <p><strong>Employee ID:</strong> ${user.employeeId}</p>
+              <p><strong>Role:</strong> ${user.role}</p>
+              <p><strong>Password:</strong> ${password}</p>
+            </div>
+            <p>You can access the Zuri Health Management System at: <a href="https://hms.zuri.health">hms.zuri.health</a></p>
+            <p>For security reasons, we strongly recommend changing your password after your first login.</p>
+            <div style="margin: 20px 0; padding: 15px; border-left: 4px solid #0066cc;">
+              <p><strong>Important:</strong></p>
+              <p>Please check your email for a separate verification link to complete your account setup.</p>
+            </div>
+            <p>If you have any questions or need assistance, please contact your system administrator.</p>
+            <p>Best regards,<br>Zuri Health Team</p>
+          </div>
+        `
+      });
+      console.log(`Registration confirmation email sent to ${email}`);
+    } catch (confirmationEmailError) {
+      console.error('Failed to send registration confirmation email:', confirmationEmailError);
+      // Email failure doesn't affect registration success
+    }
     // Attempt to send verification email asynchronously
     try {
       const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
