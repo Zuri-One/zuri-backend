@@ -513,15 +513,15 @@ exports.register = async (req, res, next) => {
     const verificationToken = crypto.randomBytes(32).toString('hex');
     
     // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    // const salt = await bcrypt.genSalt(10);
+    // const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create staff user
     const user = await User.create({
       surname,
       otherNames,
       email: email.toLowerCase(),
-      password: hashedPassword,
+      password: password,
       role: role.toUpperCase(),
       departmentId,
       primaryDepartmentId,
