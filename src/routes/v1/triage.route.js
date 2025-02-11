@@ -126,6 +126,8 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
  */
 router.get('/waiting-count', authenticate, triageController.getWaitingCount);
 
+// router.get('/triage-reports', triageController, getTriageReports);
+
 /**
  * @swagger
  * /api/v1/triage/stats:
@@ -154,6 +156,133 @@ router.get('/waiting-count', authenticate, triageController.getWaitingCount);
  *                   type: integer
  */
 router.get('/stats', triageController.getTriageStats);
+
+
+/**
+ * @swagger
+ * /api/v1/triage/reports:
+ *   get:
+ *     summary: Get comprehensive triage reports
+ *     tags: [Triage]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date for report period (YYYY-MM-DD)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date for report period (YYYY-MM-DD)
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *           enum: [RED, YELLOW, GREEN, BLACK]
+ *         description: Filter by triage category
+ *       - in: query
+ *         name: departmentId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by department
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [IN_PROGRESS, COMPLETED, REASSESSED, TRANSFERRED]
+ *         description: Filter by triage status
+ *     responses:
+ *       200:
+ *         description: Triage reports retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     totalTriages:
+ *                       type: integer
+ *                     categoryBreakdown:
+ *                       type: object
+ *                       properties:
+ *                         RED:
+ *                           type: integer
+ *                         YELLOW:
+ *                           type: integer
+ *                         GREEN:
+ *                           type: integer
+ *                         BLACK:
+ *                           type: integer
+ *                     statusBreakdown:
+ *                       type: object
+ *                       properties:
+ *                         IN_PROGRESS:
+ *                           type: integer
+ *                         COMPLETED:
+ *                           type: integer
+ *                         REASSESSED:
+ *                           type: integer
+ *                     averageWaitingTime:
+ *                       type: number
+ *                     criticalCases:
+ *                       type: integer
+ *                 departmentDistribution:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: integer
+ *                 detailedRecords:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       patientName:
+ *                         type: string
+ *                       patientGender:
+ *                         type: string
+ *                       patientAge:
+ *                         type: integer
+ *                       assessmentDateTime:
+ *                         type: string
+ *                         format: date-time
+ *                       category:
+ *                         type: string
+ *                       priorityScore:
+ *                         type: integer
+ *                       status:
+ *                         type: string
+ *                       chiefComplaint:
+ *                         type: string
+ *                       nurse:
+ *                         type: string
+ *                       department:
+ *                         type: string
+ *                       vitalSigns:
+ *                         type: object
+ *                       recommendedAction:
+ *                         type: string
+ *                       consultationStatus:
+ *                         type: string
+ *                       estimatedConsultationTime:
+ *                         type: string
+ *                         format: date-time
+ *                       queueNumber:
+ *                         type: integer
+ */
+router.get('/reports', authenticate, triageController.getTriageReports);
+
 
 /**
  * @swagger
@@ -382,5 +511,8 @@ router.post('/:id/reassess', triageController.reassessPatient);
  *         description: Triage status updated successfully
  */
 router.patch('/:id/status', triageController.updateTriageStatus);
+
+
+
 
 module.exports = router;
