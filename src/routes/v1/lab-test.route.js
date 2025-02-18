@@ -29,6 +29,53 @@ router.get('/pending', authenticate, labTestController.getPendingTests);
  */
 router.get('/', authenticate, labTestController.getLabTests);
 
+
+router.get('/current-session', 
+    authenticate, 
+    authorize(['LAB_TECHNICIAN']), 
+    labTestController.getCurrentSessionResults
+  );
+ 
+// router.get('/analytics', 
+//     authenticate, 
+//     authorize(['LAB_TECHNICIAN', 'ADMIN']), 
+//     getLabAnalytics);
+
+router.post('/:id/collect-sample', 
+    authenticate, 
+    authorize(['LAB_TECHNICIAN']), 
+    labTestController.collectSample
+  );
+  
+  // Sample approval
+  router.post('/:id/approve-sample',
+    authenticate,
+    authorize(['LAB_TECHNICIAN']),
+    labTestController.approveSample
+  );
+  
+  // Add test results
+  router.post('/:id/results',
+    authenticate,
+    authorize(['LAB_TECHNICIAN']),
+    labTestController.addTestResults
+  );
+  
+  // Get patient test history
+  router.get('/patient/:patientId/history',
+    authenticate,
+    labTestController.getPatientTestHistory
+  );
+  
+  // Get sample collection stats
+  router.get('/stats/samples',
+    authenticate,
+    authorize(['LAB_TECHNICIAN', 'ADMIN']),
+    labTestController.getSampleStats
+  );
+
+
+
 /**
  * @swagger
  * /api/v1/lab-tests/{id}:
