@@ -113,6 +113,52 @@ router.post(
  pharmacyController.addMedication
 );
 
+
+router.post(
+  '/prescriptions',
+  authorize(['DOCTOR']),
+  hasPermission(['create_prescriptions']),
+  pharmacyController.createPrescription
+);
+
+router.get(
+  '/prescriptions/pending',
+  authorize(['PHARMACIST', 'DOCTOR']),
+  hasPermission(['view_prescriptions']),
+  pharmacyController.getPendingPrescriptions
+);
+
+// Dispensing Routes
+router.post(
+  '/dispense/prescription',
+  authorize(['PHARMACIST']),
+  hasPermission(['dispense_medication']),
+  pharmacyController.dispensePrescription
+);
+
+// Medication Category Routes
+router.post(
+  '/categories',
+  authorize(['PHARMACIST', 'ADMIN']),
+  hasPermission(['manage_pharmacy_inventory']),
+  pharmacyController.addMedicationCategory
+);
+
+router.get(
+  '/categories',
+  authorize(['PHARMACIST', 'DOCTOR', 'NURSE']),
+  hasPermission(['view_pharmacy_inventory']),
+  pharmacyController.getMedicationCategories
+);
+
+// Report Routes
+router.get(
+  '/reports/dispensing-summary',
+  authorize(['PHARMACIST', 'ADMIN']),
+  hasPermission(['view_pharmacy_reports']),
+  pharmacyController.getDispensingSummary
+);
+
 /**
 * @swagger
 * /api/v1/pharmacy/inventory:

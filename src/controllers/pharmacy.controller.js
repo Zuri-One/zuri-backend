@@ -1,12 +1,14 @@
 const { 
-    Medication,
-    StockMovement, 
-    MedicationDispense,
-    LabTest,
-    Prescription,
-    User, 
-    sequelize
-  } = require('../models');
+  Medication,
+  StockMovement, 
+  MedicationDispense,
+  LabTest,
+  Prescription,
+  User,
+  Patient,
+  sequelize
+} = require('../models');
+
   const { Op } = require('sequelize');
   const { sendEmail } = require('../utils/email.util');
   const { generateDispenseReport } = require('../utils/pdf.util');
@@ -1042,6 +1044,323 @@ const {
         res.json({
           success: true,
           report
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+  
+  
+    async createPrescription(req, res, next) {
+      const transaction = await sequelize.transaction();
+      try {
+        const {
+          patientId,
+          medications,
+          diagnosis,
+          notes,
+          validUntil
+        } = req.body;
+  
+        // Validate patient exists
+        const patient = await Patient.findByPk(patientId);
+        if (!patient) {
+          throw new Error('Patient not found');
+        }
+  
+        // Create prescription
+        const prescription = await Prescription.create({
+          patientId,
+          doctorId: req.user.id,
+          diagnosis,
+          notes,
+          validUntil: validUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days default
+          status: 'active'
+        }, { transaction });
+  
+        // Add medications to prescription
+        for (const med of medications) {
+          const medication = await Medication.findByPk(med.medicationId);
+          if (!medication) {
+            throw new Error(`Medication ${med.medicationId} not found`);
+          }
+  
+          await prescription.addMedication(medication, {
+            through: {
+              quantity: med.quantity,
+              specialInstructions: med.instructions
+            },
+            transaction
+          });
+        }
+  
+        await transaction.commit();
+  
+        res.status(201).json({
+          success: true,
+          message: 'Prescription created successfully',
+          prescription
+        });
+      } catch (error) {
+        await transaction.rollback();
+        next(error);
+      }
+    }
+  
+    async getPendingPrescriptions(req, res, next) {
+      try {
+        const prescriptions = await Prescription.findAll({
+          where: {
+            status: 'active',
+            validUntil: {
+              [Op.gte]: new Date()
+            }
+          },
+          include: [
+            {
+              model: User,
+              as: 'PATIENT',
+              attributes: ['id', 'surname', 'otherNames']
+            },
+            {
+              model: User,
+              as: 'DOCTOR',
+              attributes: ['id', 'surname', 'otherNames']
+            },
+            {
+              model: Medication,
+              through: {
+                attributes: ['quantity', 'specialInstructions']
+              }
+            }
+          ],
+          order: [['createdAt', 'DESC']]
+        });
+  
+        res.json({
+          success: true,
+          prescriptions
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+  
+    // Enhanced Dispensing Management
+    async dispensePrescription(req, res, next) {
+      const transaction = await sequelize.transaction();
+      try {
+        const { prescriptionId, medicationDispenses } = req.body;
+  
+        const prescription = await Prescription.findByPk(prescriptionId, {
+          include: [
+            {
+              model: User,
+              as: 'PATIENT'
+            }
+          ]
+        });
+  
+        if (!prescription) {
+          throw new Error('Prescription not found');
+        }
+  
+        if (prescription.status !== 'active') {
+          throw new Error('Prescription is no longer active');
+        }
+  
+        const dispenseRecords = [];
+  
+        for (const dispense of medicationDispenses) {
+          const medication = await Medication.findByPk(dispense.medicationId, { transaction });
+          
+          if (!medication) {
+            throw new Error(`Medication ${dispense.medicationId} not found`);
+          }
+  
+          if (medication.currentStock < dispense.quantity) {
+            throw new Error(`Insufficient stock for ${medication.name}`);
+          }
+  
+          // Create dispense record
+          const dispenseRecord = await MedicationDispense.create({
+            prescriptionId,
+            medicationId: medication.id,
+            patientId: prescription.patientId,
+            dispensedBy: req.user.id,
+            quantity: dispense.quantity,
+            dosage: dispense.dosage,
+            frequency: dispense.frequency,
+            duration: dispense.duration,
+            unitPrice: medication.unitPrice,
+            totalPrice: medication.unitPrice * dispense.quantity,
+            status: 'DISPENSED',
+            dispensedAt: new Date()
+          }, { transaction });
+  
+          // Update inventory
+          await medication.update({
+            currentStock: medication.currentStock - dispense.quantity
+          }, { transaction });
+  
+          // Create stock movement record
+          await StockMovement.create({
+            medication_id: medication.id,
+            type: 'DISPENSED',
+            quantity: -dispense.quantity,
+            batch_number: medication.batchNumber,
+            unit_price: medication.unitPrice,
+            total_price: medication.unitPrice * dispense.quantity,
+            performed_by: req.user.id,
+            source_type: 'PRESCRIPTION',
+            source_id: prescriptionId
+          }, { transaction });
+  
+          dispenseRecords.push(dispenseRecord);
+        }
+  
+        // Update prescription status if all medications dispensed
+        await prescription.update({
+          status: 'completed'
+        }, { transaction });
+  
+        await transaction.commit();
+  
+        res.json({
+          success: true,
+          message: 'Medications dispensed successfully',
+          dispenses: dispenseRecords
+        });
+      } catch (error) {
+        await transaction.rollback();
+        next(error);
+      }
+    }
+  
+    // Medication Category Management
+    async addMedicationCategory(req, res, next) {
+      try {
+        const { name, description } = req.body;
+  
+        // Add validation for unique category name
+        const existingCategory = await MedicationCategory.findOne({
+          where: {
+            name: { [Op.iLike]: name }
+          }
+        });
+  
+        if (existingCategory) {
+          return res.status(400).json({
+            success: false,
+            message: 'Category already exists'
+          });
+        }
+  
+        const category = await MedicationCategory.create({
+          name,
+          description,
+          createdBy: req.user.id
+        });
+  
+        res.status(201).json({
+          success: true,
+          message: 'Category added successfully',
+          category
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+  
+    async getMedicationCategories(req, res, next) {
+      try {
+        const categories = await MedicationCategory.findAll({
+          order: [['name', 'ASC']]
+        });
+  
+        res.json({
+          success: true,
+          categories
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+  
+    // Pharmacy Reports
+    async getDispensingSummary(req, res, next) {
+      try {
+        const { startDate, endDate } = req.query;
+        
+        const dispenses = await MedicationDispense.findAll({
+          where: {
+            dispensedAt: {
+              [Op.between]: [new Date(startDate), new Date(endDate)]
+            },
+            status: 'DISPENSED'
+          },
+          include: [
+            {
+              model: Medication,
+              attributes: ['name', 'category']
+            },
+            {
+              model: User,
+              as: 'PATIENT',
+              attributes: ['id', 'surname', 'otherNames']
+            }
+          ]
+        });
+  
+        // Generate summary statistics
+        const summary = {
+          totalDispenses: dispenses.length,
+          totalRevenue: dispenses.reduce((sum, d) => sum + Number(d.totalPrice), 0),
+          byCategory: {},
+          byMedication: {},
+          byDay: {}
+        };
+  
+        // Process detailed statistics
+        dispenses.forEach(dispense => {
+          // By category
+          const category = dispense.Medication.category;
+          if (!summary.byCategory[category]) {
+            summary.byCategory[category] = {
+              count: 0,
+              revenue: 0
+            };
+          }
+          summary.byCategory[category].count++;
+          summary.byCategory[category].revenue += Number(dispense.totalPrice);
+  
+          // By medication
+          const medName = dispense.Medication.name;
+          if (!summary.byMedication[medName]) {
+            summary.byMedication[medName] = {
+              count: 0,
+              revenue: 0
+            };
+          }
+          summary.byMedication[medName].count++;
+          summary.byMedication[medName].revenue += Number(dispense.totalPrice);
+  
+          // By day
+          const day = dispense.dispensedAt.toISOString().split('T')[0];
+          if (!summary.byDay[day]) {
+            summary.byDay[day] = {
+              count: 0,
+              revenue: 0
+            };
+          }
+          summary.byDay[day].count++;
+          summary.byDay[day].revenue += Number(dispense.totalPrice);
+        });
+  
+        res.json({
+          success: true,
+          summary,
+          dispenses
         });
       } catch (error) {
         next(error);
