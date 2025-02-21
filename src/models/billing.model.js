@@ -1,6 +1,7 @@
 // models/billing.model.js
 const { Model, DataTypes } = require('sequelize');
 
+
 class Billing extends Model {
   static schema = {
     id: {
@@ -25,7 +26,7 @@ class Billing extends Model {
       }
     },
     billType: {
-      type: DataTypes.STRING,
+      type: DataTypes.ENUM('CONSULTATION', 'TRIAGE', 'LAB', 'PHARMACY', 'NURSING'),
       allowNull: false
     },
     items: {

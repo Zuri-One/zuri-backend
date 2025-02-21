@@ -1,428 +1,249 @@
-const { Billing, User, Department } = require('../models');
-const axios = require('axios');
+// controllers/billing.controller.js
+const { Billing, Patient } = require('../models');
+const { 
+  calculateDiscountedPrice, 
+  getPackageDetails, 
+  getItemDetails,
+  INSURANCE_COVERAGE_LIMIT,
+  TRIAGE_PACKAGES,
+  LAB_PACKAGES,
+  INDIVIDUAL_ITEMS 
+} = require('../utils/billing.utils');
 
-exports.createBill = async (req, res) => {
+
+exports.addBillingItems = async (req, res, next) => {
   try {
-    const {
-      patientId,
-      totalAmount,
-      subtotal,
-      tax = 0,
-      discount = 0,
-      billType,
-      paymentMethod,
-      items,
-      metadata,
-      departmentId,
-      reference,
-      currency = 'KES',
-    } = req.body;
+    console.log('Received billing data:', JSON.stringify(req.body, null, 2));
+    
+    const { patientId, type, items, departmentId, notes } = req.body;
 
-    console.log('Creating bill with payload:', {
-      patientId,
-      departmentId,
-      billType,
-      items,
-      subtotal,
-      tax,
-      discount,
-      totalAmount,
-      paymentMethod,
-      reference,
-      currency
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Items array is required'
+      });
+    }
+
+    if (!departmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Department ID is required'
+      });
+    }
+
+    // Check for valid UUID format for departmentId
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(departmentId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid department ID format'
+      });
+    }
+
+    const patient = await Patient.findByPk(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    
+    }
+
+    const isInsurance = patient.paymentScheme.type === 'INSURANCE';
+    let totalAmount = 0;
+    let billingItems = [];
+
+    // Process all items
+    for (const item of items) {
+      if (!item.id || !item.type) {
+        console.error('Invalid item:', item);
+        continue;
+      }
+
+      if (item.type === 'PACKAGE') {
+        const packageDetails = getPackageDetails(item.id, type);
+        if (packageDetails) {
+          const packagePrice = calculateDiscountedPrice(packageDetails.basePrice, !isInsurance);
+          billingItems.push({
+            description: packageDetails.name,
+            amount: packagePrice,
+            quantity: item.quantity || 1,
+            total: packagePrice * (item.quantity || 1),
+            type: 'PACKAGE',
+            items: packageDetails.items,
+            discount: !isInsurance ? 0.15 : 0
+          });
+          totalAmount += packagePrice * (item.quantity || 1);
+        }
+      } else if (item.type === 'ITEM') {
+        const itemDetails = getItemDetails(item.id);
+        if (itemDetails) {
+          const itemPrice = calculateDiscountedPrice(itemDetails.basePrice, !isInsurance);
+          const itemTotal = itemPrice * (item.quantity || 1);
+          billingItems.push({
+            description: itemDetails.name,
+            amount: itemPrice,
+            quantity: item.quantity || 1,
+            total: itemTotal,
+            type: 'INDIVIDUAL',
+            category: itemDetails.category,
+            discount: !isInsurance ? 0.15 : 0
+          });
+          totalAmount += itemTotal;
+        }
+      }
+    }
+
+    // Create or update billing record
+    let billing = await Billing.findOne({
+      where: {
+        patientId,
+        status: 'ACTIVE',
+        paymentStatus: 'PENDING'
+      }
     });
 
-    const bill = await Billing.create({
-      patientId,
-      departmentId,
-      billType,
-      items,
-      subtotal,
-      tax,
-      discount,
-      totalAmount,
-      paymentMethod,
-      reference,
-      currency,
-      paymentStatus: 'PENDING',
-      status: 'ACTIVE',
-      metadata,
-      createdBy: req.user.id
-    });
-
-    console.log('Bill created successfully:', bill.id);
+    if (!billing) {
+      billing = await Billing.create({
+        patientId,
+        departmentId,
+        billType: type,
+        items: billingItems,
+        subtotal: totalAmount,
+        totalAmount,
+        paymentMethod: isInsurance ? 'INSURANCE' : 'CASH',
+        paymentStatus: 'PENDING',
+        status: 'ACTIVE',
+        createdBy: req.user.id,
+        notes,
+        metadata: {
+          discountApplied: isInsurance ? 0 : 0.15,
+          serviceType: type
+        }
+      });
+    } else {
+      const updatedItems = [...billing.items, ...billingItems];
+      const updatedTotal = billing.totalAmount + totalAmount;
+      
+      await billing.update({
+        items: updatedItems,
+        totalAmount: updatedTotal,
+        subtotal: updatedTotal,
+        notes: notes || billing.notes,
+        updatedBy: req.user.id
+      });
+    }
 
     res.status(201).json({
       success: true,
-      data: bill
+      message: 'Billing items added successfully',
+      data: billing
     });
+
   } catch (error) {
-    console.error('Error creating bill:', error);
-    if (error.name === 'SequelizeValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: error.errors.map(e => ({
-          field: e.path,
-          message: e.message
-        }))
-      });
-    }
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create bill'
-    });
+    console.error('Error adding billing items:', error);
+    next(error);
   }
 };
 
-exports.initializePayment = async (req, res) => {
+exports.getCurrentBill = async (req, res, next) => {
   try {
-      const { billId, email, metadata } = req.body;
-      console.log('Full request body:', req.body); // Add this log
+    const { patientId } = req.params;
 
-      const bill = await Billing.findOne({
-          where: { id: billId },
-          include: [{
-              model: User,
-              as: 'patient',
-              attributes: ['id', 'name', 'email', 'contactNumber']
-          }]
+    const patient = await Patient.findByPk(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
       });
+    }
 
-      if (!bill) {
-          console.log('Bill not found:', billId);
-          return res.status(404).json({
-              success: false,
-              message: 'Bill not found'
-          });
+    const activeBill = await Billing.findOne({
+      where: {
+        patientId,
+        status: 'ACTIVE',
+        paymentStatus: 'PENDING'
       }
+    });
 
-      const isMpesa = bill.paymentMethod.toLowerCase() === 'mpesa';
-      const phoneNumber = metadata?.phone || bill.patient?.contactNumber;
-      
-      // Format phone number properly
-      const formattedPhone = phoneNumber?.replace(/^0/, '254')?.replace(/[^0-9]/g, '');
-      
-      console.log('Payment method:', bill.paymentMethod);
-      console.log('Phone number:', formattedPhone);
-
-      // For mobile money, we need specific configuration
-      const mobileMoneyConfig = isMpesa ? {
-          channels: ['mobile_money'],
-          mobile_money: {
-              phone: formattedPhone,
-              provider: 'mpesa'
-          }
-      } : {};
-
-      const paymentPayload = {
-          email: email || bill.patient.email,
-          amount: Math.round(bill.totalAmount * 100),
-          currency: bill.currency,
-          reference: `PAY-${Date.now()}-${billId}`,
-          callback_url: `${process.env.NEXT_PUBLIC_BASE_URL}/verify-payment`,
-          ...mobileMoneyConfig,
-          metadata: {
-              custom_fields: [
-                  {
-                      display_name: "Payment Method",
-                      variable_name: "payment_method",
-                      value: bill.paymentMethod
-                  },
-                  {
-                      display_name: "Phone Number",
-                      variable_name: "phone_number",
-                      value: formattedPhone
-                  }
-              ],
-              billId: bill.id,
-              billType: bill.billType,
-              patientId: bill.patientId,
-              phone: formattedPhone,
-              payment_method: bill.paymentMethod
-          }
+    // Get insurance coverage info if applicable
+    let insuranceCoverage = null;
+    if (patient.paymentScheme.type !== 'CASH') {
+      // For now, using hardcoded coverage limit
+      const totalBilled = activeBill ? activeBill.totalAmount : 0;
+      insuranceCoverage = {
+        limit: INSURANCE_COVERAGE_LIMIT,
+        used: totalBilled,
+        remaining: INSURANCE_COVERAGE_LIMIT - totalBilled
       };
+    }
 
-      console.log('Final Paystack payload:', JSON.stringify(paymentPayload, null, 2));
-
-      const response = await axios.post(
-          'https://api.paystack.co/transaction/initialize',
-          paymentPayload,
-          {
-              headers: {
-                  Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
-                  'Content-Type': 'application/json'
-              }
-          }
-      );
-
-      console.log('Raw Paystack response:', response.data);
-
-      await bill.update({
-          lastPaymentAttempt: new Date(),
-          paymentReference: response.data.data.reference
-      });
-
-      res.json({
-          success: true,
-          data: {
-              ...response.data.data,
-              paymentMethod: bill.paymentMethod
-          }
-      });
-  } catch (error) {
-      console.error('Payment initialization error:', error.response?.data || error);
-      res.status(500).json({
-          success: false,
-          message: error.response?.data?.message || 'Failed to initialize payment'
-      });
-  }
-};
-
-exports.verifyPayment = async (req, res) => {
-  try {
-    const { reference } = req.params;
-
-    const response = await axios.get(
-      `https://api.paystack.co/transaction/verify/${reference}`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
-        }
+    res.json({
+      success: true,
+      data: {
+        currentBill: activeBill || { totalAmount: 0, items: [] },
+        insuranceCoverage,
+        paymentType: patient.paymentScheme.type
       }
-    );
-
-    console.log('Paystack verification response:', response.data);
-
-    const { status, data } = response.data;
-    
-    // Find the bill regardless of payment status
-    const bill = await Billing.findOne({
-      where: { paymentReference: reference }
     });
 
-    if (!bill) {
-      return res.json({
-        success: false,
-        message: 'Bill not found',
-        paymentStatus: data.status
-      });
-    }
-
-    switch (data.status) {
-      case 'success':
-        await bill.update({
-          paymentStatus: 'PAID',
-          paidAt: new Date(),
-          paymentTransactions: [
-            ...(bill.paymentTransactions || []),
-            {
-              reference,
-              amount: data.amount / 100,
-              status: 'success',
-              channel: data.channel,
-              processor: 'paystack',
-              metadata: data,
-              timestamp: new Date()
-            }
-          ]
-        });
-        return res.json({
-          success: true,
-          message: 'Payment verified successfully',
-          status: data.status
-        });
-
-      case 'pending':
-        return res.json({
-          success: false,
-          message: 'Payment is pending',
-          status: data.status
-        });
-
-      case 'failed':
-        await bill.update({
-          paymentStatus: 'FAILED',
-          paymentTransactions: [
-            ...(bill.paymentTransactions || []),
-            {
-              reference,
-              amount: data.amount / 100,
-              status: 'failed',
-              channel: data.channel,
-              processor: 'paystack',
-              metadata: data,
-              timestamp: new Date()
-            }
-          ]
-        });
-        return res.json({
-          success: false,
-          message: data.gateway_response || 'Payment failed',
-          status: data.status
-        });
-
-      case 'abandoned':
-        // Don't throw error for abandoned transactions
-        return res.json({
-          success: false,
-          message: data.gateway_response || 'Payment was abandoned',
-          status: data.status
-        });
-
-      default:
-        return res.json({
-          success: false,
-          message: data.gateway_response || 'Payment status unknown',
-          status: data.status
-        });
-    }
   } catch (error) {
-    console.error('Payment verification error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Payment verification failed',
-      error: error.response?.data?.message || error.message
-    });
+    next(error);
   }
 };
 
-exports.getBills = async (req, res) => {
+exports.finalizePayment = async (req, res, next) => {
   try {
-    const bills = await Billing.findAll({
-      include: [
-        {
-          model: User,
-          as: 'patient',
-          attributes: ['id', 'name', 'email']
-        },
-        {
-          model: Department,
-          attributes: ['id', 'name']
-        },
-        {
-          model: User,
-          as: 'creator',
-          attributes: ['id', 'name']
-        }
-      ],
-      order: [['createdAt', 'DESC']]
+    const { patientId } = req.params;
+    const { paymentMethod, paymentReference } = req.body;
+
+    const billing = await Billing.findOne({
+      where: {
+        patientId,
+        status: 'ACTIVE',
+        paymentStatus: 'PENDING'
+      }
     });
 
-    res.json({
-      success: true,
-      data: bills
-    });
-  } catch (error) {
-    console.error('Error fetching bills:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch bills'
-    });
-  }
-};
-
-exports.getBill = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const bill = await Billing.findOne({
-      where: { id },
-      include: [
-        {
-          model: User,
-          as: 'patient',
-          attributes: ['id', 'name', 'email']
-        },
-        {
-          model: Department,
-          attributes: ['id', 'name']
-        },
-        {
-          model: User,
-          as: 'creator',
-          attributes: ['id', 'name']
-        }
-      ]
-    });
-
-    if (!bill) {
+    if (!billing) {
       return res.status(404).json({
         success: false,
-        message: 'Bill not found'
+        message: 'No pending bill found'
       });
     }
 
-    res.json({
-      success: true,
-      data: bill
-    });
-  } catch (error) {
-    console.error('Error fetching bill:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch bill'
-    });
-  }
-};
-
-exports.updateBill = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = req.body;
-
-    const bill = await Billing.findByPk(id);
-    if (!bill) {
-      return res.status(404).json({
-        success: false,
-        message: 'Bill not found'
-      });
-    }
-
-    updateData.updatedBy = req.user.id;
-    await bill.update(updateData);
-
-    res.json({
-      success: true,
-      data: bill
-    });
-  } catch (error) {
-    console.error('Error updating bill:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update bill'
-    });
-  }
-};
-
-exports.cancelBill = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { reason } = req.body;
-
-    const bill = await Billing.findByPk(id);
-    if (!bill) {
-      return res.status(404).json({
-        success: false,
-        message: 'Bill not found'
-      });
-    }
-
-    await bill.update({
-      status: 'CANCELLED',
-      notes: reason,
+    await billing.update({
+      paymentStatus: 'PAID',
+      paymentMethod,
+      paymentReference,
+      paidAt: new Date(),
       updatedBy: req.user.id
     });
 
     res.json({
       success: true,
-      message: 'Bill cancelled successfully'
+      message: 'Payment processed successfully',
+      data: billing
     });
+
   } catch (error) {
-    console.error('Error cancelling bill:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to cancel bill'
-    });
+    next(error);
   }
+};
+
+exports.getAvailablePackages = async (req, res) => {
+  const { type } = req.query;
+  const packages = type === 'LAB' ? LAB_PACKAGES : TRIAGE_PACKAGES;
+  
+  res.json({
+    success: true,
+    data: packages
+  });
+};
+
+exports.getAvailableItems = async (req, res) => {
+  res.json({
+    success: true,
+    data: INDIVIDUAL_ITEMS
+  });
 };
