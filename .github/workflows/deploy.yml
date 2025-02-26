@@ -22,7 +22,7 @@ jobs:
       run: npm ci
       
     - name: Run tests
-      run: npm test || true
+      run: npm test || true  # Continue even if tests fail, remove '|| true' if you want to enforce passing tests
       
     - name: Set up SSH key
       uses: webfactory/ssh-agent@v0.7.0
@@ -36,11 +36,24 @@ jobs:
         
     - name: Deploy to GCP
       run: |
+        # Install rsync
         sudo apt-get update && sudo apt-get install -y rsync
+        
+        # Sync repository to GCP
         rsync -avz --exclude '.git' --exclude 'node_modules' --exclude '.env*' ./ ubuntu@34.1.218.136:/var/www/zuri-backend/
+        
+        # Execute remote commands
         ssh ubuntu@34.1.218.136 << 'EOF'
           cd /var/www/zuri-backend
+          
+          # Install Node.js dependencies
           npm install --production
+          
+          # Restart application with PM2
           pm2 restart zuri-backend || pm2 start server.js --name zuri-backend
+          
+          # Save PM2 configuration to restart on reboot
           pm2 save
+          
+          # Log the deployment
           echo "Deployment completed at $(date)" >> /var/www/zuri-backend/deploy.log
