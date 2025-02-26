@@ -2,7 +2,7 @@
 const router = require('express').Router();
 const { 
   register, 
-  login, 
+  login,
   verifyEmail,
   resendVerification,
   forgotPassword,
@@ -11,10 +11,16 @@ const {
   verify2FA,
   verifyEmailWithCode,
   staffLogin,
-  registerPatient
-  
+  registerPatient,
+  registerAdmin,
+  verifyAdminLogin,    
+  verifyStaffLogin     
 } = require('../../controllers/auth.controller');
-const { authenticate } = require('../../middleware/auth.middleware');
+
+const { 
+  authenticate, 
+  authorizeAdmin    
+} = require('../../middleware/auth.middleware');
 const { validatePasswordReset } = require('../../middleware/validation.middleware');
 
 /**
@@ -124,6 +130,176 @@ const { validatePasswordReset } = require('../../middleware/validation.middlewar
  */
 router.post('/staff-login', staffLogin);
 
+/**
+ * @swagger
+ * /api/v1/auth/verify-admin-login:
+ *   post:
+ *     summary: Verify admin login with 2FA code
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - tempToken
+ *               - code
+ *             properties:
+ *               tempToken:
+ *                 type: string
+ *                 description: Temporary token received after initial login
+ *               code:
+ *                 type: string
+ *                 description: Verification code sent via WhatsApp or email
+ *     responses:
+ *       200:
+ *         description: Login verification successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       401:
+ *         description: Invalid verification code
+ *       400:
+ *         description: Invalid token
+ */
+router.post('/verify-admin-login', verifyAdminLogin);
+
+/**
+ * @swagger
+ * /api/v1/auth/verify-staff-login:
+ *   post:
+ *     summary: Verify staff login with 2FA code
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - tempToken
+ *               - code
+ *             properties:
+ *               tempToken:
+ *                 type: string
+ *                 description: Temporary token received after initial login
+ *               code:
+ *                 type: string
+ *                 description: Verification code sent via WhatsApp or email
+ *     responses:
+ *       200:
+ *         description: Login verification successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthResponse'
+ *       401:
+ *         description: Invalid verification code
+ *       400:
+ *         description: Invalid token
+ */
+router.post('/verify-staff-login', verifyStaffLogin);
+
+
+/**
+ * @swagger
+ * /api/v1/auth/register-admin:
+ *   post:
+ *     summary: Register a new admin user
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - surname
+ *               - otherNames
+ *               - email
+ *               - password
+ *               - employeeId
+ *               - telephone1
+ *               - gender
+ *               - dateOfBirth
+ *               - town
+ *               - areaOfResidence
+ *               - idType
+ *               - nationality
+ *             properties:
+ *               surname:
+ *                 type: string
+ *                 description: Admin's surname/last name
+ *               otherNames:
+ *                 type: string
+ *                 description: Admin's other names (first and middle names)
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *               employeeId:
+ *                 type: string
+ *                 description: Unique employee ID for the admin
+ *               telephone1:
+ *                 type: string
+ *                 description: Primary phone number
+ *               telephone2:
+ *                 type: string
+ *                 description: Secondary phone number (optional)
+ *               gender:
+ *                 type: string
+ *                 enum: [MALE, FEMALE, OTHER]
+ *               dateOfBirth:
+ *                 type: string
+ *                 format: date
+ *               postalAddress:
+ *                 type: string
+ *               postalCode:
+ *                 type: string
+ *               town:
+ *                 type: string
+ *               areaOfResidence:
+ *                 type: string
+ *               idType:
+ *                 type: string
+ *                 enum: [NATIONAL_ID, PASSPORT, MILITARY_ID, ALIEN_ID]
+ *               idNumber:
+ *                 type: string
+ *               nationality:
+ *                 type: string
+ *               designation:
+ *                 type: string
+ *                 description: Admin's job title or designation
+ *     responses:
+ *       201:
+ *         description: Admin registration successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 userId:
+ *                   type: string
+ *                   format: uuid
+ *                 employeeId:
+ *                   type: string
+ *       400:
+ *         description: Invalid input data
+ *       401:
+ *         description: Unauthorized - Requires admin privileges
+ *       409:
+ *         description: Email or Employee ID already exists
+ */
+router.post('/register-admin', authenticate, authorizeAdmin, registerAdmin);
 /**
  * @swagger
  * /api/v1/auth/register:

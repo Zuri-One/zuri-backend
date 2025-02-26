@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const validator = require('validator');
 
 class User extends Model {
-  static schema = {
+  static schema = { 
     id: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,

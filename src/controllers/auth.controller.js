@@ -6,6 +6,7 @@ const sendEmail = require('../utils/email.util');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
+const whatsappService = require('../services/whatsapp.service');
 const { Op } = require('sequelize');
 const { 
   generateVerificationEmail,
@@ -17,7 +18,170 @@ const {
 
 
 
+exports.registerAdmin = async (req, res, next) => {
+  try {
+    const {
+      surname,
+      otherNames,
+      email,
+      password,
+      employeeId,
+      telephone1,
+      telephone2,
+      gender,
+      dateOfBirth,
+      postalAddress,
+      postalCode,
+      town,
+      areaOfResidence,
+      idType,
+      idNumber,
+      nationality,
+      designation
+    } = req.body;
 
+    // Validate required fields
+    const requiredFields = [
+      'surname',
+      'otherNames',
+      'email',
+      'password',
+      'employeeId',
+      'telephone1',
+      'gender',
+      'dateOfBirth',
+      'town',
+      'areaOfResidence',
+      'idType',
+      'nationality'
+    ];
+
+    const missingFields = requiredFields.filter(field => !req.body[field]);
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: `Missing required fields: ${missingFields.join(', ')}`
+      });
+    }
+
+    // Password strength validation
+    if (password.length < 8) {
+      return res.status(400).json({
+        message: 'Password must be at least 8 characters long'
+      });
+    }
+
+    // Check for existing email or employeeId
+    const existingUser = await User.findOne({
+      where: {
+        [Op.or]: [
+          { email: email.toLowerCase() },
+          { employeeId }
+        ]
+      }
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        message: existingUser.email === email.toLowerCase() ? 
+          'Email already registered' : 
+          'Employee ID already registered'
+      });
+    }
+
+    // Generate verification code and token
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+
+    // Create admin user
+    const user = await User.create({
+      surname,
+      otherNames,
+      email: email.toLowerCase(),
+      password: password, // bcrypt hashing happens in the User model's beforeSave hook
+      role: 'ADMIN',
+      employeeId,
+      telephone1,
+      telephone2,
+      gender: gender.toUpperCase(),
+      dateOfBirth,
+      postalAddress,
+      postalCode,
+      town,
+      areaOfResidence,
+      idType,
+      idNumber,
+      nationality,
+      designation,
+      joiningDate: new Date(),
+      emailVerificationCode: verificationCode,
+      emailVerificationToken: crypto
+        .createHash('sha256')
+        .update(verificationToken)
+        .digest('hex'),
+      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      isActive: true,
+      status: 'active'
+    });
+
+    // Log registration success and return response immediately
+    console.log(`Admin registration successful for ${email}`);
+    
+    res.status(201).json({
+      message: 'Admin registration successful',
+      userId: user.id,
+      employeeId: user.employeeId
+    });
+
+    // Send verification email asynchronously
+    try {
+      const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
+      await sendEmail({
+        to: user.email,
+        subject: 'Verify your email - Zuri Health Admin Account',
+        html: generateVerificationEmail(
+          `${user.surname} ${user.otherNames}`,
+          verificationUrl,
+          verificationCode
+        )
+      });
+
+      // Send welcome email with login instructions
+      await sendEmail({
+        to: user.email,
+        subject: 'Welcome to Zuri Health - Admin Account Created',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Welcome to Zuri Health - Admin Account</h2>
+            <p>Dear ${user.surname} ${user.otherNames},</p>
+            <p>Your administrator account has been successfully created with the following details:</p>
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p><strong>Email:</strong> ${user.email}</p>
+              <p><strong>Employee ID:</strong> ${user.employeeId}</p>
+              <p><strong>Role:</strong> Administrator</p>
+            </div>
+            <p>You can access the Zuri Health Management System at: <a href="${process.env.FRONTEND_URL}">${process.env.FRONTEND_URL}</a></p>
+            <p>For security reasons, we strongly recommend changing your password after your first login.</p>
+            <div style="margin: 20px 0; padding: 15px; border-left: 4px solid #0066cc;">
+              <p><strong>Important:</strong></p>
+              <p>Please check your email for a separate verification link to complete your account setup.</p>
+            </div>
+            <p>If you have any questions or need assistance, please contact the system support team.</p>
+            <p>Best regards,<br>Zuri Health Team</p>
+          </div>
+        `
+      });
+      
+      console.log(`Admin registration emails sent to ${email}`);
+    } catch (emailError) {
+      console.error('Failed to send admin registration emails:', emailError);
+      // Email failure doesn't affect registration success
+    }
+
+  } catch (error) {
+    console.error('Admin registration error:', error);
+    next(error);
+  }
+};
 
 exports.staffLogin = async (req, res, next) => {
   try {
@@ -74,14 +238,221 @@ exports.staffLogin = async (req, res, next) => {
     // Reset login attempts on successful login
     await user.resetLoginAttempts();
 
-    // Generate authentication token
-    const token = user.generateAuthToken();
+    // Generate verification code for 2FA
+    const verificationCode = generateVerificationCode();
+    
+    // Store verification code and set expiry (5 minutes)
+    user.emailVerificationCode = verificationCode;
+    user.emailVerificationExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    await user.save();
+    
+    // Create a temporary token containing user info
+    const tempToken = jwt.sign(
+      { 
+        id: user.id, 
+        email: user.email,
+        role: user.role,
+        require2FA: true,
+        exp: Math.floor(Date.now() / 1000) + (5 * 60) // 5 minutes expiry
+      }, 
+      process.env.JWT_SECRET
+    );
+    
+    // Try to send verification code via WhatsApp first if phone exists
+    let verificationSent = false;
+    let verificationMethod = null;
+    
+    if (user.telephone1) {
+      try {
+        await whatsappService.sendVerificationCode(user.telephone1, verificationCode);
+        verificationSent = true;
+        verificationMethod = 'whatsapp';
+      } catch (error) {
+        console.error('WhatsApp verification failed:', error);
+        // Fall back to email
+      }
+    }
+    
+    // Fall back to email if WhatsApp failed or no phone exists
+    if (!verificationSent) {
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: 'Your verification code - Zuri Health',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2>Login Verification</h2>
+              <p>Hello ${user.surname} ${user.otherNames},</p>
+              <p>Your verification code is:</p>
+              <div style="background: #f5f5f5; padding: 15px; text-align: center; font-size: 24px; letter-spacing: 5px; margin: 20px 0; font-weight: bold;">
+                ${verificationCode}
+              </div>
+              <p>This code will expire in 5 minutes.</p>
+              <p>If you did not request this code, please ignore this message and consider changing your password.</p>
+              <p>Best regards,<br>Zuri Health Team</p>
+            </div>
+          `
+        });
+        verificationSent = true;
+        verificationMethod = 'email';
+      } catch (error) {
+        console.error('Email verification failed:', error);
+      }
+    }
+    
+    if (!verificationSent) {
+      return res.status(500).json({
+        message: 'Failed to send verification code. Please try again later.'
+      });
+    }
+    
+    // Send response with temporary token and verification method
+    return res.status(200).json({
+      message: `Verification code sent via ${verificationMethod}. Please enter the code to complete login.`,
+      tempToken: tempToken,
+      verificationMethod: verificationMethod,
+      requiresVerification: true
+    });
+    
+  } catch (error) {
+    console.error('Staff login error:', error);
+    next(error);
+  }
+};
+
+exports.verifyAdminLogin = async (req, res, next) => {
+  try {
+    const { tempToken, code } = req.body;
+    
+    // Verify the temporary token
+    let decoded;
+    try {
+      decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+      if (!decoded.require2FA || decoded.role !== 'ADMIN') {
+        return res.status(400).json({
+          message: 'Invalid token'
+        });
+      }
+    } catch (err) {
+      return res.status(400).json({
+        message: 'Invalid or expired token. Please login again.'
+      });
+    }
+    
+    // Find the user
+    const user = await User.findOne({
+      where: {
+        id: decoded.id,
+        email: decoded.email,
+        role: 'ADMIN',
+        emailVerificationCode: code,
+        emailVerificationExpires: {
+          [Op.gt]: new Date()
+        }
+      }
+    });
+    
+    if (!user) {
+      return res.status(401).json({
+        message: 'Invalid or expired verification code'
+      });
+    }
+    
+    // Clear verification code
+    user.emailVerificationCode = null;
+    user.emailVerificationExpires = null;
     
     // Update last login
     user.lastLogin = new Date();
     await user.save();
+    
+    // Generate final authentication token
+    const token = user.generateAuthToken();
+    
+    // Format the response to match the admin login response
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        department: user.department,
+        permissions: User.rolePermissions[user.role] || []
+      }
+    });
+    
+  } catch (error) {
+    console.error('Admin verification error:', error);
+    next(error);
+  }
+};
 
-    // Format the response
+// Verification controller for staff login
+exports.verifyStaffLogin = async (req, res, next) => {
+  try {
+    const { tempToken, code } = req.body;
+    
+    // Verify the temporary token
+    let decoded;
+    try {
+      decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+      if (!decoded.require2FA || decoded.role === 'ADMIN' || decoded.role === 'PATIENT') {
+        return res.status(400).json({
+          message: 'Invalid token'
+        });
+      }
+    } catch (err) {
+      return res.status(400).json({
+        message: 'Invalid or expired token. Please login again.'
+      });
+    }
+    
+    // Find the user with department information
+    const user = await User.findOne({
+      where: {
+        id: decoded.id,
+        email: decoded.email,
+        emailVerificationCode: code,
+        emailVerificationExpires: {
+          [Op.gt]: new Date()
+        },
+        role: {
+          [Op.notIn]: ['PATIENT', 'ADMIN']  // Ensure it's a staff user
+        }
+      },
+      include: [
+        {
+          model: Department,
+          as: 'assignedDepartment',
+          attributes: ['id', 'name']
+        },
+        {
+          model: Department,
+          as: 'primaryDepartment',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+    
+    if (!user) {
+      return res.status(401).json({
+        message: 'Invalid or expired verification code'
+      });
+    }
+    
+    // Clear verification code
+    user.emailVerificationCode = null;
+    user.emailVerificationExpires = null;
+    
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+    
+    // Generate final authentication token
+    const token = user.generateAuthToken();
+    
+    // Format the response to match the staff login response
     res.json({
       token,
       user: {
@@ -104,8 +475,9 @@ exports.staffLogin = async (req, res, next) => {
         lastLogin: user.lastLogin
       }
     });
+    
   } catch (error) {
-    console.error('Staff login error:', error);
+    console.error('Staff verification error:', error);
     next(error);
   }
 };
@@ -619,7 +991,6 @@ exports.register = async (req, res, next) => {
   }
 };
 
-// Update login controller to handle role-specific logic
 exports.login = async (req, res, next) => {
   try {
     const { email, password, role } = req.body;
@@ -651,25 +1022,107 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Generate role-specific token
-    const token = user.generateAuthToken();
+    // For non-ADMIN roles, continue with direct login
+    if (role !== 'ADMIN') {
+      // Generate role-specific token
+      const token = user.generateAuthToken();
 
-    // Update last login
-    user.lastLogin = new Date();
+      // Update last login
+      user.lastLogin = new Date();
+      await user.save();
+
+      return res.json({
+        token,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          department: user.department,
+          permissions: User.rolePermissions[user.role] || []
+        }
+      });
+    }
+
+    // For ADMIN users, implement 2FA
+    // Generate verification code for 2FA
+    const verificationCode = generateVerificationCode();
+    
+    // Store verification code and set expiry (5 minutes)
+    user.emailVerificationCode = verificationCode;
+    user.emailVerificationExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
     await user.save();
-
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
+    
+    // Create a temporary token containing user info
+    const tempToken = jwt.sign(
+      { 
+        id: user.id, 
         email: user.email,
         role: user.role,
-        department: user.department,
-        permissions: User.rolePermissions[user.role] || []
+        require2FA: true,
+        exp: Math.floor(Date.now() / 1000) + (5 * 60) // 5 minutes expiry
+      }, 
+      process.env.JWT_SECRET
+    );
+    
+    // Try to send verification code via WhatsApp first if phone exists
+    let verificationSent = false;
+    let verificationMethod = null;
+    
+    if (user.telephone1) {
+      try {
+        await whatsappService.sendVerificationCode(user.telephone1, verificationCode);
+        verificationSent = true;
+        verificationMethod = 'whatsapp';
+      } catch (error) {
+        console.error('WhatsApp verification failed:', error);
+        // Fall back to email
       }
+    }
+    
+    // Fall back to email if WhatsApp failed or no phone exists
+    if (!verificationSent) {
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: 'Your verification code - Zuri Health',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2>Login Verification</h2>
+              <p>Hello ${user.surname} ${user.otherNames},</p>
+              <p>Your verification code is:</p>
+              <div style="background: #f5f5f5; padding: 15px; text-align: center; font-size: 24px; letter-spacing: 5px; margin: 20px 0; font-weight: bold;">
+                ${verificationCode}
+              </div>
+              <p>This code will expire in 5 minutes.</p>
+              <p>If you did not request this code, please ignore this message and consider changing your password.</p>
+              <p>Best regards,<br>Zuri Health Team</p>
+            </div>
+          `
+        });
+        verificationSent = true;
+        verificationMethod = 'email';
+      } catch (error) {
+        console.error('Email verification failed:', error);
+      }
+    }
+    
+    if (!verificationSent) {
+      return res.status(500).json({
+        message: 'Failed to send verification code. Please try again later.'
+      });
+    }
+    
+    // Send response with temporary token and verification method
+    return res.status(200).json({
+      message: `Verification code sent via ${verificationMethod}. Please enter the code to complete login.`,
+      tempToken: tempToken,
+      verificationMethod: verificationMethod,
+      requiresVerification: true
     });
+    
   } catch (error) {
+    console.error('Login error:', error);
     next(error);
   }
 };

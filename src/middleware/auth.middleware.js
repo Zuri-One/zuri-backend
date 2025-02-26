@@ -41,6 +41,7 @@ exports.authenticate = async (req, res, next) => {
   }
 };
 
+
 // Role-based authorization middleware
 exports.authorize = (roles) => {
   return (req, res, next) => {
@@ -54,6 +55,23 @@ exports.authorize = (roles) => {
   };
 };
 
+exports.authorizeAdmin = async (req, res, next) => {
+  try {
+    // Check if user has admin role
+    if (req.user.role !== 'ADMIN') {
+      return res.status(403).json({
+        message: 'Access denied. Admin privileges required.'
+      });
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Admin authorization error:', error);
+    res.status(500).json({
+      message: 'An error occurred during authorization'
+    });
+  }
+};
 // Permission-based authorization middleware
 exports.hasPermission = (requiredPermissions) => {
   return async (req, res, next) => {
