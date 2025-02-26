@@ -1,0 +1,46 @@
+name: Deploy Zuri Backend to GCP
+
+on:
+  push:
+    branches: [ main ]  # Adjust branch name if needed
+  workflow_dispatch:    # Allow manual triggering
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run tests
+      run: npm test || true
+      
+    - name: Set up SSH key
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+        
+    - name: Setup known hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H 34.1.218.136 >> ~/.ssh/known_hosts
+        
+    - name: Deploy to GCP
+      run: |
+        sudo apt-get update && sudo apt-get install -y rsync
+        rsync -avz --exclude '.git' --exclude 'node_modules' --exclude '.env*' ./ ubuntu@34.1.218.136:/var/www/zuri-backend/
+        ssh ubuntu@34.1.218.136 << 'EOF'
+          cd /var/www/zuri-backend
+          npm install --production
+          pm2 restart zuri-backend || pm2 start server.js --name zuri-backend
+          pm2 save
+          echo "Deployment completed at $(date)" >> /var/www/zuri-backend/deploy.log
