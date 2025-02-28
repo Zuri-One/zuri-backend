@@ -426,6 +426,271 @@ exports.getPatientByEmail = async (req, res, next) => {
   }
 };
 
+exports.searchStaff = async (req, res, next) => {
+  try {
+    const { 
+      q,                  // For general search (name, email, phone, employee ID)
+      department,         // Filter by department
+      role,               // Filter by role
+      specialization,     // Filter by specialization (for doctors)
+      status              // Filter by status
+    } = req.query;
+    
+    // Build where conditions
+    const whereConditions = {
+      [Op.and]: [
+        { role: { [Op.ne]: 'PATIENT' } },
+        { role: { [Op.ne]: 'ADMIN' } }
+      ]
+    };
+    
+    // General search
+    if (q && q.trim() !== '') {
+      whereConditions[Op.or] = [
+        { surname: { [Op.iLike]: `%${q}%` } },
+        { otherNames: { [Op.iLike]: `%${q}%` } },
+        { email: { [Op.iLike]: `%${q}%` } },
+        { telephone1: { [Op.iLike]: `%${q}%` } },
+        { employeeId: { [Op.iLike]: `%${q}%` } },
+        { staffId: { [Op.iLike]: `%${q}%` } }
+      ];
+    }
+    
+    // Department filter
+    if (department) {
+      whereConditions.departmentId = department;
+    }
+    
+    // Role filter
+    if (role) {
+      whereConditions.role = role.toUpperCase();
+    }
+    
+    // Status filter
+    if (status) {
+      whereConditions.status = status.toLowerCase();
+    }
+    
+    // Include options
+    const includeOptions = [
+      {
+        model: Department,
+        as: 'assignedDepartment',
+        attributes: ['id', 'name', 'code']
+      },
+      {
+        model: Department,
+        as: 'primaryDepartment',
+        attributes: ['id', 'name', 'code']
+      }
+    ];
+    
+    // If specialization filter is provided, add doctor profile include
+    if (specialization) {
+      includeOptions.push({
+        model: DoctorProfile,
+        required: true,
+        where: {
+          specialization: { [Op.contains]: [specialization] }
+        }
+      });
+    } else {
+      // Add DoctorProfile as optional include
+      includeOptions.push({
+        model: DoctorProfile,
+        required: false
+      });
+    }
+    
+    // Find staff with filters
+    const staff = await User.findAll({
+      where: whereConditions,
+      attributes: { 
+        exclude: ['password', 'resetPasswordToken', 'emailVerificationToken', 'emailVerificationCode'] 
+      },
+      include: includeOptions,
+      order: [['createdAt', 'DESC']]
+    });
+    
+    // Format response
+    const formattedStaff = staff.map(member => {
+      const memberData = member.toJSON();
+      
+      return {
+        id: memberData.id,
+        fullName: `${memberData.surname} ${memberData.otherNames}`,
+        email: memberData.email,
+        employeeId: memberData.employeeId,
+        staffId: memberData.staffId,
+        role: memberData.role,
+        department: memberData.assignedDepartment,
+        primaryDepartment: memberData.primaryDepartment,
+        telephone1: memberData.telephone1,
+        telephone2: memberData.telephone2,
+        designation: memberData.designation,
+        specialization: memberData.specialization,
+        licenseNumber: memberData.licenseNumber,
+        status: memberData.status,
+        isActive: memberData.isActive,
+        // Include additional details for doctors
+        doctorInfo: memberData.role.includes('DOCTOR') ? {
+          specialization: memberData.DoctorProfile?.specialization || [],
+          qualification: memberData.qualification || [],
+          expertise: memberData.expertise || {}
+        } : null
+      };
+    });
+    
+    res.json({
+      success: true,
+      staff: formattedStaff,
+      count: formattedStaff.length
+    });
+    
+  } catch (error) {
+    console.error('Error searching staff:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to search staff members',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Update specific staff details
+ * @route PUT /api/v1/users/staff/:id/update-details
+ */
+exports.updateStaffDetails = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const {
+      surname,
+      otherNames,
+      telephone1,
+      telephone2,
+      email,
+      postalAddress,
+      postalCode,
+      town,
+      areaOfResidence,
+      departmentId,
+      primaryDepartmentId,
+      secondaryDepartments,
+      designation,
+      licenseNumber,
+      specialization,
+      expertise,
+      dutySchedule,
+      workSchedule
+    } = req.body;
+
+    // Find the staff member
+    const staff = await User.findOne({
+      where: { 
+        id,
+        role: {
+          [Op.notIn]: ['PATIENT', 'ADMIN']
+        }
+      },
+      include: [
+        {
+          model: DoctorProfile,
+          required: false
+        }
+      ]
+    });
+
+    if (!staff) {
+      return res.status(404).json({
+        success: false,
+        message: 'Staff member not found'
+      });
+    }
+
+    // Validate if email is changed and is already in use
+    if (email && email !== staff.email) {
+      const existingUser = await User.findOne({
+        where: {
+          email: email.toLowerCase(),
+          id: { [Op.ne]: id }
+        }
+      });
+
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email is already in use'
+        });
+      }
+    }
+
+    // Prepare update data (only include fields that are provided)
+    const updateData = {};
+    
+    if (surname) updateData.surname = surname;
+    if (otherNames) updateData.otherNames = otherNames;
+    if (telephone1) updateData.telephone1 = telephone1;
+    if (telephone2) updateData.telephone2 = telephone2;
+    if (email) updateData.email = email.toLowerCase();
+    if (postalAddress) updateData.postalAddress = postalAddress;
+    if (postalCode) updateData.postalCode = postalCode;
+    if (town) updateData.town = town;
+    if (areaOfResidence) updateData.areaOfResidence = areaOfResidence;
+    if (departmentId) updateData.departmentId = departmentId;
+    if (primaryDepartmentId) updateData.primaryDepartmentId = primaryDepartmentId;
+    if (secondaryDepartments) updateData.secondaryDepartments = secondaryDepartments;
+    if (designation) updateData.designation = designation;
+    if (licenseNumber) updateData.licenseNumber = licenseNumber;
+    if (specialization) updateData.specialization = Array.isArray(specialization) ? specialization : [specialization];
+    if (expertise) updateData.expertise = expertise;
+    if (dutySchedule) updateData.dutySchedule = dutySchedule;
+    if (workSchedule) updateData.workSchedule = workSchedule;
+
+    // Update the staff member
+    await staff.update(updateData);
+
+    // If staff is a doctor and has additional profile details, update them
+    if (staff.role.includes('DOCTOR') && specialization && staff.DoctorProfile) {
+      await staff.DoctorProfile.update({
+        specialization: Array.isArray(specialization) ? specialization : [specialization]
+      });
+    }
+
+    // Get updated staff data
+    const updatedStaff = await User.findOne({
+      where: { id },
+      attributes: { 
+        exclude: ['password', 'resetPasswordToken', 'emailVerificationToken', 'emailVerificationCode'] 
+      },
+      include: [
+        {
+          model: Department,
+          as: 'assignedDepartment',
+          attributes: ['id', 'name', 'code']
+        },
+        {
+          model: Department,
+          as: 'primaryDepartment',
+          attributes: ['id', 'name', 'code']
+        },
+        {
+          model: DoctorProfile,
+          required: false
+        }
+      ]
+    });
+
+    res.json({
+      success: true,
+      message: 'Staff details updated successfully',
+      staff: updatedStaff
+    });
+  } catch (error) {
+    console.error('Error updating staff details:', error);
+    next(error);
+  }
+};
 
 exports.searchPatients = async (req, res, next) => {
   try {

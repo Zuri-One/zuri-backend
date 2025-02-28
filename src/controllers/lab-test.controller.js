@@ -1,10 +1,13 @@
-const { LabTest, User, Patient, DepartmentQueue} = require('../models');
-const { Op } = require('sequelize');
+const { LabTest, User, Patient, DepartmentQueue } = require('../models');
+const { Op, sequelize } = require('sequelize');
 const { generateLabReport } = require('../utils/pdf.util');
 const sendEmail = require('../utils/email.util');
 
 const labTestController = {
-  // Create new lab test
+  /**
+   * Create new lab test
+   * @route POST /api/v1/lab-test
+   */
   createLabTest: async (req, res, next) => {
     console.log('========= LAB TEST CREATION START =========');
     console.log('Received lab test request:', req.body);
@@ -62,26 +65,54 @@ const labTestController = {
     }
   },
 
-  // Get all lab tests
+  /**
+   * Get all lab tests with enhanced filtering
+   * @route GET /api/v1/lab-test
+   */
   getLabTests: async (req, res, next) => {
     try {
       const {
         status,
         priority,
         patientId,
+        testType,
+        dateFrom,
+        dateTo,
+        sampleId,
+        isAbnormal,
+        isCritical,
         page = 1,
         limit = 10
       } = req.query;
-  
+
+      // Build where clause with all possible filters
       const whereClause = {};
-  
+
       if (status) whereClause.status = status;
       if (priority) whereClause.priority = priority;
       if (patientId) whereClause.patientId = patientId;
-  
-      console.log('Query params:', { status, priority, patientId });
+      if (testType) whereClause.testType = testType;
+      if (sampleId) whereClause.sampleId = sampleId;
+      
+      // Boolean filters
+      if (isAbnormal === 'true') whereClause.isAbnormal = true;
+      if (isCritical === 'true') whereClause.isCritical = true;
+      
+      // Date range filter
+      if (dateFrom || dateTo) {
+        whereClause.createdAt = {};
+        if (dateFrom) whereClause.createdAt[Op.gte] = new Date(dateFrom);
+        if (dateTo) {
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          whereClause.createdAt[Op.lte] = endDate;
+        }
+      }
+
+      console.log('Query params:', req.query);
       console.log('Where clause:', whereClause);
-  
+
+      // Find tests with pagination
       const { count, rows: labTests } = await LabTest.findAndCountAll({
         where: whereClause,
         include: [
@@ -96,6 +127,11 @@ const labTestController = {
             attributes: ['id', 'surname', 'otherNames']
           },
           {
+            model: User,
+            as: 'sampleCollector',
+            attributes: ['id', 'surname', 'otherNames']
+          },
+          {
             model: DepartmentQueue,
             as: 'queueEntry'
           }
@@ -104,7 +140,8 @@ const labTestController = {
         offset: (parseInt(page) - 1) * parseInt(limit),
         order: [['createdAt', 'DESC']]
       });
-  
+
+      // Return response with pagination info
       res.json({
         success: true,
         count,
@@ -112,22 +149,21 @@ const labTestController = {
         currentPage: parseInt(page),
         labTests
       });
-  
+
     } catch (error) {
       console.error('Lab tests fetch error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack
-      });
       next(error);
     }
   },
 
-  // Get pending tests
+  /**
+   * Get pending lab tests
+   * @route GET /api/v1/lab-test/pending
+   */
   getPendingTests: async (req, res, next) => {
     try {
       const labTests = await LabTest.findAll({
-        where: { status: 'ORDERED' },
+        where: { status: 'PENDING' },
         include: [
           {
             model: User,
@@ -136,8 +172,8 @@ const labTestController = {
           },
           {
             model: User,
-            as: 'referringDoctor',
-            attributes: ['id', 'name', 'email']
+            as: 'requestedBy',
+            attributes: ['id', 'surname', 'otherNames']
           }
         ],
         order: [['createdAt', 'ASC']]
@@ -152,6 +188,10 @@ const labTestController = {
     }
   },
 
+  /**
+   * Get test results from current session (today)
+   * @route GET /api/v1/lab-test/current-session
+   */
   getCurrentSessionResults: async (req, res, next) => {
     try {
       const today = new Date();
@@ -194,8 +234,11 @@ const labTestController = {
     }
   },
 
-
-   getLabAnalytics: async (req, res, next) => {
+  /**
+   * Get analytics data for lab tests
+   * @route GET /api/v1/lab-test/analytics
+   */
+  getLabAnalytics: async (req, res, next) => {
     try {
       const { startDate, endDate } = req.query;
       const dateRange = {
@@ -295,82 +338,102 @@ const labTestController = {
     }
   },
 
-  
-
-  // Get lab test by ID
+  /**
+   * Get detailed lab test by ID
+   * @route GET /api/v1/lab-test/:id
+   */
   getLabTestById: async (req, res, next) => {
     try {
       const { id } = req.params;
-  
+
+      // Find lab test with all related data
       const labTest = await LabTest.findOne({
         where: { id },
         include: [
           {
             model: Patient,
             as: 'patient',
-            attributes: ['id', 'patientNumber', 'surname', 'otherNames']
+            attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'dateOfBirth', 'sex']
           },
           {
             model: User,
             as: 'requestedBy',
-            attributes: ['id', 'surname', 'otherNames']
+            attributes: ['id', 'surname', 'otherNames', 'role']
           },
           {
             model: User,
             as: 'sampleCollector',
-            foreignKey: 'sampleCollectedById',
-            attributes: ['id', 'surname', 'otherNames']
+            attributes: ['id', 'surname', 'otherNames', 'role']
           }
         ]
       });
-  
+
       if (!labTest) {
         return res.status(404).json({
           success: false,
           message: 'Lab test not found'
         });
       }
-  
+
+      // Format response with comprehensive test information
       const formattedResponse = {
         success: true,
         labTest: {
           id: labTest.id,
-          patientId: labTest.patientId,
+          sampleId: labTest.sampleId,
           testType: labTest.testType,
+          patientId: labTest.patientId,
           status: labTest.status,
-          createdAt: labTest.createdAt, 
-          patient: {
-            surname: labTest.patient.surname,
-            otherNames: labTest.patient.otherNames,
-            patientNumber: labTest.patient.patientNumber
-          },
-          statusHistory: [{
-            status: labTest.status,
-            timestamp: labTest.updatedAt,
-            updatedBy: `${labTest.requestedBy.surname} ${labTest.requestedBy.otherNames}`,
-            notes: labTest.notes
-          }],
+          priority: labTest.priority,
+          paymentStatus: labTest.paymentStatus,
+          createdAt: labTest.createdAt,
+          updatedAt: labTest.updatedAt,
+          
+          // Patient information
+          patient: labTest.patient ? {
+            id: labTest.patient.id,
+            patientNumber: labTest.patient.patientNumber,
+            name: `${labTest.patient.surname} ${labTest.patient.otherNames}`,
+            sex: labTest.patient.sex,
+            dateOfBirth: labTest.patient.dateOfBirth
+          } : null,
+          
+          // Requester information
+          requestedBy: labTest.requestedBy ? {
+            id: labTest.requestedBy.id,
+            name: `${labTest.requestedBy.surname} ${labTest.requestedBy.otherNames}`,
+            role: labTest.requestedBy.role
+          } : null,
+          
+          // Sample information
           sampleCollection: labTest.sampleId ? {
             sampleId: labTest.sampleId,
             collectedAt: labTest.sampleCollectionDate,
             collectedBy: labTest.sampleCollector ? 
               `${labTest.sampleCollector.surname} ${labTest.sampleCollector.otherNames}` : 
               'Unknown',
+            method: labTest.metadata?.collection?.method || null,
+            preparation: labTest.metadata?.collection?.preparation || null,
             notes: labTest.notes
           } : null,
+          
+          // Results information
           results: labTest.results ? {
-            addedAt: labTest.resultDate,
-            addedBy: labTest.sampleCollector ? 
-              `${labTest.sampleCollector.surname} ${labTest.sampleCollector.otherNames}` : 
-              'Unknown',
             data: labTest.results,
             referenceRange: labTest.referenceRange,
             isAbnormal: labTest.isAbnormal,
+            isCritical: labTest.isCritical,
+            resultDate: labTest.resultDate,
+            requiresFollowUp: labTest.metadata?.requiresFollowUp || false,
             notes: labTest.notes
-          } : null
+          } : null,
+          
+          // Additional metadata for UI display
+          notes: labTest.notes,
+          metadata: labTest.metadata || {}
         }
       };
-  
+
       res.json(formattedResponse);
     } catch (error) {
       console.error('Error in getLabTestById:', error);
@@ -378,7 +441,10 @@ const labTestController = {
     }
   },
 
-  // Update test status
+  /**
+   * Update test status
+   * @route PATCH /api/v1/lab-test/:id/status
+   */
   updateTestStatus: async (req, res, next) => {
     try {
       const { id } = req.params;
@@ -393,18 +459,39 @@ const labTestController = {
         });
       }
 
-      await labTest.update({
-        status,
-        results,
-        technicianNotes: notes,
-        isAbnormal,
-        isCritical,
-        technicianId: req.user.id
+      // Update the status and related fields
+      const updateData = { status };
+      
+      if (results) updateData.results = results;
+      if (notes) updateData.notes = notes;
+      if (isAbnormal !== undefined) updateData.isAbnormal = isAbnormal;
+      if (isCritical !== undefined) updateData.isCritical = isCritical;
+      
+      // Add timestamp information based on status
+      if (status === 'COMPLETED' && !labTest.resultDate) {
+        updateData.resultDate = new Date();
+      }
+
+      // Update the metadata with status change history
+      const statusHistory = labTest.metadata?.statusHistory || [];
+      statusHistory.push({
+        from: labTest.status,
+        to: status,
+        changedBy: req.user.id,
+        changedAt: new Date(),
+        notes
       });
+
+      updateData.metadata = {
+        ...labTest.metadata || {},
+        statusHistory
+      };
+
+      await labTest.update(updateData);
 
       res.json({
         success: true,
-        message: 'Lab test updated successfully',
+        message: 'Lab test status updated successfully',
         labTest
       });
     } catch (error) {
@@ -412,11 +499,28 @@ const labTestController = {
     }
   },
 
+  /**
+   * Collect sample for lab test
+   * @route POST /api/v1/lab-test/:id/collect-sample
+   */
   collectSample: async (req, res, next) => {
     try {
       const { id } = req.params;
-      const { sampleCollectionNotes } = req.body;
+      const { 
+        sampleCollectionMethod,
+        patientPreparation,
+        sampleCollectionNotes 
+      } = req.body;
   
+      // Validate required fields
+      if (!sampleCollectionMethod) {
+        return res.status(400).json({
+          success: false,
+          message: 'Sample collection method is required'
+        });
+      }
+  
+      // Find the lab test
       const labTest = await LabTest.findByPk(id);
       if (!labTest) {
         return res.status(404).json({
@@ -425,41 +529,69 @@ const labTestController = {
         });
       }
   
-      // Generate sample ID: LAB + YY + MM + 4-digit sequence
+      // Check if sample already collected
+      if (labTest.status !== 'PENDING') {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot collect sample. Test is already in ${labTest.status} status`
+        });
+      }
+  
+      // Generate sample ID with improved uniqueness
       const date = new Date();
       const year = date.getFullYear().toString().slice(-2);
       const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
       
-      // Get count of samples for this month to generate sequence
-      const monthSampleCount = await LabTest.count({
-        where: {
-          sampleId: {
-            [Op.like]: `LAB${year}${month}%`
-          }
-        }
-      });
+      // Combine date parts with timestamp and random number for uniqueness
+      const timestamp = Date.now().toString().slice(-5);
+      const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+      
+      // Format: LAB + YY + MM + DD + timestamp + random
+      const sampleId = `LAB${year}${month}${day}${timestamp}${random}`;
   
-      const sampleId = `LAB${year}${month}${(monthSampleCount + 1).toString().padStart(4, '0')}`;
+      // Create a metadata object for collection details
+      const collectionMetadata = {
+        method: sampleCollectionMethod,
+        preparation: patientPreparation || null,
+        collectedBy: {
+          id: req.user.id,
+          name: `${req.user.surname} ${req.user.otherNames}`,
+          role: req.user.role
+        },
+        timestamp: new Date().toISOString()
+      };
   
+      // Update lab test with sample information
       await labTest.update({
         sampleId,
         sampleCollectionDate: new Date(),
         sampleCollectedById: req.user.id,
         status: 'SAMPLE_COLLECTED',
-        notes: sampleCollectionNotes
+        notes: sampleCollectionNotes || labTest.notes,
+        metadata: {
+          ...labTest.metadata || {},
+          collection: collectionMetadata
+        }
       });
   
-      res.json({
+      // Return success response
+      res.status(200).json({
         success: true,
         message: 'Sample collected successfully',
         labTest
       });
+  
     } catch (error) {
+      console.error('Sample collection error:', error);
       next(error);
     }
   },
 
-  // Approve collected sample
+  /**
+   * Approve sample for testing
+   * @route POST /api/v1/lab-test/:id/approve-sample
+   */
   approveSample: async (req, res, next) => {
     try {
       const { id } = req.params;
@@ -473,14 +605,42 @@ const labTestController = {
         });
       }
 
+      // Check if test is in correct status
+      if (labTest.status !== 'SAMPLE_COLLECTED') {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot approve/reject sample. Test must be in SAMPLE_COLLECTED status, current status: ${labTest.status}`
+        });
+      }
+
+      // Update the status based on approval decision
+      const newStatus = approved ? 'IN_PROGRESS' : 'PENDING';
+      const notes = rejectionReason || labTest.notes;
+
+      // Track the approval/rejection in metadata
+      const approvalMetadata = {
+        approved,
+        by: {
+          id: req.user.id,
+          name: `${req.user.surname} ${req.user.otherNames}`,
+          role: req.user.role
+        },
+        timestamp: new Date().toISOString(),
+        reason: rejectionReason || null
+      };
+
       await labTest.update({
-        status: approved ? 'IN_PROGRESS' : 'PENDING',
-        notes: rejectionReason || labTest.notes
+        status: newStatus,
+        notes,
+        metadata: {
+          ...labTest.metadata || {},
+          sampleApproval: approvalMetadata
+        }
       });
 
       res.json({
         success: true,
-        message: approved ? 'Sample approved' : 'Sample rejected',
+        message: approved ? 'Sample approved for testing' : 'Sample rejected',
         labTest
       });
     } catch (error) {
@@ -488,12 +648,31 @@ const labTestController = {
     }
   },
 
-  // Add test results
+  /**
+   * Add test results
+   * @route POST /api/v1/lab-test/:id/results
+   */
   addTestResults: async (req, res, next) => {
     try {
       const { id } = req.params;
-      const { results, referenceRange, isAbnormal, notes } = req.body;
+      const { 
+        results, 
+        referenceRange, 
+        isAbnormal, 
+        isCritical,
+        requiresFollowUp,
+        notes 
+      } = req.body;
 
+      // Validate test results
+      if (!results || Object.keys(results).length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Test results are required'
+        });
+      }
+
+      // Find the lab test
       const labTest = await LabTest.findByPk(id);
       if (!labTest) {
         return res.status(404).json({
@@ -502,26 +681,80 @@ const labTestController = {
         });
       }
 
+      // Check if sample has been collected
+      if (labTest.status !== 'SAMPLE_COLLECTED' && labTest.status !== 'IN_PROGRESS') {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot add results. Test must be in SAMPLE_COLLECTED or IN_PROGRESS status, current status: ${labTest.status}`
+        });
+      }
+
+      // Create a metadata object for test results
+      const resultsMetadata = {
+        performedBy: {
+          id: req.user.id,
+          name: `${req.user.surname} ${req.user.otherNames}`,
+          role: req.user.role
+        },
+        timestamp: new Date().toISOString(),
+        abnormalFlags: {}
+      };
+
+      // Check each result against reference range
+      let hasAbnormalResults = isAbnormal || false;
+      if (referenceRange) {
+        Object.keys(results).forEach(key => {
+          if (referenceRange[key] && 
+              (results[key] < referenceRange[key].min || 
+               results[key] > referenceRange[key].max)) {
+            resultsMetadata.abnormalFlags[key] = true;
+            hasAbnormalResults = true;
+          }
+        });
+      }
+
+      // Update lab test with results information
       await labTest.update({
         results,
         referenceRange,
-        isAbnormal,
-        notes,
+        isAbnormal: hasAbnormalResults,
+        isCritical: isCritical || false,
         resultDate: new Date(),
-        status: 'COMPLETED'
+        status: 'COMPLETED',
+        notes: notes || labTest.notes,
+        metadata: {
+          ...labTest.metadata || {},
+          results: resultsMetadata,
+          requiresFollowUp: requiresFollowUp || false
+        }
       });
 
-      res.json({
+      // If result is critical, create a notification record
+      if (isCritical) {
+        // Example notification logic - implement based on your system's notification mechanism
+        console.log(`CRITICAL ALERT: Lab test ${labTest.id} has critical results.`);
+        
+        // You might want to send a notification to the requesting doctor
+        // await notificationService.sendCriticalAlertToDoctor(labTest);
+      }
+
+      // Return success response
+      res.status(200).json({
         success: true,
         message: 'Test results added successfully',
         labTest
       });
+
     } catch (error) {
+      console.error('Adding test results error:', error);
       next(error);
     }
   },
 
-  // Get patient test history
+  /**
+   * Get patient test history
+   * @route GET /api/v1/lab-test/patient/:patientId/history
+   */
   getPatientTestHistory: async (req, res, next) => {
     try {
       const { patientId } = req.params;
@@ -549,6 +782,11 @@ const labTestController = {
             model: User,
             as: 'requestedBy',
             attributes: ['id', 'surname', 'otherNames']
+          },
+          {
+            model: User,
+            as: 'sampleCollector',
+            attributes: ['id', 'surname', 'otherNames']
           }
         ],
         order: [['resultDate', 'DESC']]
@@ -556,6 +794,7 @@ const labTestController = {
 
       res.json({
         success: true,
+        count: tests.length,
         tests
       });
     } catch (error) {
@@ -563,7 +802,10 @@ const labTestController = {
     }
   },
 
-  // Get sample collection stats
+  /**
+   * Get sample collection stats
+   * @route GET /api/v1/lab-test/stats/samples
+   */
   getSampleStats: async (req, res, next) => {
     try {
       const stats = await LabTest.findAll({
@@ -588,13 +830,14 @@ const labTestController = {
     }
   },
 
-
-
-  // Mark critical value
+  /**
+   * Mark critical value
+   * @route POST /api/v1/lab-test/:id/critical
+   */
   markCriticalValue: async (req, res, next) => {
     try {
       const { id } = req.params;
-      const { notifiedTo } = req.body;
+      const { notifiedTo, criticalValues, notificationMethod } = req.body;
 
       const labTest = await LabTest.findByPk(id);
 
@@ -605,11 +848,33 @@ const labTestController = {
         });
       }
 
+      // Ensure the test has results
+      if (labTest.status !== 'COMPLETED' || !labTest.results) {
+        return res.status(400).json({
+          success: false,
+          message: 'Test must be completed with results before marking critical values'
+        });
+      }
+
+      // Create critical notification metadata
+      const criticalNotification = {
+        notifiedTo,
+        notifiedBy: {
+          id: req.user.id,
+          name: `${req.user.surname} ${req.user.otherNames}`,
+          role: req.user.role
+        },
+        notificationMethod,
+        criticalValues: criticalValues || [],
+        notifiedAt: new Date().toISOString()
+      };
+
       await labTest.update({
         isCritical: true,
-        criticalValueNotified: true,
-        notifiedTo,
-        notifiedAt: new Date()
+        metadata: {
+          ...labTest.metadata || {},
+          criticalNotification
+        }
       });
 
       res.json({
@@ -618,6 +883,160 @@ const labTestController = {
         labTest
       });
     } catch (error) {
+      next(error);
+    }
+  },
+
+  /**
+   * Generate and download lab report
+   * @route GET /api/v1/lab-test/:id/report
+   */
+  generateReport: async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      
+      const labTest = await LabTest.findOne({
+        where: { id },
+        include: [
+          {
+            model: Patient,
+            as: 'patient',
+            attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'dateOfBirth', 'sex']
+          },
+          {
+            model: User,
+            as: 'requestedBy',
+            attributes: ['id', 'surname', 'otherNames', 'role']
+          },
+          {
+            model: User,
+            as: 'sampleCollector',
+            attributes: ['id', 'surname', 'otherNames', 'role']
+          }
+        ]
+      });
+
+      if (!labTest) {
+        return res.status(404).json({
+          success: false,
+          message: 'Lab test not found'
+        });
+      }
+
+      if (labTest.status !== 'COMPLETED') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot generate report for incomplete test'
+        });
+      }
+
+      // Generate PDF buffer
+      const pdfBuffer = await generateLabReport(labTest);
+
+      // Set response headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="lab-report-${labTest.sampleId}.pdf"`);
+      
+      // Send PDF buffer as response
+      res.send(pdfBuffer);
+
+    } catch (error) {
+      console.error('Report generation error:', error);
+      next(error);
+    }
+  },
+
+  /**
+   * Send lab results to patient via email
+   * @route POST /api/v1/lab-test/:id/email-results
+   */
+  emailResults: async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { emailAddress, message } = req.body;
+
+      const labTest = await LabTest.findOne({
+        where: { id },
+        include: [
+          {
+            model: Patient,
+            as: 'patient',
+            attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'email']
+          }
+        ]
+      });
+
+      if (!labTest) {
+        return res.status(404).json({
+          success: false,
+          message: 'Lab test not found'
+        });
+      }
+
+      if (labTest.status !== 'COMPLETED') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot send results for incomplete test'
+        });
+      }
+
+      // Generate PDF
+      const pdfBuffer = await generateLabReport(labTest);
+
+      // Target email - use provided email or patient's email
+      const toEmail = emailAddress || labTest.patient?.email;
+
+      if (!toEmail) {
+        return res.status(400).json({
+          success: false,
+          message: 'No email address available'
+        });
+      }
+
+      // Send email with PDF attachment
+      await sendEmail({
+        to: toEmail,
+        subject: `Lab Test Results - ${labTest.testType}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Lab Test Results</h2>
+            <p>Dear ${labTest.patient.surname} ${labTest.patient.otherNames},</p>
+            <p>Please find attached your lab test results for ${labTest.testType.replace('_', ' ')}.</p>
+            <p>Sample ID: ${labTest.sampleId}</p>
+            <p>Collection Date: ${new Date(labTest.sampleCollectionDate).toLocaleDateString()}</p>
+            <p>Result Date: ${new Date(labTest.resultDate).toLocaleDateString()}</p>
+            ${message ? `<p>Message from your healthcare provider: ${message}</p>` : ''}
+            <p>If you have any questions about your results, please contact your healthcare provider.</p>
+            <p>Thank you for choosing our healthcare services.</p>
+            <p>Best regards,<br>Laboratory Department</p>
+          </div>
+        `,
+        attachments: [
+          {
+            filename: `lab-results-${labTest.sampleId}.pdf`,
+            content: pdfBuffer
+          }
+        ]
+      });
+
+      // Update the metadata to record that results were sent
+      await labTest.update({
+        metadata: {
+          ...labTest.metadata || {},
+          resultsSent: {
+            sentTo: toEmail,
+            sentBy: req.user.id,
+            sentAt: new Date().toISOString()
+          }
+        }
+      });
+
+      res.json({
+        success: true,
+        message: `Test results sent to ${toEmail}`
+      });
+    } catch (error) {
+      console.error('Email sending error:', error);
       next(error);
     }
   }

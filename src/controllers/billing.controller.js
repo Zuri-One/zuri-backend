@@ -166,11 +166,28 @@ exports.getCurrentBill = async (req, res, next) => {
       }
     });
 
+    // Recalculate the total amount from the items to ensure accuracy
+    if (activeBill && activeBill.items && activeBill.items.length > 0) {
+      const calculatedTotal = activeBill.items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
+      
+      // Update the bill if the calculated total doesn't match
+      if (calculatedTotal !== parseFloat(activeBill.totalAmount)) {
+        await activeBill.update({
+          subtotal: calculatedTotal.toFixed(2),
+          totalAmount: calculatedTotal.toFixed(2)
+        });
+        
+        // Refresh the activeBill object with updated values
+        activeBill.subtotal = calculatedTotal.toFixed(2);
+        activeBill.totalAmount = calculatedTotal.toFixed(2);
+      }
+    }
+
     // Get insurance coverage info if applicable
     let insuranceCoverage = null;
     if (patient.paymentScheme.type !== 'CASH') {
       // For now, using hardcoded coverage limit
-      const totalBilled = activeBill ? activeBill.totalAmount : 0;
+      const totalBilled = activeBill ? parseFloat(activeBill.totalAmount) : 0;
       insuranceCoverage = {
         limit: INSURANCE_COVERAGE_LIMIT,
         used: totalBilled,

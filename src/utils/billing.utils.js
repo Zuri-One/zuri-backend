@@ -44,6 +44,83 @@ const LAB_PACKAGES = {
       { name: 'Culture & Sensitivity', quantity: 1, unit: 'test' },
       { name: 'Lab Processing Fee', quantity: 1, unit: 'service' }
     ]
+  },
+  COMPLETE_BLOOD_COUNT: {
+    name: 'Complete Blood Count (CBC)',
+    basePrice: 2000,
+    items: [
+      { name: 'White Blood Cells Test', quantity: 1, unit: 'test' },
+      { name: 'Red Blood Cells Test', quantity: 1, unit: 'test' },
+      { name: 'Hemoglobin Test', quantity: 1, unit: 'test' },
+      { name: 'Hematocrit Test', quantity: 1, unit: 'test' },
+      { name: 'Platelets Test', quantity: 1, unit: 'test' },
+      { name: 'Lab Processing Fee', quantity: 1, unit: 'service' }
+    ]
+  },
+  METABOLIC_PANEL: {
+    name: 'Basic Metabolic Panel (BMP)',
+    basePrice: 2300,
+    items: [
+      { name: 'Glucose Test', quantity: 1, unit: 'test' },
+      { name: 'Calcium Test', quantity: 1, unit: 'test' },
+      { name: 'Electrolytes Test', quantity: 1, unit: 'test' },
+      { name: 'Creatinine Test', quantity: 1, unit: 'test' },
+      { name: 'BUN Test', quantity: 1, unit: 'test' },
+      { name: 'Lab Processing Fee', quantity: 1, unit: 'service' }
+    ]
+  },
+  LIPID_PANEL: {
+    name: 'Lipid Panel',
+    basePrice: 1900,
+    items: [
+      { name: 'Total Cholesterol Test', quantity: 1, unit: 'test' },
+      { name: 'HDL Test', quantity: 1, unit: 'test' },
+      { name: 'LDL Test', quantity: 1, unit: 'test' },
+      { name: 'Triglycerides Test', quantity: 1, unit: 'test' },
+      { name: 'Lab Processing Fee', quantity: 1, unit: 'service' }
+    ]
+  },
+  GLUCOSE_TEST: {
+    name: 'Blood Glucose Test',
+    basePrice: 1200,
+    items: [
+      { name: 'Fasting Glucose Test', quantity: 1, unit: 'test' },
+      { name: 'HbA1c Test', quantity: 1, unit: 'test' },
+      { name: 'Lab Processing Fee', quantity: 1, unit: 'service' }
+    ]
+  },
+  LIVER_FUNCTION: {
+    name: 'Liver Function Test',
+    basePrice: 2100,
+    items: [
+      { name: 'ALT Test', quantity: 1, unit: 'test' },
+      { name: 'AST Test', quantity: 1, unit: 'test' },
+      { name: 'ALP Test', quantity: 1, unit: 'test' },
+      { name: 'GGT Test', quantity: 1, unit: 'test' },
+      { name: 'Total Bilirubin Test', quantity: 1, unit: 'test' },
+      { name: 'Lab Processing Fee', quantity: 1, unit: 'service' }
+    ]
+  },
+  KIDNEY_FUNCTION: {
+    name: 'Kidney Function Test',
+    basePrice: 1700,
+    items: [
+      { name: 'Creatinine Test', quantity: 1, unit: 'test' },
+      { name: 'BUN Test', quantity: 1, unit: 'test' },
+      { name: 'eGFR Test', quantity: 1, unit: 'test' },
+      { name: 'Lab Processing Fee', quantity: 1, unit: 'service' }
+    ]
+  },
+  ELECTROLYTES_PANEL: {
+    name: 'Electrolytes Panel',
+    basePrice: 1600,
+    items: [
+      { name: 'Sodium Test', quantity: 1, unit: 'test' },
+      { name: 'Potassium Test', quantity: 1, unit: 'test' },
+      { name: 'Chloride Test', quantity: 1, unit: 'test' },
+      { name: 'Calcium Test', quantity: 1, unit: 'test' },
+      { name: 'Lab Processing Fee', quantity: 1, unit: 'service' }
+    ]
   }
 };
 

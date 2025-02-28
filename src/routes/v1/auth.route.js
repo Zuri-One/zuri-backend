@@ -299,7 +299,7 @@ router.post('/verify-staff-login', verifyStaffLogin);
  *       409:
  *         description: Email or Employee ID already exists
  */
-router.post('/register-admin', authenticate, authorizeAdmin, registerAdmin);
+router.post('/register-admin',  registerAdmin);
 /**
  * @swagger
  * /api/v1/auth/register:
