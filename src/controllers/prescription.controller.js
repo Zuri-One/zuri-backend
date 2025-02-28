@@ -128,7 +128,7 @@ exports.getPatientPrescriptions = async (req, res, next) => {
         {
           model: Medication,
           through: {
-            attributes: ['dosage', 'frequency', 'duration']
+            attributes: ['quantity', 'specialInstructions']
           }
         }
       ],
