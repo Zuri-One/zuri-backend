@@ -10,7 +10,16 @@ const {
   getAvailableItems
 } = require('../../controllers/billing.controller');
 
+const {
+  initializePaystack,
+  verifyPaystack,
+  paystackWebhook
+} = require('../../controllers/paystack.controller');
+
 // Base path: /api/v1/billing
+
+// Paystack webhook (no auth needed)
+router.post('/paystack-webhook', paystackWebhook);
 
 // Get available packages and items - no auth needed
 router.get('/packages', getAvailablePackages);
@@ -32,6 +41,17 @@ router.post('/add-items',
 router.post('/patient/:patientId/finalize',
   authorize(['RECEPTIONIST']), // Added array syntax for roles
   finalizePayment
+);
+
+// Paystack integration
+router.post('/initialize-paystack', 
+  authorize(['RECEPTIONIST']),
+  initializePaystack
+);
+
+router.get('/verify-paystack/:reference', 
+  authorize(['RECEPTIONIST']),
+  verifyPaystack
 );
 
 module.exports = router;

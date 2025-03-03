@@ -128,7 +128,7 @@ const LAB_PACKAGES = {
 const INDIVIDUAL_ITEMS = {
   SYRINGE: {
     name: 'Syringe',
-    basePrice: 50,
+    basePrice: 5,
     unit: 'pc',
     category: 'CONSUMABLE'
   },
