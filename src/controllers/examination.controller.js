@@ -21,6 +21,24 @@ exports.createExamination = async (req, res, next) => {
       proceduresPerformed,
       nursingNotes
     });
+    
+    // Log body composition data if present
+    const bodyCompositionFields = [
+      'waistHipRatio', 'bodyFat', 'fatFreeBodyWeight', 'subcutaneousFat', 
+      'visceralFat', 'bodyWater', 'skeletalMuscle', 'muscleMass', 
+      'boneMass', 'protein', 'basicMetabolicRate', 'metabolicAge'
+    ];
+    
+    const bodyCompositionData = {};
+    bodyCompositionFields.forEach(field => {
+      if (generalExamination[field] !== undefined) {
+        bodyCompositionData[field] = generalExamination[field];
+      }
+    });
+    
+    if (Object.keys(bodyCompositionData).length > 0) {
+      console.log('Body composition data received:', bodyCompositionData);
+    }
 
     // Calculate BMI
     const weight = generalExamination.weight;

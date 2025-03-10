@@ -60,7 +60,11 @@ class Examination extends Model {
             }
           }
         }
-      }
+      },
+      comment: 'Required fields: temperature, bloodPressure, weight, height, bmi, pulseRate, spo2. ' +
+               'Optional fields: headCircumference, waistHipRatio, bodyFat, fatFreeBodyWeight, ' + 
+               'subcutaneousFat, visceralFat, bodyWater, skeletalMuscle, muscleMass, boneMass, ' +
+               'protein, basicMetabolicRate, metabolicAge'
     },
     
     // Systemic Examinations
