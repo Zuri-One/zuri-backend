@@ -126,35 +126,47 @@ const LAB_PACKAGES = {
 
 // Individual items that can be added
 const INDIVIDUAL_ITEMS = {
-  SYRINGE: {
-    name: 'Syringe',
-    basePrice: 5,
-    unit: 'pc',
+  FLUID: {
+    name: 'fluid',
+    basePrice: 300,
+    unit: 'bottle',
     category: 'CONSUMABLE'
   },
-  GLOVES: {
-    name: 'Gloves',
+  STERILE_DRESSING_PACK: {
+    name: 'sterile dressing pack',
+    basePrice: 700,
+    unit: 'pack',
+    category: 'CONSUMABLE'
+  },
+  INFUSION: {
+    name: 'Infusion',
     basePrice: 100,
-    unit: 'pair',
+    unit: 'set',
     category: 'CONSUMABLE'
   },
-  GAUZE: {
-    name: 'Gauze',
-    basePrice: 200,
-    unit: 'roll',
+  SUTURE: {
+    name: 'suture',
+    basePrice: 100,
+    unit: 'piece',
     category: 'CONSUMABLE'
   },
-  BLOOD_SUGAR: {
-    name: 'Blood Sugar Test',
+  NEEDLE: {
+    name: 'Needle',
+    basePrice: 5,
+    unit: 'piece',
+    category: 'CONSUMABLE'
+  },
+  STRAPPING: {
+    name: 'Strapping',
+    basePrice: 50,
+    unit: 'piece',
+    category: 'CONSUMABLE'
+  },
+  CANNULA: {
+    name: 'Cannula',
     basePrice: 500,
-    unit: 'test',
-    category: 'LAB'
-  },
-  HIV_TEST: {
-    name: 'HIV Test',
-    basePrice: 800,
-    unit: 'test',
-    category: 'LAB'
+    unit: 'piece',
+    category: 'CONSUMABLE'
   }
 };
 
