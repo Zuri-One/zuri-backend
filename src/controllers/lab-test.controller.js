@@ -194,16 +194,41 @@ const labTestController = {
    */
   getCurrentSessionResults: async (req, res, next) => {
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const { dateFrom, dateTo } = req.query;
+      
+      let whereClause = {};
+      
+      // If date range is provided, use it
+      if (dateFrom || dateTo) {
+        whereClause.createdAt = {};
+        
+        if (dateFrom) {
+          const fromDate = new Date(dateFrom);
+          fromDate.setHours(0, 0, 0, 0);
+          whereClause.createdAt[Op.gte] = fromDate;
+        }
+        
+        if (dateTo) {
+          const toDate = new Date(dateTo);
+          toDate.setHours(23, 59, 59, 999);
+          whereClause.createdAt[Op.lte] = toDate;
+        }
+      } else {
+        // Default to today if no date range is provided
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        whereClause.createdAt = {
+          [Op.gte]: today
+        };
+      }
+      
+      // Add status filter - make it more flexible
+      whereClause.status = {
+        [Op.in]: ['COMPLETED', 'PENDING', 'SAMPLE_COLLECTED', 'IN_PROGRESS']
+      };
   
       const labTests = await LabTest.findAll({
-        where: {
-          resultDate: {
-            [Op.gte]: today
-          },
-          status: 'COMPLETED'
-        },
+        where: whereClause,
         include: [
           {
             model: Patient,
@@ -221,7 +246,7 @@ const labTestController = {
             attributes: ['id', 'surname', 'otherNames']
           }
         ],
-        order: [['resultDate', 'DESC']]
+        order: [['createdAt', 'DESC']]
       });
   
       res.json({

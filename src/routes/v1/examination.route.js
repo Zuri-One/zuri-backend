@@ -30,6 +30,12 @@ router.post('/',
   examinationController.createExamination
 );
 
+router.put('/:id', 
+  authenticate, 
+  authorize(['NURSE', 'DOCTOR', 'HEAD_NURSE', 'ADMIN']), 
+  examinationController.updateExamination
+);
+
 // Get specific examination (place parameterized routes last)
 router.get('/:id', 
   authenticate, 

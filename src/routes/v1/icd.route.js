@@ -169,6 +169,7 @@ router.get('/entity/:codeOrUri', getICDEntity);
  */
 router.post('/cache/clear', clearCache);
 
+
 // Only available in development environment
 if (process.env.NODE_ENV === 'development') {
   /**

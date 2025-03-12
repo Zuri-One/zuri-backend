@@ -95,6 +95,18 @@ class Examination extends Model {
     nursingNotes: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    lastUpdatedBy: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'Users',
+        key: 'id'
+      }
+    },
+    lastUpdatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true
     }
   };
 
@@ -112,6 +124,10 @@ class Examination extends Model {
     this.belongsTo(models.User, {
       foreignKey: 'performedBy',
       as: 'examiner'
+    });
+    this.belongsTo(models.User, {
+      foreignKey: 'lastUpdatedBy',
+      as: 'updatedBy'
     });
   }
 }

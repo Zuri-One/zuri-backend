@@ -70,6 +70,91 @@ exports.createExamination = async (req, res, next) => {
   }
 };
 
+
+// Add to controllers/examination.controller.js
+exports.updateExamination = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const {
+      generalExamination,
+      systemicExaminations,
+      proceduresPerformed,
+      nursingNotes
+    } = req.body;
+
+    console.log('Updating examination data:', {
+      id,
+      generalExamination,
+      systemicExaminations,
+      proceduresPerformed,
+      nursingNotes
+    });
+    
+    // Find the examination first
+    const examination = await Examination.findByPk(id);
+    
+    if (!examination) {
+      return res.status(404).json({
+        success: false,
+        message: 'Examination record not found'
+      });
+    }
+    
+    // Verify that the user has permission to update this examination
+    // (Either the user created it or has admin/supervisor privileges)
+    if (examination.performedBy !== req.user.id && 
+        !['ADMIN', 'HEAD_NURSE', 'DOCTOR'].includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to update this examination'
+      });
+    }
+
+    // Calculate BMI if weight and height are provided
+    if (generalExamination?.weight && generalExamination?.height) {
+      const weight = generalExamination.weight;
+      const height = generalExamination.height;
+      const bmi = weight / ((height / 100) * (height / 100));
+      generalExamination.bmi = parseFloat(bmi.toFixed(2));
+    }
+
+    // Update the examination
+    await examination.update({
+      generalExamination: generalExamination || examination.generalExamination,
+      systemicExaminations: systemicExaminations || examination.systemicExaminations,
+      proceduresPerformed: proceduresPerformed || examination.proceduresPerformed,
+      nursingNotes: nursingNotes !== undefined ? nursingNotes : examination.nursingNotes,
+      lastUpdatedBy: req.user.id,
+      lastUpdatedAt: new Date()
+    });
+
+    // Fetch the updated examination with examiner details
+    const updatedExamination = await Examination.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'examiner',
+          attributes: ['id', 'surname', 'otherNames', 'role']
+        }
+      ]
+    });
+
+    res.json({
+      success: true,
+      message: 'Examination updated successfully',
+      examination: updatedExamination
+    });
+  } catch (error) {
+    console.error('Examination update error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Database error occurred',
+      error: process.env.NODE_ENV === 'development' ? error : undefined
+    });
+  }
+};
+
+
 exports.getExamination = async (req, res, next) => {
   try {
     const examination = await Examination.findByPk(req.params.id, {

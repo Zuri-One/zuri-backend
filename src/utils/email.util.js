@@ -29,33 +29,33 @@ const sendEmail = async (options) => {
   }
 };
 
-// Add test function
-const testEmailSetup = async () => {
-  try {
-    console.log('Testing email configuration...');
-    await sendEmail({
-      to: 'isaacwambiri254@gmail.com',
-      subject: 'Test Email - Zuri Health Email Setup',
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2>Email Configuration Test</h2>
-          <p>This is a test email to verify that the email service is configured correctly.</p>
-          <p>Configuration details:</p>
-          <ul>
-            <li>Sender: ${process.env.EMAIL_FROM}</li>
-            <li>Time sent: ${new Date().toLocaleString()}</li>
-          </ul>
-          <p>If you received this email, the email service is working properly!</p>
-        </div>
-      `
-    });
-    console.log('Test email sent successfully!');
-  } catch (error) {
-    console.error('Test email failed:', error);
-  }
-};
+// // Add test function
+// const testEmailSetup = async () => {
+//   try {
+//     console.log('Testing email configuration...');
+//     await sendEmail({
+//       to: 'isaacwambiri254@gmail.com',
+//       subject: 'Test Email - Zuri Health Email Setup',
+//       html: `
+//         <div style="font-family: Arial, sans-serif; padding: 20px;">
+//           <h2>Email Configuration Test</h2>
+//           <p>This is a test email to verify that the email service is configured correctly.</p>
+//           <p>Configuration details:</p>
+//           <ul>
+//             <li>Sender: ${process.env.EMAIL_FROM}</li>
+//             <li>Time sent: ${new Date().toLocaleString()}</li>
+//           </ul>
+//           <p>If you received this email, the email service is working properly!</p>
+//         </div>
+//       `
+//     });
+//     console.log('Test email sent successfully!');
+//   } catch (error) {
+//     console.error('Test email failed:', error);
+//   }
+// };
 
-// Execute test
-testEmailSetup();
+// // Execute test
+// testEmailSetup();
 
 module.exports = sendEmail;
