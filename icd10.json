@@ -1,0 +1,285 @@
+{
+	"info": {
+		"_postman_id": "f5d87e80-c7a9-4b67-b01a-0d8f2ecd2d8c",
+		"name": "WHO ICD API Integration",
+		"description": "Collection for testing the WHO ICD API integration with HMS",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Search ICD (Detailed)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/icd/search?q=diabetes&page=1&pageSize=10&format=detailed",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"icd",
+						"search"
+					],
+					"query": [
+						{
+							"key": "q",
+							"value": "diabetes",
+							"description": "Search query (code or disease name)"
+						},
+						{
+							"key": "page",
+							"value": "1",
+							"description": "Page number"
+						},
+						{
+							"key": "pageSize",
+							"value": "10",
+							"description": "Results per page"
+						},
+						{
+							"key": "format",
+							"value": "detailed",
+							"description": "Response format (detailed or simple)"
+						},
+						{
+							"key": "language",
+							"value": "en",
+							"description": "Language code",
+							"disabled": true
+						}
+					]
+				},
+				"description": "Search for ICD codes or disease names (detailed format)"
+			},
+			"response": []
+		},
+		{
+			"name": "Search ICD (Simple)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/icd/search?q=diabetes&page=1&pageSize=10&format=simple",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"icd",
+						"search"
+					],
+					"query": [
+						{
+							"key": "q",
+							"value": "diabetes",
+							"description": "Search query (code or disease name)"
+						},
+						{
+							"key": "page",
+							"value": "1",
+							"description": "Page number"
+						},
+						{
+							"key": "pageSize",
+							"value": "10",
+							"description": "Results per page"
+						},
+						{
+							"key": "format",
+							"value": "simple",
+							"description": "Response format (detailed or simple)"
+						},
+						{
+							"key": "language",
+							"value": "en",
+							"description": "Language code",
+							"disabled": true
+						}
+					]
+				},
+				"description": "Search for ICD codes or disease names (simple format)"
+			},
+			"response": []
+		},
+		{
+			"name": "Get ICD Entity by Code (Detailed)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/icd/entity/5A10?format=detailed",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"icd",
+						"entity",
+						"5A10"
+					],
+					"query": [
+						{
+							"key": "format",
+							"value": "detailed",
+							"description": "Response format (detailed or simple)"
+						},
+						{
+							"key": "language",
+							"value": "en",
+							"description": "Language code",
+							"disabled": true
+						}
+					]
+				},
+				"description": "Get details of an ICD entity by its code (detailed format)"
+			},
+			"response": []
+		},
+		{
+			"name": "Get ICD Entity by Code (Simple)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/icd/entity/5A10?format=simple",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"icd",
+						"entity",
+						"5A10"
+					],
+					"query": [
+						{
+							"key": "format",
+							"value": "simple",
+							"description": "Response format (detailed or simple)"
+						},
+						{
+							"key": "language",
+							"value": "en",
+							"description": "Language code",
+							"disabled": true
+						}
+					]
+				},
+				"description": "Get details of an ICD entity by its code (simple format)"
+			},
+			"response": []
+		},
+		{
+			"name": "Get ICD Entity by URI",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/icd/entity/http://id.who.int/icd/release/11/2023-01/mms/5A10",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"icd",
+						"entity",
+						"http://id.who.int/icd/release/11/2023-01/mms/5A10"
+					],
+					"query": [
+						{
+							"key": "format",
+							"value": "simple",
+							"description": "Response format (detailed or simple)",
+							"disabled": true
+						}
+					]
+				},
+				"description": "Get details of an ICD entity by its full URI"
+			},
+			"response": []
+		},
+		{
+			"name": "Clear ICD Cache",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/icd/cache/clear?type=search",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"icd",
+						"cache",
+						"clear"
+					],
+					"query": [
+						{
+							"key": "type",
+							"value": "search",
+							"description": "Type of cache to clear (token, search, entity, or all)"
+						}
+					]
+				},
+				"description": "Clear the ICD API cache (search, token, entity, or all)"
+			},
+			"response": []
+		},
+		{
+			"name": "Debug ICD (Development Only)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/api/v1/icd/debug",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"icd",
+						"debug"
+					]
+				},
+				"description": "Get debug information about the ICD API integration (only available in development environment)"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:10000",
+			"type": "string"
+		}
+	]
+}

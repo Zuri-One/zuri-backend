@@ -21,6 +21,7 @@ const videoRoutes = require('./video.route');
 const billingRoutes = require('./billing.route');
 const queueRoutes = require('./queue.route');
 const examinationRoutes = require('./examination.route');
+const icdRoutes = require('./icd.route'); 
 
 // New route imports
 // const progressNoteRoutes = require('./progress-note.route');
@@ -49,6 +50,7 @@ router.use('/medication', medicationRoutes);
 router.use('/billing', billingRoutes);
 router.use('/queue', queueRoutes);
 router.use('/examinations', examinationRoutes);
+router.use('/icd', icdRoutes); // Mount ICD routes
 
 // Mount new routes
 // router.use('/progress-notes', progressNoteRoutes);
