@@ -12,13 +12,13 @@ router.post('/',
 
 router.get('/patient/:patientId', 
   authenticate, 
-  authorize(['DOCTOR', 'NURSE']), 
+  authorize(['DOCTOR', 'NURSE', 'PHARMACIST']), 
   medicalRecordController.getPatientMedicalHistory
 );
 
 router.get('/patient/:patientId', 
   authenticate, 
-  authorize(['DOCTOR', 'NURSE']), 
+  authorize(['DOCTOR', 'NURSE', 'PHARMACIST']), 
   medicalRecordController.getPatientMedicalHistory
 );
 
