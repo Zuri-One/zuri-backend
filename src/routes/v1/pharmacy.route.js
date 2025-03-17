@@ -4,385 +4,59 @@ const router = express.Router();
 const { authenticate, authorize, hasPermission } = require('../../middleware/auth.middleware');
 const pharmacyController = require('../../controllers/pharmacy.controller');
 
-/**
-* @swagger
-* components:
-*   schemas:
-*     Medication:
-*       type: object
-*       required:
-*         - name
-*         - category
-*         - type
-*         - strength
-*         - currentStock
-*         - unitPrice
-*       properties:
-*         id:
-*           type: string
-*           format: uuid
-*         name:
-*           type: string
-*         genericName:
-*           type: string
-*         category:
-*           type: string
-*           enum: [ANTIBIOTIC, ANALGESIC, ANTIVIRAL, ANTIHISTAMINE, ANTIHYPERTENSIVE, ANTIDIABETIC, PSYCHIATRIC, CARDIAC, RESPIRATORY, SUPPLEMENTS, OTHER]
-*         type:
-*           type: string
-*           enum: [TABLET, CAPSULE, SYRUP, INJECTION, CREAM, OINTMENT, DROPS, INHALER, POWDER, OTHER]
-*         strength:
-*           type: string
-*         currentStock:
-*           type: integer
-*         minStockLevel:
-*           type: integer
-*         maxStockLevel:
-*           type: integer
-*         unitPrice:
-*           type: number
-*         expiryDate:
-*           type: string
-*           format: date
-*     StockMovement:
-*       type: object
-*       properties:
-*         medicationId:
-*           type: string
-*           format: uuid
-*         type:
-*           type: string
-*           enum: [RECEIVED, DISPENSED, RETURNED, EXPIRED, DAMAGED, ADJUSTED]
-*         quantity:
-*           type: integer
-*         reason:
-*           type: string
-*     MedicationDispense:
-*       type: object
-*       required:
-*         - medicationId
-*         - patientId
-*         - quantity
-*         - dosage
-*         - frequency
-*         - duration
-*       properties:
-*         medicationId:
-*           type: string
-*           format: uuid
-*         patientId:
-*           type: string
-*           format: uuid
-*         quantity:
-*           type: integer
-*         dosage:
-*           type: string
-*         frequency:
-*           type: string
-*         duration:
-*           type: integer
-*         instructions:
-*           type: string
-*/
-
 // Apply authentication to all routes
 router.use(authenticate);
 
-/**
-* @swagger
-* /api/v1/pharmacy/inventory:
-*   post:
-*     summary: Add new medication to inventory
-*     tags: [Pharmacy]
-*     security:
-*       - bearerAuth: []
-*     requestBody:
-*       required: true
-*       content:
-*         application/json:
-*           schema:
-*             $ref: '#/components/schemas/Medication'
-*     responses:
-*       201:
-*         description: Medication added successfully
-*/
-router.post(
- '/inventory',
- authorize(['PHARMACIST', 'ADMIN']),
- hasPermission(['manage_pharmacy_inventory']),
- pharmacyController.addMedication
-);
-
-
-router.post(
-  '/prescriptions',
-  authorize(['DOCTOR']),
-  hasPermission(['create_prescriptions']),
-  pharmacyController.createPrescription
-);
-
-router.get(
-  '/prescriptions/pending',
-  authorize(['PHARMACIST', 'DOCTOR']),
-  hasPermission(['view_prescriptions']),
-  pharmacyController.getPendingPrescriptions
-);
-
-// Dispensing Routes
-router.post(
-  '/dispense/prescription',
-  authorize(['PHARMACIST']),
-  hasPermission(['dispense_medication']),
-  pharmacyController.dispensePrescription
-);
-
-// Medication Category Routes
-router.post(
-  '/categories',
-  authorize(['PHARMACIST', 'ADMIN']),
-  hasPermission(['manage_pharmacy_inventory']),
-  pharmacyController.addMedicationCategory
-);
-
-router.get(
-  '/categories',
-  authorize(['PHARMACIST', 'DOCTOR', 'NURSE']),
-  hasPermission(['view_pharmacy_inventory']),
-  pharmacyController.getMedicationCategories
-);
-
-// Report Routes
-router.get(
-  '/reports/dispensing-summary',
-  authorize(['PHARMACIST', 'ADMIN']),
-  hasPermission(['view_pharmacy_reports']),
-  pharmacyController.getDispensingSummary
-);
+// ====================================
+// SUPPLIER ROUTES
+// ====================================
 
 /**
-* @swagger
-* /api/v1/pharmacy/inventory:
-*   get:
-*     summary: Get all medications in inventory
-*     tags: [Pharmacy]
-*     security:
-*       - bearerAuth: []
-*     parameters:
-*       - in: query
-*         name: search
-*         schema:
-*           type: string
-*       - in: query
-*         name: category
-*         schema:
-*           type: string
-*       - in: query
-*         name: type
-*         schema:
-*           type: string
-*     responses:
-*       200:
-*         description: Inventory list retrieved successfully
-*/
-router.get(
- '/inventory',
-//  authorize(['PHARMACIST', 'DOCTOR', 'NURSE']),
-//  hasPermission(['view_pharmacy_inventory']),
- pharmacyController.getInventory
-);
-
-/**
-* @swagger
-* /api/v1/pharmacy/inventory/{id}:
-*   get:
-*     summary: Get medication by ID
-*     tags: [Pharmacy]
-*     security:
-*       - bearerAuth: []
-*     parameters:
-*       - in: path
-*         name: id
-*         required: true
-*         schema:
-*           type: string
-*           format: uuid
-*     responses:
-*       200:
-*         description: Medication details retrieved successfully
-*/
-router.get(
- '/inventory/:id',
- authorize(['PHARMACIST', 'DOCTOR', 'NURSE']),
- hasPermission(['view_pharmacy_inventory']),
- pharmacyController.getMedicationById
-);
-
-/**
-* @swagger
-* /api/v1/pharmacy/inventory/{id}:
-*   put:
-*     summary: Update medication details
-*     tags: [Pharmacy]
-*     security:
-*       - bearerAuth: []
-*     parameters:
-*       - in: path
-*         name: id
-*         required: true
-*         schema:
-*           type: string
-*           format: uuid
-*     requestBody:
-*       required: true
-*       content:
-*         application/json:
-*           schema:
-*             $ref: '#/components/schemas/Medication'
-*     responses:
-*       200:
-*         description: Medication updated successfully
-*/
-router.put(
- '/inventory/:id',
- authorize(['PHARMACIST']),
- hasPermission(['manage_pharmacy_inventory']),
- pharmacyController.updateMedication
-);
-
-/**
-* @swagger
-* /api/v1/pharmacy/stock/adjustment/{id}:
-*   post:
-*     summary: Adjust stock level for a medication
-*     tags: [Pharmacy]
-*     security:
-*       - bearerAuth: []
-*     parameters:
-*       - in: path
-*         name: id
-*         required: true
-*         schema:
-*           type: string
-*           format: uuid
-*     requestBody:
-*       required: true
-*       content:
-*         application/json:
-*           schema:
-*             $ref: '#/components/schemas/StockMovement'
-*     responses:
-*       200:
-*         description: Stock adjusted successfully
-*/
-router.post(
- '/stock/adjustment/:id',
- authorize(['PHARMACIST']),
- hasPermission(['manage_pharmacy_inventory']),
- pharmacyController.updateStock
-);
-
-/**
-* @swagger
-* /api/v1/pharmacy/stock/low:
-*   get:
-*     summary: Get medications with low stock levels
-*     tags: [Pharmacy]
-*     security:
-*       - bearerAuth: []
-*     responses:
-*       200:
-*         description: Low stock medications retrieved successfully
-*/
-router.get(
-  '/stock/low',
-  authorize(['PHARMACIST', 'ADMIN']),
-  hasPermission(['view_pharmacy_inventory']),
-  pharmacyController.getLowStockItems
- );
- 
- /**
  * @swagger
- * /api/v1/pharmacy/stock/expiring:
+ * /api/v1/pharmacy/suppliers:
  *   get:
- *     summary: Get medications nearing expiry
- *     tags: [Pharmacy]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Expiring medications retrieved successfully
- */
- router.get(
-  '/stock/expiring',
-  authorize(['PHARMACIST', 'ADMIN']),
-  hasPermission(['view_pharmacy_inventory']),
-  pharmacyController.getExpiringItems
- );
- 
- /**
- * @swagger
- * /api/v1/pharmacy/dispense:
- *   post:
- *     summary: Dispense medication
- *     tags: [Pharmacy]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/MedicationDispense'
- *     responses:
- *       200:
- *         description: Medication dispensed successfully
- */
- router.post(
-  '/dispense',
-  authorize(['PHARMACIST']),
-  hasPermission(['dispense_medication']),
-  pharmacyController.dispenseMedication
- );
- 
- /**
- * @swagger
- * /api/v1/pharmacy/dispense/history:
- *   get:
- *     summary: Get dispensing history
+ *     summary: Get all suppliers
  *     tags: [Pharmacy]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
- *         name: startDate
+ *         name: search
  *         schema:
  *           type: string
- *           format: date
  *       - in: query
- *         name: endDate
+ *         name: page
  *         schema:
- *           type: string
- *           format: date
+ *           type: integer
  *       - in: query
- *         name: status
+ *         name: limit
  *         schema:
- *           type: string
+ *           type: integer
  *     responses:
  *       200:
- *         description: Dispensing history retrieved successfully
+ *         description: Suppliers retrieved successfully
  */
- router.get(
-  '/dispense/history',
+router.get(
+  '/suppliers',
   authorize(['PHARMACIST', 'ADMIN']),
-  hasPermission(['view_dispensing_history']),
-  pharmacyController.getDispenseHistory
- );
- 
- /**
+  // hasPermission(['view_pharmacy_inventory']),
+  pharmacyController.getSuppliers
+);
+
+
+router.get(
+  '/dispense/pending',
+  authorize(['PHARMACIST']),
+  // hasPermission(['dispense_medication']),
+  pharmacyController.getPendingDispenses
+);
+
+
+/**
  * @swagger
- * /api/v1/pharmacy/dispense/{id}:
+ * /api/v1/pharmacy/suppliers/{id}:
  *   get:
- *     summary: Get dispense record by ID
+ *     summary: Get supplier by ID
  *     tags: [Pharmacy]
  *     security:
  *       - bearerAuth: []
@@ -395,118 +69,219 @@ router.get(
  *           format: uuid
  *     responses:
  *       200:
- *         description: Dispense record retrieved successfully
+ *         description: Supplier retrieved successfully
  */
- router.get(
-  '/dispense/:id',
-  authorize(['PHARMACIST', 'DOCTOR']),
-  hasPermission(['view_dispensing_history']),
-  pharmacyController.getDispenseById
- );
- 
- /**
- * @swagger
- * /api/v1/pharmacy/lab-prescriptions:
- *   get:
- *     summary: Get prescriptions based on lab results
- *     tags: [Pharmacy]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Lab-based prescriptions retrieved successfully
- */
- router.get(
-  '/lab-prescriptions',
-  authorize(['PHARMACIST']),
-  hasPermission(['view_lab_results']),
-  pharmacyController.getLabBasedPrescriptions
- );
- 
- /**
- * @swagger
- * /api/v1/pharmacy/reports/inventory:
- *   get:
- *     summary: Get inventory report
- *     tags: [Pharmacy]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: startDate
- *         schema:
- *           type: string
- *           format: date
- *       - in: query
- *         name: endDate
- *         schema:
- *           type: string
- *           format: date
- *     responses:
- *       200:
- *         description: Inventory report retrieved successfully
- */
- router.get(
-  '/reports/inventory',
+router.get(
+  '/suppliers/:id',
   authorize(['PHARMACIST', 'ADMIN']),
-  hasPermission(['view_pharmacy_reports']),
-  pharmacyController.getInventoryReport
- );
- 
- /**
+  // hasPermission(['view_pharmacy_inventory']),
+  pharmacyController.getSupplierById
+);
+
+/**
  * @swagger
- * /api/v1/pharmacy/reports/dispensing:
- *   get:
- *     summary: Get dispensing report
- *     tags: [Pharmacy]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: startDate
- *         schema:
- *           type: string
- *           format: date
- *       - in: query
- *         name: endDate
- *         schema:
- *           type: string
- *           format: date
- *     responses:
- *       200:
- *         description: Dispensing report retrieved successfully
- */
- router.get(
-  '/reports/dispensing',
-  authorize(['PHARMACIST', 'ADMIN']),
-  hasPermission(['view_pharmacy_reports']),
-  pharmacyController.getDispensingReport
- );
- 
- /**
- * @swagger
- * /api/v1/pharmacy/stats:
- *   get:
- *     summary: Get pharmacy statistics
- *     tags: [Pharmacy]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Statistics retrieved successfully
- */
- router.get(
-  '/stats',
-  authorize(['PHARMACIST', 'ADMIN']),
-  hasPermission(['view_pharmacy_reports']),
-  pharmacyController.getPharmacyStats
- );
- 
- /**
- * @swagger
- * /api/v1/pharmacy/dispense/validate:
+ * /api/v1/pharmacy/suppliers:
  *   post:
- *     summary: Validate a medication dispense request
+ *     summary: Add new supplier
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *             properties:
+ *               name:
+ *                 type: string
+ *               supplierId:
+ *                 type: string
+ *               contactPerson:
+ *                 type: string
+ *               phoneNumber:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Supplier added successfully
+ */
+router.post(
+  '/suppliers',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['manage_pharmacy_inventory']),
+  pharmacyController.addSupplier
+);
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/suppliers/{id}:
+ *   put:
+ *     summary: Update supplier
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               supplierId:
+ *                 type: string
+ *               contactPerson:
+ *                 type: string
+ *               phoneNumber:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               address:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Supplier updated successfully
+ */
+router.put(
+  '/suppliers/:id',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['manage_pharmacy_inventory']),
+  pharmacyController.updateSupplier
+);
+
+// ====================================
+// INVENTORY RECEIPT ROUTES
+// ====================================
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/inventory-receipts:
+ *   post:
+ *     summary: Add new inventory receipt with medications
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - supplierId
+ *               - medications
+ *             properties:
+ *               supplierId:
+ *                 type: string
+ *                 format: uuid
+ *               invoiceNumber:
+ *                 type: string
+ *               deliveryDate:
+ *                 type: string
+ *                 format: date
+ *               deliveryMethod:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *               medications:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       201:
+ *         description: Inventory receipt created successfully
+ */
+router.post(
+  '/inventory-receipts',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['manage_pharmacy_inventory']),
+  pharmacyController.addInventoryReceipt
+);
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/inventory-receipts:
+ *   get:
+ *     summary: Get all inventory receipts
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: supplierId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Inventory receipts retrieved successfully
+ */
+router.get(
+  '/inventory-receipts',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['view_pharmacy_inventory']),
+  pharmacyController.getInventoryReceipts
+);
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/inventory-receipts/{id}:
+ *   get:
+ *     summary: Get inventory receipt by ID
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Inventory receipt retrieved successfully
+ */
+router.get(
+  '/inventory-receipts/:id',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['view_pharmacy_inventory']),
+  pharmacyController.getInventoryReceiptById
+);
+
+// ====================================
+// STOCK TRANSFER ROUTES
+// ====================================
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/stock/transfer:
+ *   post:
+ *     summary: Transfer stock between locations
  *     tags: [Pharmacy]
  *     security:
  *       - bearerAuth: []
@@ -519,43 +294,353 @@ router.get(
  *             required:
  *               - medicationId
  *               - quantity
+ *               - fromLocation
+ *               - toLocation
  *             properties:
  *               medicationId:
  *                 type: string
  *                 format: uuid
  *               quantity:
- *                 type: number
- *               prescriptionId:
+ *                 type: integer
+ *               fromLocation:
  *                 type: string
- *                 format: uuid
+ *                 enum: [STORE, MEDICAL_CAMP, PHARMACY]
+ *               toLocation:
+ *                 type: string
+ *                 enum: [STORE, MEDICAL_CAMP, PHARMACY]
+ *               notes:
+ *                 type: string
  *     responses:
  *       200:
- *         description: Validation results retrieved successfully
+ *         description: Stock transferred successfully
  */
- router.post(
-  '/dispense/validate',
-  authorize(['PHARMACIST']),
-  hasPermission(['dispense_medication']),
-  pharmacyController.validateDispense
- );
- 
- /**
+router.post(
+  '/stock/transfer',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['manage_pharmacy_inventory']),
+  pharmacyController.transferStock
+);
+
+// ====================================
+// STOCK MOVEMENT ROUTES
+// ====================================
+
+/**
  * @swagger
- * /api/v1/pharmacy/dispense/pending:
+ * /api/v1/pharmacy/stock/movements:
  *   get:
- *     summary: Get pending dispense requests
+ *     summary: Get stock movement history
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: medicationId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Stock movements retrieved successfully
+ */
+router.get(
+  '/stock/movements',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['view_pharmacy_inventory']),
+  pharmacyController.getStockMovements
+);
+
+// ====================================
+// MEDICATION ROUTES
+// ====================================
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/inventory:
+ *   post:
+ *     summary: Add new medication to inventory
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - batchNumber
+ *               - category
+ *               - type
+ *               - strength
+ *               - expiryDate
+ *             properties:
+ *               name:
+ *                 type: string
+ *               genericName:
+ *                 type: string
+ *               batchNumber:
+ *                 type: string
+ *               category:
+ *                 type: string
+ *               type:
+ *                 type: string
+ *               strength:
+ *                 type: string
+ *               manufacturer:
+ *                 type: string
+ *               currentStock:
+ *                 type: integer
+ *               minStockLevel:
+ *                 type: integer
+ *               maxStockLevel:
+ *                 type: integer
+ *               supplierId:
+ *                 type: string
+ *                 format: uuid
+ *               markedPrice:
+ *                 type: number
+ *               markupPercentage:
+ *                 type: number
+ *               storageLocation:
+ *                 type: string
+ *                 enum: [STORE, MEDICAL_CAMP, PHARMACY]
+ *               expiryDate:
+ *                 type: string
+ *                 format: date
+ *               imageUrl:
+ *                 type: string
+ *               prescriptionRequired:
+ *                 type: boolean
+ *               location:
+ *                 type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Medication added successfully
+ */
+router.post(
+  '/inventory',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['manage_pharmacy_inventory']),
+  pharmacyController.addMedication
+);
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/inventory:
+ *   get:
+ *     summary: Get all medications in inventory
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: supplierId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: storageLocation
+ *         schema:
+ *           type: string
+ *           enum: [STORE, MEDICAL_CAMP, PHARMACY]
+ *       - in: query
+ *         name: lowStock
+ *         schema:
+ *           type: boolean
+ *       - in: query
+ *         name: expiringSoon
+ *         schema:
+ *           type: boolean
+ *     responses:
+ *       200:
+ *         description: Inventory list retrieved successfully
+ */
+router.get(
+  '/inventory',
+  authorize(['PHARMACIST', 'DOCTOR', 'NURSE', 'ADMIN']),
+  // hasPermission(['view_pharmacy_inventory']),
+  pharmacyController.getInventory
+);
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/inventory/{id}:
+ *   get:
+ *     summary: Get medication by ID
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Medication details retrieved successfully
+ */
+router.get(
+  '/inventory/:id',
+  authorize(['PHARMACIST', 'DOCTOR', 'NURSE', 'ADMIN']),
+  // hasPermission(['view_pharmacy_inventory']),
+  pharmacyController.getMedicationById
+);
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/inventory/{id}:
+ *   put:
+ *     summary: Update medication details
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Medication updated successfully
+ */
+router.put(
+  '/inventory/:id',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['manage_pharmacy_inventory']),
+  pharmacyController.updateMedication
+);
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/stock/adjustment/{id}:
+ *   post:
+ *     summary: Adjust stock level for a medication
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - quantity
+ *               - type
+ *             properties:
+ *               quantity:
+ *                 type: integer
+ *               type:
+ *                 type: string
+ *                 enum: [RECEIVED, DISPENSED, RETURNED, EXPIRED, DAMAGED, ADJUSTED]
+ *               reason:
+ *                 type: string
+ *               batchNumber:
+ *                 type: string
+ *               expiryDate:
+ *                 type: string
+ *                 format: date
+ *               markedPrice:
+ *                 type: number
+ *               markupPercentage:
+ *                 type: number
+ *               storageLocation:
+ *                 type: string
+ *                 enum: [STORE, MEDICAL_CAMP, PHARMACY]
+ *     responses:
+ *       200:
+ *         description: Stock adjusted successfully
+ */
+router.post(
+  '/stock/adjustment/:id',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['manage_pharmacy_inventory']),
+  pharmacyController.updateStock
+);
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/stock/low:
+ *   get:
+ *     summary: Get medications with low stock levels
  *     tags: [Pharmacy]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Pending dispense requests retrieved successfully
+ *         description: Low stock medications retrieved successfully
  */
- router.get(
-  '/dispense/pending',
-  authorize(['PHARMACIST']),
-  hasPermission(['dispense_medication']),
-  pharmacyController.getPendingDispenses
- );
- 
- module.exports = router;
+router.get(
+  '/stock/low',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['view_pharmacy_inventory']),
+  pharmacyController.getLowStockItems
+);
+
+/**
+ * @swagger
+ * /api/v1/pharmacy/stats:
+ *   get:
+ *     summary: Get pharmacy statistics
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Statistics retrieved successfully
+ */
+router.get(
+  '/stats',
+  authorize(['PHARMACIST', 'ADMIN']),
+  // hasPermission(['view_pharmacy_reports']),
+  pharmacyController.getPharmacyStats
+);
+
+module.exports = router;
