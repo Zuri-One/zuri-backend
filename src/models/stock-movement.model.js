@@ -8,7 +8,7 @@ class StockMovement extends Model {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true
       },
-      medication_id: {  // Changed to match DB column name
+      medicationId: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
@@ -17,22 +17,22 @@ class StockMovement extends Model {
         }
       },
       type: {
-        type: DataTypes.ENUM('RECEIVED', 'DISPENSED', 'RETURNED', 'EXPIRED', 'DAMAGED', 'ADJUSTED'),
+        type: DataTypes.ENUM('RECEIVED', 'DISPENSED', 'RETURNED', 'EXPIRED', 'DAMAGED', 'ADJUSTED', 'TRANSFER'),
         allowNull: false
       },
       quantity: {
         type: DataTypes.INTEGER,
         allowNull: false
       },
-      batch_number: {  // Changed to match DB column name
+      batchNumber: {
         type: DataTypes.STRING,
         allowNull: true
       },
-      unit_price: {  // Changed to match DB column name
+      unitPrice: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false
       },
-      total_price: {  // Changed to match DB column name
+      totalPrice: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false
       },
@@ -40,7 +40,7 @@ class StockMovement extends Model {
         type: DataTypes.TEXT,
         allowNull: true
       },
-      performed_by: {  // Changed to match DB column name
+      performedBy: {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
@@ -48,24 +48,46 @@ class StockMovement extends Model {
           key: 'id'
         }
       },
-      source_type: {  // Changed to match DB column name
+      sourceType: {
         type: DataTypes.STRING(50),
         allowNull: true
       },
-      source_id: {  // Changed to match DB column name
+      sourceId: {
         type: DataTypes.UUID,
+        allowNull: true
+      },
+      fromLocation: {
+        type: DataTypes.ENUM('STORE', 'MEDICAL_CAMP', 'PHARMACY'),
+        allowNull: true
+      },
+      toLocation: {
+        type: DataTypes.ENUM('STORE', 'MEDICAL_CAMP', 'PHARMACY'),
         allowNull: true
       }
     }, {
       sequelize,
       modelName: 'StockMovement',
       tableName: 'stock_movements',
-      underscored: true,  // Added to handle snake_case column names
-      timestamps: true,
-      createdAt: 'created_at',  // Specify the actual column names
-      updatedAt: 'updated_at'
+      underscored: true,
+      timestamps: true
     });
+  }
+
+  static associate(models) {
+    if (models.Medication) {
+      this.belongsTo(models.Medication, {
+        foreignKey: 'medicationId',
+        as: 'medication'
+      });
+    }
+    
+    if (models.User) {
+      this.belongsTo(models.User, {
+        foreignKey: 'performedBy',
+        as: 'performer'
+      });
+    }
   }
 }
 
-  module.exports = StockMovement;
+module.exports = StockMovement;

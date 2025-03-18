@@ -18,8 +18,7 @@ class Medication extends Model {
       },
       batchNumber: {
         type: DataTypes.STRING,
-        allowNull: false,
-        unique: true
+        allowNull: false
       },
       category: {
         type: DataTypes.ENUM('ANTIBIOTIC', 'ANALGESIC', 'ANTIVIRAL', 'ANTIHISTAMINE', 
@@ -55,9 +54,31 @@ class Medication extends Model {
         allowNull: false,
         defaultValue: 1000
       },
+      supplier_id: { // Changed field name to match database column
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: 'suppliers',
+          key: 'id'
+        }
+      },
+      markedPrice: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+      },
+      markupPercentage: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: true,
+        defaultValue: 15.00
+      },
       unitPrice: {
-        type: DataTypes.DECIMAL,  // Changed from DECIMAL(10,2)
+        type: DataTypes.DECIMAL(10, 2),
         allowNull: false
+      },
+      storageLocation: {
+        type: DataTypes.ENUM('STORE', 'MEDICAL_CAMP', 'PHARMACY'),
+        allowNull: false,
+        defaultValue: 'PHARMACY'
       },
       expiryDate: {
         type: DataTypes.DATE,
@@ -82,19 +103,22 @@ class Medication extends Model {
       notes: {
         type: DataTypes.TEXT,
         allowNull: true
+      },
+      inventoryReceiptId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: 'inventory_receipts',
+          key: 'id'
+        }
       }
     }, {
       sequelize,
       modelName: 'Medication',
-      tableName: 'Medications',
+      tableName: 'Medications', // Changed to match uppercase table name in database
       timestamps: true,
-      underscored: false,
-      freezeTableName: true
+      underscored: true
     });
-
-    // Log the initialized attributes
-    console.log('Medication model initialized with attributes:', 
-      Object.keys(model.rawAttributes));
 
     return model;
   }
@@ -104,6 +128,20 @@ class Medication extends Model {
       this.hasMany(models.StockMovement, {
         foreignKey: 'medicationId',
         as: 'stockMovements'
+      });
+    }
+    
+    if (models.Supplier) {
+      this.belongsTo(models.Supplier, {
+        foreignKey: 'supplier_id', // Changed to match database column
+        as: 'supplier'
+      });
+    }
+    
+    if (models.InventoryReceipt) {
+      this.belongsTo(models.InventoryReceipt, {
+        foreignKey: 'inventoryReceiptId',
+        as: 'inventoryReceipt'
       });
     }
   }

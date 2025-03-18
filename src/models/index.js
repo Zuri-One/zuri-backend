@@ -15,6 +15,7 @@ const models = {
   HealthMetric: require(path.join(__dirname, 'health-metric.model')),
   Prescription: require(path.join(__dirname, 'prescription.model')),
   Medication: require(path.join(__dirname, 'medication.model')),
+  MedicationDispense: require(path.join(__dirname, 'medication-dispense.model')),
   PrescriptionMedications: require(path.join(__dirname, 'prescription-medications.model')),
   MedicalRecord: require(path.join(__dirname, 'medical-record.model')),
   LabTest: require(path.join(__dirname, 'lab-test.model')),
@@ -32,6 +33,8 @@ const models = {
   ConsultationQueue: require(path.join(__dirname, 'consultation-queue.model')),
   DepartmentQueue: require(path.join(__dirname, 'department-queue.model')),
   Examination: require(path.join(__dirname, 'examination.model')),
+  Supplier: require(path.join(__dirname, 'supplier.model')),
+  InventoryReceipt : require(path.join(__dirname, 'inventory-receipt.model')),
 };
 
 // Enhanced initialization function that supports multiple patterns
@@ -95,6 +98,7 @@ const modelInitializationOrder = [
   'HealthMetric',
   'Prescription',
   'Medication',
+  'MedicationDispense',
   'PrescriptionMedications',
   'MedicalRecord',
   'LabTest',
@@ -108,7 +112,9 @@ const modelInitializationOrder = [
   'Billing',
   'ConsultationQueue',
   'DepartmentQueue',
-  'Examination'
+  'Examination',
+  'Supplier',
+  'InventoryReceipt'
 ];
 
 // Initialize models in order with enhanced error handling
