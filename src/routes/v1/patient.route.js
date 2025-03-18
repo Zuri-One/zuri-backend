@@ -145,6 +145,79 @@ router.get('/doctors', patientController.searchDoctors);
 
 /**
  * @swagger
+ * /api/v1/patient/{id}/ccp-enrollment:
+ *   patch:
+ *     summary: Toggle patient's CCP enrollment status
+ *     tags: [Patient Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Patient ID (UUID)
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               isCCPEnrolled:
+ *                 type: boolean
+ *                 description: Optional. If provided, sets to this value. If not provided, toggles current value.
+ *     responses:
+ *       200:
+ *         description: CCP enrollment status updated successfully
+ *       404:
+ *         description: Patient not found
+ */
+router.patch('/:id/ccp-enrollment', 
+  authenticate, 
+  // authorize(['ADMIN', 'DOCTOR', 'NURSE']), 
+  patientController.toggleCCPEnrollment
+);
+
+/**
+ * @swagger
+ * /api/v1/patient/ccp/patients:
+ *   get:
+ *     summary: Get all CCP enrolled patients
+ *     tags: [Patient Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Page number for pagination (optional)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Number of records per page (optional, default 10)
+ *       - in: query
+ *         name: noPagination
+ *         schema:
+ *           type: boolean
+ *         description: If true, returns all records without pagination
+ *     responses:
+ *       200:
+ *         description: List of CCP enrolled patients retrieved successfully
+ */
+router.get('/ccp/patients', 
+  authenticate, 
+  // authorize(['ADMIN', 'DOCTOR', 'NURSE']), 
+  patientController.getCCPPatients
+);
+
+/**
+ * @swagger
  * /api/v1/patient/appointments/history:
  *   get:
  *     summary: Get patient's appointment history

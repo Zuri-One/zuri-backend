@@ -26,13 +26,13 @@ router.get('/patient/:patientId',
 // Create new examination record
 router.post('/', 
   authenticate, 
-  authorize(['NURSE', 'DOCTOR']), 
+  authorize(['NURSE', 'DOCTOR', 'LAB_TECHNICIAN']), 
   examinationController.createExamination
 );
 
 router.put('/:id', 
   authenticate, 
-  authorize(['NURSE', 'DOCTOR', 'HEAD_NURSE', 'ADMIN']), 
+  authorize(['NURSE', 'DOCTOR', 'HEAD_NURSE', 'ADMIN', 'LAB_TECHNICIAN']), 
   examinationController.updateExamination
 );
 

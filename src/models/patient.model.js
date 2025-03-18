@@ -92,6 +92,19 @@ class Patient extends Model {
       comment: 'Required - Area of residence'
     },
 
+    isCCPEnrolled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Indicates if patient is enrolled in Chronic Care Program'
+    },
+    
+    // Optional: You might want to add enrollment date too
+    ccpEnrollmentDate: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Date when patient was enrolled in CCP'
+    },
     // Authentication
     password: {
       type: DataTypes.STRING,

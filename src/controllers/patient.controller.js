@@ -593,6 +593,152 @@ exports.searchPatients = async (req, res, next) => {
   }
 };
 
+// Toggle CCP enrollment status
+exports.toggleCCPEnrollment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { isCCPEnrolled } = req.body;
+    
+    const patient = await Patient.findByPk(id);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    }
+
+    const updateData = {
+      isCCPEnrolled: isCCPEnrolled ?? !patient.isCCPEnrolled
+    };
+    
+    // Set enrollment date if enrolling
+    if (isCCPEnrolled === true || (isCCPEnrolled === undefined && !patient.isCCPEnrolled)) {
+      updateData.ccpEnrollmentDate = patient.ccpEnrollmentDate || new Date();
+    }
+
+    await patient.update(updateData);
+
+    res.json({
+      success: true,
+      message: `Patient ${updateData.isCCPEnrolled ? 'enrolled in' : 'unenrolled from'} CCP successfully`,
+      patient: {
+        id: patient.id,
+        patientNumber: patient.patientNumber,
+        fullName: `${patient.surname} ${patient.otherNames}`,
+        isCCPEnrolled: updateData.isCCPEnrolled,
+        ccpEnrollmentDate: updateData.ccpEnrollmentDate
+      }
+    });
+  } catch (error) {
+    console.error('Error toggling CCP enrollment:', error);
+    next(error);
+  }
+};
+
+// Get all CCP enrolled patients
+exports.getCCPPatients = async (req, res, next) => {
+  try {
+    const { page, limit, noPagination } = req.query;
+    
+    // Base query options
+    const queryOptions = {
+      where: {
+        isCCPEnrolled: true
+      },
+      attributes: [
+        'id',
+        'patientNumber',
+        'surname',
+        'otherNames',
+        'sex',
+        'dateOfBirth',
+        'telephone1',
+        'email',
+        'nationality',
+        'residence',
+        'town',
+        'isEmergency',
+        'isRevisit',
+        'status',
+        'isCCPEnrolled',
+        'ccpEnrollmentDate',
+        'createdAt'
+      ],
+      order: [['ccpEnrollmentDate', 'DESC']]
+    };
+
+    // If pagination is explicitly disabled
+    if (noPagination === 'true') {
+      const patients = await Patient.findAll(queryOptions);
+      return res.json({
+        success: true,
+        data: {
+          patients: patients.map(patient => ({
+            id: patient.id,
+            patientNumber: patient.patientNumber,
+            fullName: `${patient.surname} ${patient.otherNames}`,
+            age: moment().diff(moment(patient.dateOfBirth), 'years'),
+            sex: patient.sex,
+            contact: patient.telephone1,
+            email: patient.email || 'N/A',
+            location: `${patient.residence}, ${patient.town}`,
+            status: patient.status,
+            isEmergency: patient.isEmergency,
+            isRevisit: patient.isRevisit,
+            enrolledOn: patient.ccpEnrollmentDate ? moment(patient.ccpEnrollmentDate).format('MMMM Do YYYY') : 'N/A',
+            registeredOn: moment(patient.createdAt).format('MMMM Do YYYY')
+          })),
+          total: patients.length
+        }
+      });
+    }
+
+    // Pagination options
+    const currentPage = parseInt(page) || 1;
+    const itemsPerPage = Math.min(parseInt(limit) || 10, 100); // Max 100 items per page
+    
+    // Add pagination to query
+    const { count, rows: patients } = await Patient.findAndCountAll({
+      ...queryOptions,
+      offset: (currentPage - 1) * itemsPerPage,
+      limit: itemsPerPage
+    });
+
+    // Calculate total pages
+    const totalPages = Math.ceil(count / itemsPerPage);
+
+    // Format response
+    res.json({
+      success: true,
+      data: {
+        patients: patients.map(patient => ({
+          id: patient.id,
+          patientNumber: patient.patientNumber,
+          fullName: `${patient.surname} ${patient.otherNames}`,
+          age: moment().diff(moment(patient.dateOfBirth), 'years'),
+          sex: patient.sex,
+          contact: patient.telephone1,
+          email: patient.email || 'N/A',
+          location: `${patient.residence}, ${patient.town}`,
+          status: patient.status,
+          isEmergency: patient.isEmergency,
+          isRevisit: patient.isRevisit,
+          enrolledOn: patient.ccpEnrollmentDate ? moment(patient.ccpEnrollmentDate).format('MMMM Do YYYY') : 'N/A',
+          registeredOn: moment(patient.createdAt).format('MMMM Do YYYY')
+        })),
+        pagination: {
+          total: count,
+          pages: totalPages,
+          page: currentPage,
+          limit: itemsPerPage
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching CCP patients:', error);
+    next(error);
+  }
+};
 
 exports.getPatientRegistrations = async (req, res, next) => {
   try {
