@@ -1076,6 +1076,10 @@ exports.getPatientDetails = async (req, res, next) => {
         currentStatus: patient.status,
         isActive: patient.isActive
       },
+      chronicCareProgram: {
+        isEnrolled: patient.isCCPEnrolled,
+        enrollmentDate: patient.ccpEnrollmentDate ? moment(patient.ccpEnrollmentDate).format('MMMM Do YYYY') : null
+      },
       registrationInfo: {
         registeredOn: moment(patient.createdAt).format('MMMM Do YYYY, h:mm:ss a'),
         registrationNotes: patient.registrationNotes || null,
