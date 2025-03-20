@@ -17,14 +17,22 @@ exports.createMedication = async (req, res, next) => {
 exports.getAllMedications = async (req, res, next) => {
   try {
     const medications = await Medication.findAll({
+      attributes: [
+        'id', 'name', 'genericName', 'batchNumber', 'category', 'type', 'strength', 
+        'manufacturer', 'currentStock', 'minStockLevel', 'maxStockLevel', 
+        'supplier_id', 'unitPrice', 'expiryDate', 'imageUrl', 'prescriptionRequired', 
+        'isActive', 'location', 'notes', 'createdAt', 'updatedAt'
+      ],
       where: { isActive: true },
       order: [['name', 'ASC']]
     });
+    
     res.json({
       success: true,
       medications
     });
   } catch (error) {
+    console.error('Error fetching medications:', error.message);
     next(error);
   }
 };

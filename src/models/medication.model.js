@@ -117,7 +117,7 @@ class Medication extends Model {
       modelName: 'Medication',
       tableName: 'Medications', // Changed to match uppercase table name in database
       timestamps: true,
-      underscored: true
+      // underscored: true
     });
 
     return model;
