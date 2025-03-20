@@ -736,6 +736,7 @@ exports.getCCPPatients = async (req, res, next) => {
         'sex',
         'dateOfBirth',
         'telephone1',
+        'telephone2',
         'email',
         'nationality',
         'residence',
@@ -743,35 +744,84 @@ exports.getCCPPatients = async (req, res, next) => {
         'isEmergency',
         'isRevisit',
         'status',
+        'isActive',
+        'occupation',
         'isCCPEnrolled',
         'ccpEnrollmentDate',
-        'createdAt'
+        'createdAt',
+        'updatedAt'
       ],
+      include: [{
+        model: DepartmentQueue,
+        as: 'DepartmentQueues',
+        required: false,
+        include: [{
+          model: Department,
+          attributes: ['name', 'code']
+        }],
+        where: {
+          status: {
+            [Op.notIn]: ['COMPLETED', 'TRANSFERRED', 'CANCELLED']
+          }
+        },
+        order: [['createdAt', 'DESC']],
+        limit: 1,
+        separate: true
+      }],
       order: [['ccpEnrollmentDate', 'DESC']]
     };
 
     // If pagination is explicitly disabled
     if (noPagination === 'true') {
       const patients = await Patient.findAll(queryOptions);
+      
+      const formattedPatients = patients.map(patient => ({
+        personalInfo: {
+          id: patient.id,
+          patientNumber: patient.patientNumber,
+          surname: patient.surname,
+          otherNames: patient.otherNames,
+          fullName: `${patient.surname} ${patient.otherNames}`,
+          sex: patient.sex,
+          dateOfBirth: patient.dateOfBirth,
+          age: moment().diff(moment(patient.dateOfBirth), 'years'),
+          nationality: patient.nationality,
+          occupation: patient.occupation
+        },
+        contactInfo: {
+          telephone1: patient.telephone1,
+          telephone2: patient.telephone2 || null,
+          email: patient.email || null,
+          residence: patient.residence,
+          town: patient.town
+        },
+        status: {
+          isEmergency: patient.isEmergency,
+          isRevisit: patient.isRevisit,
+          currentStatus: patient.status,
+          isActive: patient.isActive,
+          currentQueue: patient.DepartmentQueues?.[0] ? {
+            department: patient.DepartmentQueues[0].Department.name,
+            status: patient.DepartmentQueues[0].status,
+            queueNumber: patient.DepartmentQueues[0].queueNumber
+          } : null
+        },
+        chronicCareProgram: {
+          isEnrolled: patient.isCCPEnrolled,
+          enrollmentDate: patient.ccpEnrollmentDate ? moment(patient.ccpEnrollmentDate).format('MMMM Do YYYY') : null
+        },
+        registrationInfo: {
+          registeredOn: moment(patient.createdAt).format('MMMM Do YYYY'),
+          lastUpdated: moment(patient.updatedAt).format('MMMM Do YYYY')
+        }
+      }));
+      
       return res.json({
         success: true,
-        data: {
-          patients: patients.map(patient => ({
-            id: patient.id,
-            patientNumber: patient.patientNumber,
-            fullName: `${patient.surname} ${patient.otherNames}`,
-            age: moment().diff(moment(patient.dateOfBirth), 'years'),
-            sex: patient.sex,
-            contact: patient.telephone1,
-            email: patient.email || 'N/A',
-            location: `${patient.residence}, ${patient.town}`,
-            status: patient.status,
-            isEmergency: patient.isEmergency,
-            isRevisit: patient.isRevisit,
-            enrolledOn: patient.ccpEnrollmentDate ? moment(patient.ccpEnrollmentDate).format('MMMM Do YYYY') : 'N/A',
-            registeredOn: moment(patient.createdAt).format('MMMM Do YYYY')
-          })),
-          total: patients.length
+        count: formattedPatients.length,
+        patients: formattedPatients,
+        summary: {
+          total: formattedPatients.length
         }
       });
     }
@@ -791,30 +841,56 @@ exports.getCCPPatients = async (req, res, next) => {
     const totalPages = Math.ceil(count / itemsPerPage);
 
     // Format response
+    const formattedPatients = patients.map(patient => ({
+      personalInfo: {
+        id: patient.id,
+        patientNumber: patient.patientNumber,
+        surname: patient.surname,
+        otherNames: patient.otherNames,
+        fullName: `${patient.surname} ${patient.otherNames}`,
+        sex: patient.sex,
+        dateOfBirth: patient.dateOfBirth,
+        age: moment().diff(moment(patient.dateOfBirth), 'years'),
+        nationality: patient.nationality,
+        occupation: patient.occupation
+      },
+      contactInfo: {
+        telephone1: patient.telephone1,
+        telephone2: patient.telephone2 || null,
+        email: patient.email || null,
+        residence: patient.residence,
+        town: patient.town
+      },
+      status: {
+        isEmergency: patient.isEmergency,
+        isRevisit: patient.isRevisit,
+        currentStatus: patient.status,
+        isActive: patient.isActive,
+        currentQueue: patient.DepartmentQueues?.[0] ? {
+          department: patient.DepartmentQueues[0].Department.name,
+          status: patient.DepartmentQueues[0].status,
+          queueNumber: patient.DepartmentQueues[0].queueNumber
+        } : null
+      },
+      chronicCareProgram: {
+        isEnrolled: patient.isCCPEnrolled,
+        enrollmentDate: patient.ccpEnrollmentDate ? moment(patient.ccpEnrollmentDate).format('MMMM Do YYYY') : null
+      },
+      registrationInfo: {
+        registeredOn: moment(patient.createdAt).format('MMMM Do YYYY'),
+        lastUpdated: moment(patient.updatedAt).format('MMMM Do YYYY')
+      }
+    }));
+
     res.json({
       success: true,
-      data: {
-        patients: patients.map(patient => ({
-          id: patient.id,
-          patientNumber: patient.patientNumber,
-          fullName: `${patient.surname} ${patient.otherNames}`,
-          age: moment().diff(moment(patient.dateOfBirth), 'years'),
-          sex: patient.sex,
-          contact: patient.telephone1,
-          email: patient.email || 'N/A',
-          location: `${patient.residence}, ${patient.town}`,
-          status: patient.status,
-          isEmergency: patient.isEmergency,
-          isRevisit: patient.isRevisit,
-          enrolledOn: patient.ccpEnrollmentDate ? moment(patient.ccpEnrollmentDate).format('MMMM Do YYYY') : 'N/A',
-          registeredOn: moment(patient.createdAt).format('MMMM Do YYYY')
-        })),
-        pagination: {
-          total: count,
-          pages: totalPages,
-          page: currentPage,
-          limit: itemsPerPage
-        }
+      count: formattedPatients.length,
+      patients: formattedPatients,
+      pagination: {
+        total: count,
+        pages: totalPages,
+        page: currentPage,
+        limit: itemsPerPage
       }
     });
   } catch (error) {
