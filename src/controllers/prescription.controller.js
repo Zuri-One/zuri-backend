@@ -32,7 +32,7 @@ exports.createPrescription = async (req, res, next) => {
         await Promise.all(medications.map(med => 
           newPrescription.addMedication(med.medicationId, {
             through: {
-              quantity: 1,  // or med.quantity if you send it
+              quantity: med.quantity || 1,  // Use med.quantity if provided or default to 1
               specialInstructions: `Dosage: ${med.dosage}, Frequency: ${med.frequency}, Duration: ${med.duration}`
             },
             transaction: t
@@ -58,8 +58,9 @@ exports.createPrescription = async (req, res, next) => {
         },
         {
           model: Medication,
+          attributes: ['id', 'name'], // Only include necessary attributes
           through: {
-            attributes: ['quantity', 'specialInstructions']  // Changed to match actual columns
+            attributes: ['quantity', 'specialInstructions']
           }
         }
       ]
