@@ -14,6 +14,15 @@ const { Op } = require('sequelize');
 const { sendEmail } = require('../utils/email.util');
 const { generateDispenseReport } = require('../utils/pdf.util');
 const { validateMedicationInteractions } = require('../utils/pharmacy.util');
+const { 
+  calculateDiscountedPrice, 
+  getPackageDetails, 
+  getItemDetails,
+  INSURANCE_COVERAGE_LIMIT,
+  TRIAGE_PACKAGES,
+  LAB_PACKAGES,
+  INDIVIDUAL_ITEMS 
+} = require('../utils/billing.utils');
 
 class PharmacyController {
   // Supplier Management

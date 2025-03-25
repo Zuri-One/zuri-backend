@@ -1,4 +1,6 @@
 const { Prescription, User, Medication, sequelize } = require('../models');
+const BillingService = require('../services/billing.service');
+
 
 exports.createPrescription = async (req, res, next) => {
   try {
@@ -141,9 +143,9 @@ exports.getPatientPrescriptions = async (req, res, next) => {
       });
     }
     
-    // Get the medication data using raw SQL with proper quoting for column names
+    // Updated SQL query to include unitPrice in the selection
     const rawMeds = await sequelize.query(`
-      SELECT pm.*, m."id", m."name", m."strength", m."type"
+      SELECT pm.*, m."id", m."name", m."strength", m."type", m."unitPrice"
       FROM "PrescriptionMedications" AS pm
       JOIN "Medications" AS m ON pm."MedicationId" = m."id"
       WHERE pm."prescriptionId" IN (:prescriptionIds)
@@ -152,7 +154,7 @@ exports.getPatientPrescriptions = async (req, res, next) => {
       type: sequelize.QueryTypes.SELECT
     });
     
-    // Group medications by prescription ID
+    // Updated grouping to include unitPrice in the medication object
     const medsLookup = rawMeds.reduce((acc, med) => {
       if (!acc[med.prescriptionId]) acc[med.prescriptionId] = [];
       acc[med.prescriptionId].push({
@@ -161,7 +163,8 @@ exports.getPatientPrescriptions = async (req, res, next) => {
           id: med.id,
           name: med.name,
           strength: med.strength,
-          type: med.type
+          type: med.type,
+          unitPrice: med.unitPrice  // Added unitPrice field
         },
         quantity: med.quantity,
         specialInstructions: med.specialInstructions
@@ -188,6 +191,48 @@ exports.getPatientPrescriptions = async (req, res, next) => {
     });
   }
 };
+
+
+exports.updatePrescriptionMedication = async (req, res, next) => {
+  try {
+    const { prescriptionId, medicationId } = req.params;
+    const { dosage, frequency, duration, quantity } = req.body;
+
+    // Parse the existing special instructions
+    const prescriptionMedication = await sequelize.models.PrescriptionMedication.findOne({
+      where: {
+        prescriptionId,
+        medicationId
+      }
+    });
+
+    if (!prescriptionMedication) {
+      return res.status(404).json({
+        success: false,
+        message: 'Prescription medication not found'
+      });
+    }
+
+    // Create new special instructions string with updated values
+    const specialInstructions = `Dosage: ${dosage}, Frequency: ${frequency}, Duration: ${duration}`;
+
+    // Update the prescription medication
+    await prescriptionMedication.update({
+      specialInstructions,
+      quantity: quantity || prescriptionMedication.quantity
+    });
+
+    res.json({
+      success: true,
+      message: 'Prescription medication updated successfully',
+      prescriptionMedication
+    });
+  } catch (error) {
+    console.error('Error updating prescription medication:', error);
+    next(error);
+  }
+};
+
 
 exports.updatePrescriptionStatus = async (req, res, next) => {
   try {

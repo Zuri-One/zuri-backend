@@ -1,4 +1,6 @@
 // utils/billing.utils.js
+const { Medication } = require('../models');
+const { Op } = require('sequelize');
 
 const INSURANCE_COVERAGE_LIMIT = 15000;
 
@@ -170,6 +172,27 @@ const INDIVIDUAL_ITEMS = {
   }
 };
 
+// Add logging function for consistent log format
+const log = (message, data = null) => {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    service: 'billing-utils',
+    message
+  };
+  
+  if (data) {
+    logEntry.data = data;
+  }
+  
+  console.log(JSON.stringify(logEntry));
+};
+
+/**
+ * Calculate price with discount applied based on payment type
+ * @param {number} basePrice - The base price of the item or package
+ * @param {boolean} isInsurance - Whether the patient is paying with insurance
+ * @returns {number} - The price after discount (if any)
+ */
 function calculateDiscountedPrice(basePrice, isInsurance = true) {
   if (!isInsurance) {
     return basePrice * 0.85; // 15% discount for cash patients
@@ -177,13 +200,94 @@ function calculateDiscountedPrice(basePrice, isInsurance = true) {
   return basePrice;
 }
 
+/**
+ * Get details for a specific package
+ * @param {string} packageId - The ID of the package to look up
+ * @param {string} type - The type of package (TRIAGE or LAB)
+ * @returns {Object|null} - Details about the package or null if not found
+ */
 function getPackageDetails(packageId, type = 'TRIAGE') {
   const packages = type === 'TRIAGE' ? TRIAGE_PACKAGES : LAB_PACKAGES;
   return packages[packageId];
 }
 
-function getItemDetails(itemId) {
-  return INDIVIDUAL_ITEMS[itemId];
+/**
+ * Get item details from predefined items or medication database
+ * @param {string} itemId - The ID of the item to look up
+ * @param {string} type - The type of item (used to distinguish pharmacy items)
+ * @returns {Promise<Object|null>} - Details about the item or null if not found
+ */
+async function getItemDetails(itemId, type = '') {
+  try {
+    log(`Looking up item: ${itemId}, type: ${type}`);
+    
+    // First check if it's a predefined item
+    if (INDIVIDUAL_ITEMS[itemId]) {
+      log(`Found predefined item: ${itemId}`, { item: INDIVIDUAL_ITEMS[itemId] });
+      return INDIVIDUAL_ITEMS[itemId];
+    }
+    
+    log(`Item ${itemId} not found in predefined items, checking Medications database`);
+
+    // If type is PHARMACY or the item wasn't found in predefined items, check the medications database
+    if (type === 'PHARMACY' || !INDIVIDUAL_ITEMS[itemId]) {
+      try {
+        // Look up the medication by ID using raw SQL to avoid column name issues
+        // This works directly with the database columns as they exist based on your schema
+        const medications = await Medication.sequelize.query(
+          `SELECT "id", "name", "genericName", "batchNumber", "category", 
+                 "type", "strength", "unitPrice", "storageLocation" 
+           FROM "Medications" 
+           WHERE "id" = :medicationId`,
+          {
+            replacements: { medicationId: itemId },
+            type: Medication.sequelize.QueryTypes.SELECT
+          }
+        );
+        
+        const medication = medications && medications.length > 0 ? medications[0] : null;
+        
+        if (medication) {
+          log(`Found medication in database: ${medication.name}`, { 
+            id: medication.id,
+            name: medication.name,
+            unitPrice: medication.unitPrice
+          });
+          
+          // Return medication details in a format compatible with billing
+          return {
+            name: medication.name,
+            basePrice: parseFloat(medication.unitPrice || 0),
+            unit: 'unit',
+            category: 'MEDICATION',
+            strength: medication.strength,
+            type: medication.type || 'MEDICATION',
+            batchNumber: medication.batchNumber,
+            genericName: medication.genericName
+          };
+        } else {
+          log(`Medication not found in database: ${itemId}`);
+        }
+      } catch (error) {
+        log(`Error fetching medication details: ${error.message}`, { 
+          error: error.toString(),
+          stack: error.stack,
+          itemId
+        });
+      }
+    }
+
+    log(`No item found with ID: ${itemId}`);
+    // If no item was found, return null
+    return null;
+  } catch (error) {
+    log(`Unexpected error in getItemDetails: ${error.message}`, {
+      error: error.toString(),
+      stack: error.stack,
+      itemId
+    });
+    return null;
+  }
 }
 
 module.exports = {

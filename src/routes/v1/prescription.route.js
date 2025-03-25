@@ -3,6 +3,7 @@ const router = express.Router();
 const prescriptionController = require('../../controllers/prescription.controller');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
+
 /**
  * @swagger
  * /api/v1/prescriptions:
@@ -13,6 +14,9 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
  */
 router.post('/', authenticate, prescriptionController.createPrescription);
 
+
+router.post('/', authenticate, prescriptionController.createPrescription);
+router.patch('/:prescriptionId/medications/:medicationId', authenticate, prescriptionController.updatePrescriptionMedication);
 /**
  * @swagger
  * /api/v1/prescriptions/{id}:
