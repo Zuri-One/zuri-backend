@@ -39,6 +39,18 @@ class PrescriptionMedications extends Model {
       timestamps: true
     });
   }
+
+  static associate(models) {
+    // Define the relationship to Medication
+    this.belongsTo(models.Medication, {
+      foreignKey: 'MedicationId'  // Make sure this matches your database column exactly
+    });
+    
+    // Define the relationship to Prescription
+    this.belongsTo(models.Prescription, {
+      foreignKey: 'prescriptionId'
+    });
+  }
 }
 
 module.exports = PrescriptionMedications;

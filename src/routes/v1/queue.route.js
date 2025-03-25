@@ -67,7 +67,7 @@ router.get('/patient/:patientId/history',
  */
 router.get('/department/:departmentId', 
   authenticate, 
-  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']), 
+  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'PHARMACIST']), 
   queueController.getDepartmentQueue
 );
 

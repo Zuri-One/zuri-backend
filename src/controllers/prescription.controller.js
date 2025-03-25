@@ -118,6 +118,7 @@ exports.getPrescription = async (req, res, next) => {
 
 exports.getPatientPrescriptions = async (req, res, next) => {
   try {
+    // Get the basic prescription data first
     const prescriptions = await Prescription.findAll({
       where: { patientId: req.params.patientId },
       include: [
@@ -125,23 +126,66 @@ exports.getPatientPrescriptions = async (req, res, next) => {
           model: User,
           as: 'DOCTOR',
           attributes: ['id', 'surname', 'otherNames']
-        },
-        {
-          model: Medication,
-          through: {
-            attributes: ['quantity', 'specialInstructions']
-          }
         }
       ],
       order: [['createdAt', 'DESC']]
     });
 
-    res.json({
+    // Get the prescription IDs
+    const prescriptionIds = prescriptions.map(p => p.id);
+    
+    if (prescriptionIds.length === 0) {
+      return res.json({
+        success: true,
+        prescriptions: []
+      });
+    }
+    
+    // Get the medication data using raw SQL with proper quoting for column names
+    const rawMeds = await sequelize.query(`
+      SELECT pm.*, m."id", m."name", m."strength", m."type"
+      FROM "PrescriptionMedications" AS pm
+      JOIN "Medications" AS m ON pm."MedicationId" = m."id"
+      WHERE pm."prescriptionId" IN (:prescriptionIds)
+    `, {
+      replacements: { prescriptionIds },
+      type: sequelize.QueryTypes.SELECT
+    });
+    
+    // Group medications by prescription ID
+    const medsLookup = rawMeds.reduce((acc, med) => {
+      if (!acc[med.prescriptionId]) acc[med.prescriptionId] = [];
+      acc[med.prescriptionId].push({
+        id: med.id,
+        medication: {
+          id: med.id,
+          name: med.name,
+          strength: med.strength,
+          type: med.type
+        },
+        quantity: med.quantity,
+        specialInstructions: med.specialInstructions
+      });
+      return acc;
+    }, {});
+    
+    // Add medications to prescriptions
+    const fullPrescriptions = prescriptions.map(p => {
+      const plainP = p.get({ plain: true });
+      plainP.medications = medsLookup[p.id] || [];
+      return plainP;
+    });
+    
+    return res.json({
       success: true,
-      prescriptions
+      prescriptions: fullPrescriptions
     });
   } catch (error) {
-    next(error);
+    console.error('Error fetching patient prescriptions:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Database error occurred'
+    });
   }
 };
 

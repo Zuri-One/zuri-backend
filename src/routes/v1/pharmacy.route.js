@@ -51,6 +51,71 @@ router.get(
   pharmacyController.getPendingDispenses
 );
 
+// For viewing all pending prescriptions
+router.get(
+  '/pending',
+  authorize(['PHARMACIST']),
+  pharmacyController.getPendingPrescriptions
+);
+
+// For viewing a specific dispensed prescription
+router.get(
+  '/prescriptions/dispensed/:id',
+  authorize(['PHARMACIST']),
+  pharmacyController.getDispensedPrescriptionDetails
+);
+
+
+
+ 
+/**
+ * @swagger
+ * /api/v1/pharmacy/dispense/prescription:
+ *   post:
+ *     summary: Dispense medications for a prescription
+ *     tags: [Pharmacy]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - prescriptionId
+ *               - medicationDispenses
+ *             properties:
+ *               prescriptionId:
+ *                 type: string
+ *                 format: uuid
+ *               medicationDispenses:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     medicationId:
+ *                       type: string
+ *                     patientId:
+ *                       type: string
+ *                     quantity:
+ *                       type: integer
+ *                     dosage:
+ *                       type: string
+ *                     frequency:
+ *                       type: string
+ *                     duration:
+ *                       type: string
+ *     responses:
+ *       200:
+ *         description: Medications dispensed successfully
+ */
+router.post(
+  '/dispense/prescription',
+  authorize(['PHARMACIST']),
+  // hasPermission(['dispense_medication']),
+  pharmacyController.manualDispensePrescription
+);
 
 /**
  * @swagger
