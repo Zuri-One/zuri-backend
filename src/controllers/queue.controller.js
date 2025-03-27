@@ -142,7 +142,7 @@ exports.addToQueue = async (req, res, next) => {
           patientStatus = 'WAITING_RADIOLOGY';
           break;
         case 'PHAR':
-          patientStatus = 'WAITING_PHARMACY';
+          patientStatus = 'IN_PHARMACY';
           break;
         default:
           patientStatus = source === 'TRIAGE' ? 'IN_TRIAGE' : 'WAITING';
