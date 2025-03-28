@@ -2,6 +2,7 @@ const { LabTest, Patient, User, DepartmentQueue } = require('../models');
 const { Op } = require('sequelize');
 const sequelize = require('../models').sequelize;
 
+
 /**
  * Get lab queue including both physical queue and pending lab tests
  * @route GET /api/v1/queue/lab-queue
@@ -43,6 +44,10 @@ exports.getLabQueue = async (req, res, next) => {
           model: User,
           as: 'assignedStaff',
           attributes: ['id', 'surname', 'otherNames']
+        },
+        {
+          model: Triage,
+          attributes: ['id', 'category', 'priorityScore']
         }
       ],
       order: [
@@ -69,8 +74,6 @@ exports.getLabQueue = async (req, res, next) => {
         }
       ],
       order: [
-        // For lab tests, URGENT priority comes first
-        [sequelize.literal(`CASE WHEN priority = 'URGENT' THEN 0 ELSE 1 END`), 'ASC'],
         ['createdAt', 'ASC']
       ]
     });
@@ -81,57 +84,57 @@ exports.getLabQueue = async (req, res, next) => {
       !patientsInQueueIds.includes(test.patientId)
     );
 
-    // Format the pending lab tests to have a similar structure as queue entries
-    const formattedPendingTests = filteredPendingTests.map(test => ({
-      id: null, // No queue entry ID yet
-      type: 'PENDING_LAB_TEST',
-      testId: test.id,
-      patientId: test.patientId,
-      patient: {
-        id: test.patient.id,
-        patientNumber: test.patient.patientNumber,
-        name: `${test.patient.surname} ${test.patient.otherNames}`,
-        sex: test.patient.sex,
-        dateOfBirth: test.patient.dateOfBirth,
-        isEmergency: test.patient.isEmergency
-      },
-      testType: test.testType,
-      priority: test.priority,
-      requestedBy: test.requestedBy ? `${test.requestedBy.surname} ${test.requestedBy.otherNames}` : null,
-      requestedAt: test.createdAt,
-      status: 'PENDING_TEST',
-      notes: test.notes
-    }));
+    // Get department info for lab department (needed for virtual entries)
+    const labDepartment = await Department.findByPk(staff.departmentId);
 
-    // Format queue entries for consistent response
-    const formattedQueueEntries = queueEntries.map(entry => ({
-      id: entry.id,
-      type: 'QUEUE_ENTRY',
-      patientId: entry.patientId,
-      patient: {
-        id: entry.Patient.id,
-        patientNumber: entry.Patient.patientNumber,
-        name: `${entry.Patient.surname} ${entry.Patient.otherNames}`,
-        sex: entry.Patient.sex,
-        dateOfBirth: entry.Patient.dateOfBirth,
-        isEmergency: entry.Patient.isEmergency
-      },
-      department: entry.Department.name,
-      queueNumber: entry.queueNumber,
-      priority: entry.priority,
-      status: entry.status,
-      assignedTo: entry.assignedStaff ? `${entry.assignedStaff.surname} ${entry.assignedStaff.otherNames}` : null,
-      createdAt: entry.createdAt,
-      estimatedWaitTime: entry.estimatedWaitTime,
-      notes: entry.notes
-    }));
+    // Create virtual queue entries for pending lab tests
+    const lastQueueNumber = queueEntries.length > 0 
+      ? Math.max(...queueEntries.map(entry => entry.queueNumber)) 
+      : 0;
+      
+    const virtualQueueEntries = filteredPendingTests.map((test, index) => {
+      // Create a virtual queue entry that looks just like a real one
+      return {
+        id: `virtual-${test.id}`, // Use a special ID format to identify virtual entries
+        patientId: test.patientId,
+        departmentId: staff.departmentId,
+        queueNumber: lastQueueNumber + index + 1,
+        priority: test.priority === 'URGENT' ? 1 : 3, // Map lab test priority to queue priority
+        status: 'WAITING',
+        source: 'LAB_REQUEST',
+        estimatedWaitTime: 30, // Default estimate
+        createdAt: test.createdAt,
+        updatedAt: test.updatedAt,
+        notes: `Pending lab test: ${test.testType}. ${test.notes || ''}`,
+        
+        // Include related models with the same structure as real queue entries
+        Patient: test.patient,
+        Department: labDepartment,
+        assignedStaff: test.requestedBy,
+        
+        // Add lab test specific info that might be useful
+        labTest: {
+          id: test.id,
+          testType: test.testType,
+          priority: test.priority,
+          requestedAt: test.createdAt
+        },
+        
+        // Flag this as a virtual entry
+        isVirtual: true
+      };
+    });
 
-    // Combined queue with both types of entries
-    const combinedQueue = {
-      queueEntries: formattedQueueEntries,
-      pendingTests: formattedPendingTests,
-      totalCount: formattedQueueEntries.length + formattedPendingTests.length
-    };
+    // Combine real and virtual queue entries
+    const combinedQueue = [...queueEntries, ...virtualQueueEntries];
+    
+    // Sort by priority and then creation date
+    combinedQueue.sort((a, b) => {
+      if (a.priority !== b.priority) {
+        return a.priority - b.priority;
+      }
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    });
 
     res.json({
       success: true,
@@ -143,6 +146,8 @@ exports.getLabQueue = async (req, res, next) => {
     next(error);
   }
 };
+
+
 exports.startLabTest = async (req, res, next) => {
   try {
     const { queueEntryId } = req.params;
