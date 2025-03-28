@@ -1,5 +1,6 @@
 const { DepartmentQueue, Patient, Department, User, Triage, MedicalRecord, LabTest  } = require('../models');
 const { Op } = require('sequelize');
+const sequelize = require('../models').sequelize;
 
 exports.addToQueue = async (req, res, next) => {
   try {
@@ -203,6 +204,7 @@ exports.addToQueue = async (req, res, next) => {
 };
 
 
+
 exports.getDepartmentQueue = async (req, res, next) => {
   try {
     const { departmentId } = req.params;
@@ -303,15 +305,30 @@ exports.getDoctorDepartmentQueue = async (req, res, next) => {
 };
 
 
+/**
+ * Get lab queue including both physical queue and pending lab tests
+ * @route GET /api/v1/queue/lab-queue
+ */
 exports.getLabQueue = async (req, res, next) => {
   try {
-    const labTechnician = await User.findByPk(req.user.id, {
-      attributes: ['departmentId'] 
+    const staffId = req.user.id;
+    
+    // Get lab technician's department
+    const staff = await User.findByPk(staffId, {
+      attributes: ['departmentId', 'role']
     });
- 
-    const queue = await DepartmentQueue.findAll({
+
+    if (!staff || !staff.departmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Lab technician not assigned to any department'
+      });
+    }
+
+    // Part 1: Get patients physically in the lab queue
+    const queueEntries = await DepartmentQueue.findAll({
       where: {
-        departmentId: labTechnician.departmentId,
+        departmentId: staff.departmentId,
         status: {
           [Op.in]: ['WAITING', 'IN_PROGRESS']
         }
@@ -322,30 +339,113 @@ exports.getLabQueue = async (req, res, next) => {
           attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'sex', 'dateOfBirth', 'isEmergency']
         },
         {
-          model: User,
-          as: 'assignedStaff',
-          attributes: ['id', 'surname', 'otherNames']  
+          model: Department,
+          attributes: ['id', 'name', 'code']
         },
         {
-          model: Triage,
-          attributes: ['id', 'category', 'priorityScore']
+          model: User,
+          as: 'assignedStaff',
+          attributes: ['id', 'surname', 'otherNames']
         }
       ],
       order: [
         ['priority', 'ASC'],
-        ['createdAt', 'ASC'] 
+        ['createdAt', 'ASC']
       ]
     });
- 
+
+    // Part 2: Get pending lab tests
+    const pendingLabTests = await LabTest.findAll({
+      where: {
+        status: 'PENDING'
+      },
+      include: [
+        {
+          model: Patient,
+          as: 'patient',
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'sex', 'dateOfBirth', 'isEmergency']
+        },
+        {
+          model: User,
+          as: 'requestedBy',
+          attributes: ['id', 'surname', 'otherNames']
+        }
+      ],
+      order: [
+        // For lab tests, URGENT priority comes first
+        [sequelize.literal(`CASE WHEN priority = 'URGENT' THEN 0 ELSE 1 END`), 'ASC'],
+        ['createdAt', 'ASC']
+      ]
+    });
+
+    // Filter out pending lab tests where the patient is already in the queue
+    const patientsInQueueIds = queueEntries.map(entry => entry.patientId);
+    const filteredPendingTests = pendingLabTests.filter(test => 
+      !patientsInQueueIds.includes(test.patientId)
+    );
+
+    // Format the pending lab tests to have a similar structure as queue entries
+    const formattedPendingTests = filteredPendingTests.map(test => ({
+      id: null, // No queue entry ID yet
+      type: 'PENDING_LAB_TEST',
+      testId: test.id,
+      patientId: test.patientId,
+      patient: {
+        id: test.patient.id,
+        patientNumber: test.patient.patientNumber,
+        name: `${test.patient.surname} ${test.patient.otherNames}`,
+        sex: test.patient.sex,
+        dateOfBirth: test.patient.dateOfBirth,
+        isEmergency: test.patient.isEmergency
+      },
+      testType: test.testType,
+      priority: test.priority,
+      requestedBy: test.requestedBy ? `${test.requestedBy.surname} ${test.requestedBy.otherNames}` : null,
+      requestedAt: test.createdAt,
+      status: 'PENDING_TEST',
+      notes: test.notes
+    }));
+
+    // Format queue entries for consistent response
+    const formattedQueueEntries = queueEntries.map(entry => ({
+      id: entry.id,
+      type: 'QUEUE_ENTRY',
+      patientId: entry.patientId,
+      patient: {
+        id: entry.Patient.id,
+        patientNumber: entry.Patient.patientNumber,
+        name: `${entry.Patient.surname} ${entry.Patient.otherNames}`,
+        sex: entry.Patient.sex,
+        dateOfBirth: entry.Patient.dateOfBirth,
+        isEmergency: entry.Patient.isEmergency
+      },
+      department: entry.Department.name,
+      queueNumber: entry.queueNumber,
+      priority: entry.priority,
+      status: entry.status,
+      assignedTo: entry.assignedStaff ? `${entry.assignedStaff.surname} ${entry.assignedStaff.otherNames}` : null,
+      createdAt: entry.createdAt,
+      estimatedWaitTime: entry.estimatedWaitTime,
+      notes: entry.notes
+    }));
+
+    // Combined queue with both types of entries
+    const combinedQueue = {
+      queueEntries: formattedQueueEntries,
+      pendingTests: formattedPendingTests,
+      totalCount: formattedQueueEntries.length + formattedPendingTests.length
+    };
+
     res.json({
       success: true,
-      data: queue
+      data: combinedQueue
     });
- 
+
   } catch (error) {
+    console.error('Error in getLabQueue:', error);
     next(error);
   }
- };
+};
 
 exports.getLabDepartmentQueue = async (req, res, next) => {
   try {
