@@ -112,7 +112,7 @@ router.put('/:queueId/assign',
  */
 router.post('/:queueId/transfer', 
   authenticate, 
-  authorize(['ADMIN', 'DOCTOR', 'NURSE']), 
+  authorize(['ADMIN', 'RECEPTIONIST', 'DOCTOR', 'NURSE']), 
   queueController.transferToAnotherDepartment
 );
 

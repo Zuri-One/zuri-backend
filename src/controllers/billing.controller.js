@@ -11,12 +11,10 @@ const {
 } = require('../utils/billing.utils');
 const PDFDocument = require('pdfkit');
 const { Readable } = require('stream');
-const { createUploadthing } = require('uploadthing/server');
+const fs = require('fs').promises;
+const path = require('path');
 const { Op } = require('sequelize');
 const whatsAppService = require('../services/whatsapp.service');
-
-// Initialize UploadThing
-const uploadthing = createUploadthing();
 
 // Add logging function for consistent log format
 const log = (message, data = null) => {
@@ -31,6 +29,42 @@ const log = (message, data = null) => {
   }
   
   console.log(JSON.stringify(logEntry));
+};
+
+/**
+ * Format phone number to international format for WhatsApp
+ * @param {string} phoneNumber - The phone number to format
+ * @returns {string} - Formatted phone number
+ */
+const formatPhoneForWhatsApp = (phoneNumber) => {
+  if (!phoneNumber) return null;
+  
+  // Remove any non-digit characters
+  let digits = phoneNumber.replace(/\D/g, '');
+  
+  // If the number starts with '0', replace with Kenya country code
+  if (digits.startsWith('0')) {
+    digits = '254' + digits.substring(1);
+  }
+  
+  // If the number doesn't have a country code, add Kenya's
+  if (digits.length === 9) {
+    digits = '254' + digits;
+  }
+  
+  // Add the plus sign
+  return '+' + digits;
+};
+
+/**
+ * Get base URL for the current environment
+ * @returns {string} - Base URL for serving files
+ */
+const getBaseUrl = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  return isProduction 
+    ? 'https://hms-api.zuri.health/api/v1' 
+    : `http://localhost:${process.env.PORT || 10000}/api/v1`;
 };
 
 // Helper function to generate PDF receipt
@@ -105,33 +139,30 @@ const generateReceipt = async (billing, patient) => {
   });
 };
 
-// Helper function to upload to UploadThing
-const uploadReceipt = async (pdfBuffer, fileName) => {
+// Helper function to save receipt locally
+const saveReceiptLocally = async (pdfBuffer, fileName) => {
   try {
-    // Create a readable stream from the buffer
-    const stream = Readable.from(pdfBuffer);
+    // Create uploads/receipts directory if it doesn't exist
+    const uploadsDir = path.join(__dirname, '..', '..', 'public', 'uploads', 'receipts');
+    await fs.mkdir(uploadsDir, { recursive: true });
     
-    // Upload to UploadThing
-    const result = await uploadthing.uploadFiles({
-      file: {
-        name: fileName,
-        size: pdfBuffer.length,
-        type: 'application/pdf',
-        stream: () => stream
-      },
-      middleware: {
-        // Add any middleware context needed by UploadThing
-      }
-    });
+    // Save the file
+    const filePath = path.join(uploadsDir, fileName);
+    await fs.writeFile(filePath, pdfBuffer);
     
-    log('Receipt uploaded to UploadThing', {
+    // Return a URL that can be accessed from outside
+    const baseUrl = getBaseUrl();
+    const fileUrl = `${baseUrl}/uploads/receipts/${fileName}`;
+    
+    log('Receipt saved locally', {
       fileName,
-      fileUrl: result.url
+      filePath,
+      fileUrl
     });
     
-    return result.url;
+    return fileUrl;
   } catch (error) {
-    log('Error uploading receipt', {
+    log('Error saving receipt', {
       error: error.toString(),
       stack: error.stack
     });
@@ -498,8 +529,8 @@ exports.finalizePayment = async (req, res, next) => {
         // Generate a unique filename
         const fileName = `receipt-${billing.id}-${Date.now()}.pdf`;
         
-        // Upload the PDF
-        receiptUrl = await uploadReceipt(pdfBuffer, fileName);
+        // Save the PDF locally
+        receiptUrl = await saveReceiptLocally(pdfBuffer, fileName);
         
         // Store the receipt URL with the billing record
         await billing.update({
@@ -510,15 +541,19 @@ exports.finalizePayment = async (req, res, next) => {
         });
         
         // Send receipt via WhatsApp if phone number exists
-        if (patient.contactInfo && patient.contactInfo.telephone1) {
+        if (patient.telephone1) {
           try {
+            // Format the phone number for WhatsApp
+            const formattedPhone = formatPhoneForWhatsApp(patient.telephone1);
+            
             log('Sending receipt via WhatsApp', { 
-              phone: patient.contactInfo.telephone1,
+              phone: patient.telephone1,
+              formattedPhone,
               receiptUrl
             });
             
             await whatsAppService.sendDocumentLink(
-              patient.contactInfo.telephone1,
+              formattedPhone,  // Use the formatted phone number
               receiptUrl
             );
             
@@ -535,7 +570,7 @@ exports.finalizePayment = async (req, res, next) => {
           });
         }
       } catch (receiptError) {
-        log('Error generating/uploading receipt', {
+        log('Error generating/saving receipt', {
           error: receiptError.toString(),
           stack: receiptError.stack
         });
@@ -852,8 +887,8 @@ exports.getReceipt = async (req, res, next) => {
         // Generate a unique filename
         const fileName = `receipt-${billing.id}-${Date.now()}.pdf`;
         
-        // Upload the PDF
-        receiptUrl = await uploadReceipt(pdfBuffer, fileName);
+        // Save the PDF locally
+        receiptUrl = await saveReceiptLocally(pdfBuffer, fileName);
         
         // Store the receipt URL with the billing record
         await billing.update({
@@ -863,9 +898,9 @@ exports.getReceipt = async (req, res, next) => {
           }
         });
         
-        log('New receipt generated and uploaded', { receiptUrl });
+        log('New receipt generated and saved', { receiptUrl });
       } catch (receiptError) {
-        log('Error generating/uploading receipt', {
+        log('Error generating/saving receipt', {
           error: receiptError.toString(),
           stack: receiptError.stack
         });
@@ -877,15 +912,19 @@ exports.getReceipt = async (req, res, next) => {
     }
     
     // Send via WhatsApp if requested
-    if (sendWhatsApp === 'true' && patient.contactInfo && patient.contactInfo.telephone1) {
+    if (sendWhatsApp === 'true' && patient.telephone1) {
       try {
+        // Format the phone number for WhatsApp
+        const formattedPhone = formatPhoneForWhatsApp(patient.telephone1);
+        
         log('Sending receipt via WhatsApp', { 
-          phone: patient.contactInfo.telephone1,
+          phone: patient.telephone1,
+          formattedPhone,
           receiptUrl
         });
         
         await whatsAppService.sendDocumentLink(
-          patient.contactInfo.telephone1,
+          formattedPhone,  // Use the formatted phone number
           receiptUrl
         );
         
@@ -915,3 +954,104 @@ exports.getReceipt = async (req, res, next) => {
     next(error);
   }
 };
+
+// Add a static route handler for serving uploaded files
+exports.setupStaticRoutes = (app) => {
+  const express = require('express');
+  const path = require('path');
+  
+  // Set up static file serving for receipts
+  const uploadsPath = path.join(__dirname, '..', '..', 'public', 'uploads');
+  
+  // Create middleware to serve static files
+  app.use('/api/v1/uploads', express.static(uploadsPath));
+  
+  // Add a route to serve receipt files directly
+  app.get('/api/v1/receipt/:fileName', (req, res) => {
+    const { fileName } = req.params;
+    
+    // Validate filename to prevent directory traversal attacks
+    if (!fileName || fileName.includes('..') || fileName.includes('/')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid file name'
+      });
+    }
+    
+    const filePath = path.join(uploadsPath, 'receipts', fileName);
+    
+    // Send the file
+    res.sendFile(filePath, (err) => {
+      if (err) {
+        // If file not found or other error
+        log('Error serving receipt file', {
+          fileName,
+          error: err.toString()
+        });
+        
+        res.status(404).json({
+          success: false,
+          message: 'Receipt file not found'
+        });
+      }
+    });
+  });
+  
+  log('Static routes for receipts configured');
+};
+
+// Function to manually test the WhatsApp receipt service
+exports.testWhatsAppReceipt = async (req, res, next) => {
+  try {
+    const { phoneNumber } = req.body;
+    
+    if (!phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number is required'
+      });
+    }
+    
+    // Format the phone number
+    const formattedPhone = formatPhoneForWhatsApp(phoneNumber);
+    
+    // Create a test receipt URL
+    const baseUrl = getBaseUrl();
+    const testUrl = `${baseUrl}/test-receipt.pdf`;
+    
+    log('Testing WhatsApp receipt service', {
+      originalPhone: phoneNumber,
+      formattedPhone,
+      testUrl
+    });
+    
+    // Send the test message
+    const result = await whatsAppService.sendDocumentLink(
+      formattedPhone,
+      testUrl
+    );
+    
+    res.json({
+      success: true,
+      message: 'Test WhatsApp message sent successfully',
+      data: {
+        phoneNumber: formattedPhone,
+        result
+      }
+    });
+    
+  } catch (error) {
+    log('Error testing WhatsApp receipt service', {
+      error: error.toString(),
+      stack: error.stack
+    });
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send test WhatsApp message',
+      error: error.message
+    });
+  }
+};
+
+module.exports = exports;

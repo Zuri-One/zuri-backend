@@ -112,8 +112,8 @@ class Billing extends Model {
   };
 
   static associate(models) {
-    this.belongsTo(models.User, {
-      foreignKey: 'patientId',
+    this.belongsTo(models.Patient, {
+      foreignKey: 'patientId', 
       as: 'patient'
     });
     this.belongsTo(models.Department, {
