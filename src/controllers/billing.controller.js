@@ -1,5 +1,5 @@
 // controllers/billing.controller.js
-const { Billing, Patient } = require('../models');
+const { Billing, Patient, User, Department } = require('../models');
 const { 
   calculateDiscountedPrice, 
   getPackageDetails, 
@@ -9,6 +9,14 @@ const {
   LAB_PACKAGES,
   INDIVIDUAL_ITEMS 
 } = require('../utils/billing.utils');
+const PDFDocument = require('pdfkit');
+const { Readable } = require('stream');
+const { createUploadthing } = require('uploadthing/server');
+const { Op } = require('sequelize');
+const whatsAppService = require('../services/whatsapp.service');
+
+// Initialize UploadThing
+const uploadthing = createUploadthing();
 
 // Add logging function for consistent log format
 const log = (message, data = null) => {
@@ -23,6 +31,112 @@ const log = (message, data = null) => {
   }
   
   console.log(JSON.stringify(logEntry));
+};
+
+// Helper function to generate PDF receipt
+const generateReceipt = async (billing, patient) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 50 });
+      const chunks = [];
+      
+      // Collect PDF data chunks
+      doc.on('data', (chunk) => chunks.push(chunk));
+      doc.on('end', () => {
+        const pdfBuffer = Buffer.concat(chunks);
+        resolve(pdfBuffer);
+      });
+      doc.on('error', (err) => reject(err));
+
+      // Add header
+      doc.fontSize(18).text('ZURI HEALTH', { align: 'center' });
+      doc.fontSize(14).text('RECEIPT', { align: 'center' });
+      doc.moveDown();
+
+      // Add receipt info
+      doc.fontSize(10);
+      doc.text(`Receipt #: ${billing.id}`);
+      doc.text(`Date: ${new Date(billing.paidAt || billing.updatedAt).toLocaleDateString()}`);
+      doc.text(`Patient: ${patient.fullName || `${patient.surname} ${patient.otherNames}`}`);
+      doc.text(`Payment Method: ${billing.paymentMethod}`);
+      if (billing.paymentReference) {
+        doc.text(`Reference: ${billing.paymentReference}`);
+      }
+      doc.moveDown();
+
+      // Table header
+      doc.fontSize(10).font('Helvetica-Bold');
+      doc.text('Item', 50, doc.y, { width: 240 });
+      doc.text('Qty', 290, doc.y, { width: 40 });
+      doc.text('Price', 330, doc.y, { width: 80 });
+      doc.text('Total', 410, doc.y, { width: 100 });
+      doc.moveDown();
+      
+      doc.font('Helvetica');
+      
+      // Items
+      let y = doc.y;
+      (billing.items || []).forEach(item => {
+        doc.text(item.description, 50, y, { width: 240 });
+        doc.text(item.quantity.toString(), 290, y, { width: 40 });
+        doc.text(`KSh ${parseFloat(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 330, y, { width: 80 });
+        doc.text(`KSh ${parseFloat(item.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 410, y, { width: 100 });
+        y += 20;
+      });
+
+      doc.moveTo(50, y).lineTo(510, y).stroke();
+      y += 10;
+
+      // Total
+      doc.font('Helvetica-Bold');
+      doc.text('Total', 330, y, { width: 80 });
+      doc.text(`KSh ${parseFloat(billing.totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, 410, y, { width: 100 });
+      
+      doc.moveDown(2);
+      doc.font('Helvetica');
+      doc.text('Thank you for choosing Zuri Health!', { align: 'center' });
+      
+      // Finalize PDF
+      doc.end();
+      
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+
+// Helper function to upload to UploadThing
+const uploadReceipt = async (pdfBuffer, fileName) => {
+  try {
+    // Create a readable stream from the buffer
+    const stream = Readable.from(pdfBuffer);
+    
+    // Upload to UploadThing
+    const result = await uploadthing.uploadFiles({
+      file: {
+        name: fileName,
+        size: pdfBuffer.length,
+        type: 'application/pdf',
+        stream: () => stream
+      },
+      middleware: {
+        // Add any middleware context needed by UploadThing
+      }
+    });
+    
+    log('Receipt uploaded to UploadThing', {
+      fileName,
+      fileUrl: result.url
+    });
+    
+    return result.url;
+  } catch (error) {
+    log('Error uploading receipt', {
+      error: error.toString(),
+      stack: error.stack
+    });
+    throw error;
+  }
 };
 
 exports.addBillingItems = async (req, res, next) => {
@@ -331,9 +445,18 @@ exports.getCurrentBill = async (req, res, next) => {
 exports.finalizePayment = async (req, res, next) => {
   try {
     const { patientId } = req.params;
-    const { paymentMethod, paymentReference } = req.body;
+    const { paymentMethod, paymentReference, sendReceipt = false } = req.body;
     
-    log('Finalizing payment', { patientId, paymentMethod });
+    log('Finalizing payment', { patientId, paymentMethod, sendReceipt });
+
+    const patient = await Patient.findByPk(patientId);
+    if (!patient) {
+      log('Patient not found', { patientId });
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    }
 
     const billing = await Billing.findOne({
       where: {
@@ -356,6 +479,7 @@ exports.finalizePayment = async (req, res, next) => {
       totalAmount: billing.totalAmount 
     });
 
+    // Update billing status
     await billing.update({
       paymentStatus: 'PAID',
       paymentMethod,
@@ -364,17 +488,76 @@ exports.finalizePayment = async (req, res, next) => {
       updatedBy: req.user.id
     });
 
+    // Generate and upload receipt if requested
+    let receiptUrl = null;
+    if (sendReceipt) {
+      try {
+        log('Generating receipt PDF', { billingId: billing.id });
+        const pdfBuffer = await generateReceipt(billing, patient);
+        
+        // Generate a unique filename
+        const fileName = `receipt-${billing.id}-${Date.now()}.pdf`;
+        
+        // Upload the PDF
+        receiptUrl = await uploadReceipt(pdfBuffer, fileName);
+        
+        // Store the receipt URL with the billing record
+        await billing.update({
+          metadata: {
+            ...billing.metadata,
+            receiptUrl
+          }
+        });
+        
+        // Send receipt via WhatsApp if phone number exists
+        if (patient.contactInfo && patient.contactInfo.telephone1) {
+          try {
+            log('Sending receipt via WhatsApp', { 
+              phone: patient.contactInfo.telephone1,
+              receiptUrl
+            });
+            
+            await whatsAppService.sendDocumentLink(
+              patient.contactInfo.telephone1,
+              receiptUrl
+            );
+            
+            log('WhatsApp receipt notification sent successfully');
+          } catch (whatsappError) {
+            log('Failed to send WhatsApp receipt notification', {
+              error: whatsappError.toString()
+            });
+            // Don't throw the error, just log it
+          }
+        } else {
+          log('Cannot send WhatsApp receipt - no phone number', {
+            patientId
+          });
+        }
+      } catch (receiptError) {
+        log('Error generating/uploading receipt', {
+          error: receiptError.toString(),
+          stack: receiptError.stack
+        });
+        // Don't throw the error, just log it
+      }
+    }
+
     log('Payment processed successfully', {
       billingId: billing.id,
       totalAmount: billing.totalAmount,
       paymentMethod,
-      reference: paymentReference
+      reference: paymentReference,
+      receiptSent: !!receiptUrl
     });
 
     res.json({
       success: true,
       message: 'Payment processed successfully',
-      data: billing
+      data: {
+        billing,
+        receiptUrl
+      }
     });
 
   } catch (error) {
@@ -617,6 +800,117 @@ exports.generateBillingReport = async (req, res, next) => {
       error: error.toString(),
       stack: error.stack,
       query: req.query
+    });
+    next(error);
+  }
+};
+
+// Add a new endpoint to get or generate a receipt for an existing payment
+exports.getReceipt = async (req, res, next) => {
+  try {
+    const { billingId } = req.params;
+    const { regenerate = false, sendWhatsApp = false } = req.query;
+    
+    log('Getting receipt', { billingId, regenerate, sendWhatsApp });
+    
+    const billing = await Billing.findByPk(billingId);
+    if (!billing) {
+      log('Billing record not found', { billingId });
+      return res.status(404).json({
+        success: false,
+        message: 'Billing record not found'
+      });
+    }
+    
+    // Check if this is a paid bill
+    if (billing.paymentStatus !== 'PAID') {
+      log('Cannot get receipt for unpaid bill', { billingId });
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot generate receipt for unpaid bill'
+      });
+    }
+    
+    // Get patient info
+    const patient = await Patient.findByPk(billing.patientId);
+    if (!patient) {
+      log('Patient not found', { patientId: billing.patientId });
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    }
+    
+    // Check if receipt already exists and we're not regenerating
+    let receiptUrl = billing.metadata?.receiptUrl;
+    if (!receiptUrl || regenerate === 'true') {
+      // Generate new receipt
+      try {
+        log('Generating new receipt PDF', { billingId });
+        const pdfBuffer = await generateReceipt(billing, patient);
+        
+        // Generate a unique filename
+        const fileName = `receipt-${billing.id}-${Date.now()}.pdf`;
+        
+        // Upload the PDF
+        receiptUrl = await uploadReceipt(pdfBuffer, fileName);
+        
+        // Store the receipt URL with the billing record
+        await billing.update({
+          metadata: {
+            ...billing.metadata,
+            receiptUrl
+          }
+        });
+        
+        log('New receipt generated and uploaded', { receiptUrl });
+      } catch (receiptError) {
+        log('Error generating/uploading receipt', {
+          error: receiptError.toString(),
+          stack: receiptError.stack
+        });
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to generate receipt'
+        });
+      }
+    }
+    
+    // Send via WhatsApp if requested
+    if (sendWhatsApp === 'true' && patient.contactInfo && patient.contactInfo.telephone1) {
+      try {
+        log('Sending receipt via WhatsApp', { 
+          phone: patient.contactInfo.telephone1,
+          receiptUrl
+        });
+        
+        await whatsAppService.sendDocumentLink(
+          patient.contactInfo.telephone1,
+          receiptUrl
+        );
+        
+        log('WhatsApp receipt notification sent successfully');
+      } catch (whatsappError) {
+        log('Failed to send WhatsApp receipt notification', {
+          error: whatsappError.toString()
+        });
+        // Don't throw the error, just log it
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        receiptUrl,
+        billing
+      }
+    });
+    
+  } catch (error) {
+    log('Error getting receipt', { 
+      error: error.toString(),
+      stack: error.stack,
+      billingId: req.params.billingId
     });
     next(error);
   }

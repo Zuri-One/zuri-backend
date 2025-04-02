@@ -7,7 +7,11 @@ const {
   getCurrentBill,
   finalizePayment,
   getAvailablePackages,
-  getAvailableItems
+  getAvailableItems,
+  getBillingHistory,
+  getBillingDetails,
+  generateBillingReport,
+  getReceipt
 } = require('../../controllers/billing.controller');
 
 const {
@@ -41,6 +45,20 @@ router.post('/add-items',
 router.post('/patient/:patientId/finalize',
   authorize(['RECEPTIONIST']), // Added array syntax for roles
   finalizePayment
+);
+
+// Get or regenerate receipt
+router.get('/receipt/:billingId', 
+  authorize(['RECEPTIONIST', 'ADMIN']),
+  getReceipt
+);
+
+// Billing history and reports
+router.get('/history', getBillingHistory);
+router.get('/details/:id', getBillingDetails);
+router.get('/report', 
+  authorize(['ADMIN', 'FINANCE']),
+  generateBillingReport
 );
 
 // Paystack integration

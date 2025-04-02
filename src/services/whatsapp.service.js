@@ -90,6 +90,179 @@ class WhatsAppService {
       }
     });
   }
+
+  /**
+   * Send a document link via WhatsApp using the hms_documents_sender template
+   * @param {string} phoneNumber - Recipient's phone number
+   * @param {string} documentUrl - URL to the document/receipt/prescription
+   * @returns {Promise<object>} - Response from Infobip API
+   */
+  sendDocumentLink = async (phoneNumber, documentUrl) => {
+    return new Promise((resolve, reject) => {
+      try {
+        // Ensure phone number is in international format (no + sign)
+        const formattedPhoneNumber = phoneNumber.startsWith('+') 
+          ? phoneNumber.substring(1) 
+          : phoneNumber;
+
+        const options = {
+          'method': 'POST',
+          'hostname': config.infobip.hostname,
+          'path': '/whatsapp/1/message/template',
+          'headers': {
+            'Authorization': `App ${config.infobip.apiKey}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          'maxRedirects': 20
+        };
+
+        const req = https.request(options, (res) => {
+          const chunks = [];
+          
+          res.on("data", (chunk) => {
+            chunks.push(chunk);
+          });
+          
+          res.on("end", () => {
+            const body = Buffer.concat(chunks);
+            const response = JSON.parse(body.toString());
+            
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              resolve(response);
+            } else {
+              reject(new Error(`Failed to send WhatsApp document link: ${body.toString()}`));
+            }
+          });
+          
+          res.on("error", (error) => {
+            reject(error);
+          });
+        });
+
+        req.on('error', (error) => {
+          reject(error);
+        });
+
+        const postData = JSON.stringify({
+          "messages": [
+            {
+              "from": config.infobip.whatsappNumber,
+              "to": formattedPhoneNumber,
+              "content": {
+                "templateName": "hms_documents_sender",
+                "templateData": {
+                  "body": {
+                    "placeholders": [
+                      documentUrl
+                    ]
+                  }
+                },
+                "language": "en"
+              },
+              "notifyUrl": config.infobip.webhookUrl
+            }
+          ]
+        });
+
+        req.write(postData);
+        req.end();
+      } catch (error) {
+        reject(new Error(`WhatsApp document service error: ${error.message}`));
+      }
+    });
+  }
+
+  /**
+   * Helper method to extract common code for sending WhatsApp templates
+   * @param {string} phoneNumber - Recipient's phone number
+   * @param {string} templateName - Name of the template to use
+   * @param {Array<string>} placeholders - Array of placeholder values
+   * @param {Array<Object>} buttons - Optional array of button objects
+   * @param {string} language - Language code for the template
+   * @returns {Promise<object>} - Response from Infobip API
+   */
+  sendWhatsAppTemplate = async (phoneNumber, templateName, placeholders, buttons = null, language = 'en') => {
+    return new Promise((resolve, reject) => {
+      try {
+        // Ensure phone number is in international format (no + sign)
+        const formattedPhoneNumber = phoneNumber.startsWith('+') 
+          ? phoneNumber.substring(1) 
+          : phoneNumber;
+
+        const options = {
+          'method': 'POST',
+          'hostname': config.infobip.hostname,
+          'path': '/whatsapp/1/message/template',
+          'headers': {
+            'Authorization': `App ${config.infobip.apiKey}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          'maxRedirects': 20
+        };
+
+        const req = https.request(options, (res) => {
+          const chunks = [];
+          
+          res.on("data", (chunk) => {
+            chunks.push(chunk);
+          });
+          
+          res.on("end", () => {
+            const body = Buffer.concat(chunks);
+            const response = JSON.parse(body.toString());
+            
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              resolve(response);
+            } else {
+              reject(new Error(`Failed to send WhatsApp template: ${body.toString()}`));
+            }
+          });
+          
+          res.on("error", (error) => {
+            reject(error);
+          });
+        });
+
+        req.on('error', (error) => {
+          reject(error);
+        });
+
+        // Prepare the template data
+        const templateData = {
+          "body": {
+            "placeholders": placeholders
+          }
+        };
+
+        // Add buttons if provided
+        if (buttons && buttons.length > 0) {
+          templateData.buttons = buttons;
+        }
+
+        const postData = JSON.stringify({
+          "messages": [
+            {
+              "from": config.infobip.whatsappNumber,
+              "to": formattedPhoneNumber,
+              "content": {
+                "templateName": templateName,
+                "templateData": templateData,
+                "language": language
+              },
+              "notifyUrl": config.infobip.webhookUrl
+            }
+          ]
+        });
+
+        req.write(postData);
+        req.end();
+      } catch (error) {
+        reject(new Error(`WhatsApp template service error: ${error.message}`));
+      }
+    });
+  }
 }
 
 module.exports = new WhatsAppService();
