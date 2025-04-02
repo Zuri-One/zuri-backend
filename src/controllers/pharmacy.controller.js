@@ -1404,44 +1404,51 @@ class PharmacyController {
 
   async manualDispensePrescription(req, res) {
     let transaction;
-
+  
     try {
-      const { prescriptionId, medicationDispenses } = req.body;
+      const { prescriptionId, medicationDispenses, patientId } = req.body;
       console.log('Starting dispense for prescription:', prescriptionId);
-
+  
       // Start transaction
       transaction = await sequelize.transaction();
-
-      // Check if prescription exists
-      const prescriptionResult = await sequelize.query(
-        'SELECT * FROM "Prescriptions" WHERE id = $1',
-        {
-          bind: [prescriptionId],
-          type: sequelize.QueryTypes.SELECT,
-          transaction
+  
+      let prescriptionPatientId = patientId;
+      let prescriptionStatus = null;
+  
+      // Check if prescription exists only if prescriptionId is provided
+      if (prescriptionId) {
+        const prescriptionResult = await sequelize.query(
+          'SELECT * FROM "Prescriptions" WHERE id = $1',
+          {
+            bind: [prescriptionId],
+            type: sequelize.QueryTypes.SELECT,
+            transaction
+          }
+        );
+  
+        if (!prescriptionResult.length) {
+          await transaction.rollback();
+          return res.status(404).json({
+            success: false,
+            message: 'Prescription not found'
+          });
         }
-      );
-
-      if (!prescriptionResult.length) {
-        await transaction.rollback();
-        return res.status(404).json({
-          success: false,
-          message: 'Prescription not found'
-        });
+  
+        const prescription = prescriptionResult[0];
+        prescriptionPatientId = prescription.patientId;
+        prescriptionStatus = prescription.status;
+  
+        if (prescription.status !== 'active') {
+          await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            message: 'Prescription is no longer active'
+          });
+        }
       }
-
-      const prescription = prescriptionResult[0];
-
-      if (prescription.status !== 'active') {
-        await transaction.rollback();
-        return res.status(400).json({
-          success: false,
-          message: 'Prescription is no longer active'
-        });
-      }
-
+  
       const results = [];
-
+  
       // Process each medication
       for (const dispense of medicationDispenses) {
         // Check medication in Medications table
@@ -1453,7 +1460,7 @@ class PharmacyController {
             transaction
           }
         );
-
+  
         if (!medicationResult.length) {
           await transaction.rollback();
           return res.status(404).json({
@@ -1461,9 +1468,9 @@ class PharmacyController {
             message: `Medication ${dispense.medicationId} not found`
           });
         }
-
+  
         const medication = medicationResult[0];
-
+  
         if (parseInt(medication.currentStock) < parseInt(dispense.quantity)) {
           await transaction.rollback();
           return res.status(400).json({
@@ -1471,13 +1478,13 @@ class PharmacyController {
             message: `Insufficient stock for ${medication.name}`
           });
         }
-
+  
         // Extract numeric duration
         const durationDays = parseInt(dispense.duration?.match(/\d+/)?.[0] || '7');
-
+  
         // Create notes for instructions
         const notes = `Duration: ${dispense.duration || '7 days'}. ${dispense.instructions || ''}`;
-
+  
         // Insert dispense record
         await sequelize.query(
           `INSERT INTO medication_dispenses (
@@ -1493,7 +1500,7 @@ class PharmacyController {
             bind: [
               prescriptionId,
               dispense.medicationId,
-              prescription.patientId,
+              prescriptionPatientId || patientId, // Use prescriptionPatientId or fallback to patientId
               req.user.id,
               dispense.quantity,
               dispense.dosage || 'As directed',
@@ -1507,7 +1514,7 @@ class PharmacyController {
             transaction
           }
         );
-
+  
         // Update stock in Medications table
         const newStock = parseInt(medication.currentStock) - parseInt(dispense.quantity);
         await sequelize.query(
@@ -1518,7 +1525,7 @@ class PharmacyController {
             transaction
           }
         );
-
+  
         // Record stock movement
         await sequelize.query(
           `INSERT INTO stock_movements (
@@ -1539,7 +1546,7 @@ class PharmacyController {
               parseFloat(medication.unitPrice),
               parseFloat(medication.unitPrice) * parseInt(dispense.quantity),
               req.user.id,
-              'PRESCRIPTION',
+              prescriptionId ? 'PRESCRIPTION' : 'WALKIN',
               prescriptionId,
               medication.storageLocation || 'PHARMACY'
             ],
@@ -1547,7 +1554,7 @@ class PharmacyController {
             transaction
           }
         );
-
+  
         results.push({
           medication: medication.name,
           quantity: dispense.quantity,
@@ -1555,29 +1562,31 @@ class PharmacyController {
           totalPrice: parseFloat(medication.unitPrice) * parseInt(dispense.quantity)
         });
       }
-
-      // Update prescription status
-      await sequelize.query(
-        'UPDATE "Prescriptions" SET status = $1, "updatedAt" = NOW() WHERE id = $2',
-        {
-          bind: ['completed', prescriptionId],
-          type: sequelize.QueryTypes.UPDATE,
-          transaction
-        }
-      );
-
+  
+      // Update prescription status only if prescriptionId exists
+      if (prescriptionId) {
+        await sequelize.query(
+          'UPDATE "Prescriptions" SET status = $1, "updatedAt" = NOW() WHERE id = $2',
+          {
+            bind: ['completed', prescriptionId],
+            type: sequelize.QueryTypes.UPDATE,
+            transaction
+          }
+        );
+      }
+  
       // Commit transaction
       await transaction.commit();
-
+  
       return res.status(200).json({
         success: true,
         message: 'Medications dispensed successfully',
         results
       });
-
+  
     } catch (error) {
       console.error('Error in dispense:', error);
-
+  
       if (transaction) {
         try {
           await transaction.rollback();
@@ -1585,7 +1594,7 @@ class PharmacyController {
           console.error('Error rolling back transaction:', rollbackError);
         }
       }
-
+  
       return res.status(500).json({
         success: false,
         message: 'Database error occurred',
