@@ -49,12 +49,17 @@ class Medication extends Model {
         allowNull: false,
         defaultValue: 10
       },
+      individualUnitPrice: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        comment: 'Price of a single unit (tablet, capsule, etc.)'
+      },
       maxStockLevel: {
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 1000
       },
-      supplier_id: { // Changed field name to match database column
+      supplier_id: {
         type: DataTypes.UUID,
         allowNull: true,
         references: {
@@ -111,11 +116,41 @@ class Medication extends Model {
           model: 'inventory_receipts',
           key: 'id'
         }
+      },
+      packSize: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+        comment: 'Number of units in each pack'
+      },
+      packUnit: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 'tablet',
+        comment: 'Unit of measurement (tablet, capsule, ml, etc.)'
+      },
+      dispensingUnit: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 'tablet',
+        comment: 'Unit used when dispensing to patients'
+      },
+      trackByPack: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: 'If true, currentStock represents number of packs; if false, individual units'
+      },
+      unitPriceType: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 'PER_UNIT',
+        comment: 'Whether unit price is per pack or per unit'
       }
     }, {
       sequelize,
       modelName: 'Medication',
-      tableName: 'Medications', // Changed to match uppercase table name in database
+      tableName: 'Medications',
       timestamps: true,
       // underscored: true
     });
@@ -133,7 +168,7 @@ class Medication extends Model {
     
     if (models.Supplier) {
       this.belongsTo(models.Supplier, {
-        foreignKey: 'supplier_id', // Changed to match database column
+        foreignKey: 'supplier_id',
         as: 'supplier'
       });
     }

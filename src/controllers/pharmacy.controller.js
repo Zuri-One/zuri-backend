@@ -165,7 +165,7 @@ class PharmacyController {
   // Inventory Receipt Management
   async addInventoryReceipt(req, res, next) {
     const transaction = await sequelize.transaction();
-
+  
     try {
       const {
         supplierId,
@@ -175,7 +175,7 @@ class PharmacyController {
         notes,
         medications
       } = req.body;
-
+  
       // Validate required fields
       if (!supplierId) {
         await transaction.rollback();
@@ -184,7 +184,7 @@ class PharmacyController {
           message: 'Supplier ID is required'
         });
       }
-
+  
       if (!medications || !Array.isArray(medications) || medications.length === 0) {
         await transaction.rollback();
         return res.status(400).json({
@@ -192,7 +192,7 @@ class PharmacyController {
           message: 'At least one medication is required'
         });
       }
-
+  
       // Check if supplier exists
       const supplier = await Supplier.findByPk(supplierId);
       if (!supplier) {
@@ -202,13 +202,13 @@ class PharmacyController {
           message: 'Supplier not found'
         });
       }
-
+  
       // Calculate total amount
       let totalAmount = 0;
       medications.forEach(med => {
         totalAmount += parseFloat(med.markedPrice) * parseInt(med.quantity);
       });
-
+  
       // Create inventory receipt
       const inventoryReceipt = await InventoryReceipt.create({
         supplierId,
@@ -219,18 +219,25 @@ class PharmacyController {
         notes,
         totalAmount
       }, { transaction });
-
+  
       console.log('Created inventory receipt:', inventoryReceipt.id);
-
+  
       // Process each medication
       for (const med of medications) {
-        // Calculate unit price based on markup
+        // Calculate unit price based on markup and quantity
         const markupPercentage = parseFloat(med.markupPercentage || 15);
         const markedPrice = parseFloat(med.markedPrice);
-        const unitPrice = markedPrice * (1 + markupPercentage / 100);
-
+        const quantity = parseInt(med.quantity);
+        
+        // Unit price is now marked price with markup divided by quantity
+        const unitPrice = (markedPrice * (1 + markupPercentage / 100)) / quantity;
+        
+        // Calculate individual unit price
+        const packSize = parseInt(med.packSize || 1);
+        const individualUnitPrice = unitPrice / packSize;
+  
         let medicationId;
-
+  
         if (med.id) {
           // Update existing medication in the uppercase Medications table
           const [updated] = await sequelize.query(`
@@ -241,6 +248,7 @@ class PharmacyController {
                 strength = ?,
                 "currentStock" = "currentStock" + ?,
                 "unitPrice" = ?,
+                "individualUnitPrice" = ?,
                 "expiryDate" = ?,
                 "updatedAt" = NOW()
             WHERE id = ?
@@ -253,13 +261,14 @@ class PharmacyController {
               med.strength,
               parseInt(med.quantity),
               unitPrice,
+              individualUnitPrice,
               new Date(med.expiryDate),
               med.id
             ],
             type: sequelize.QueryTypes.UPDATE,
             transaction
           });
-
+  
           if (updated && updated.length > 0) {
             medicationId = updated[0].id;
             console.log('Updated medication:', medicationId);
@@ -279,10 +288,11 @@ class PharmacyController {
             INSERT INTO "Medications" (
               id, name, "genericName", "batchNumber", category, type, strength, 
               manufacturer, "currentStock", "minStockLevel", "maxStockLevel", 
-              supplier_id, "unitPrice", "expiryDate", "imageUrl", "prescriptionRequired", 
-              "isActive", location, notes, "createdAt", "updatedAt"
+              supplier_id, "unitPrice", "individualUnitPrice", "expiryDate", "imageUrl", "prescriptionRequired", 
+              "isActive", location, notes, "createdAt", "updatedAt", "packSize", "packUnit", "dispensingUnit", 
+              "trackByPack", "unitPriceType", "markedPrice", "markupPercentage"
             ) VALUES (
-              uuid_generate_v4(), ?, ?, ?, ?::medication_category, ?::medication_type, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, NOW(), NOW()
+              uuid_generate_v4(), ?, ?, ?, ?::medication_category, ?::medication_type, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?, ?, NOW(), NOW(), ?, ?, ?, ?, ?, ?, ?
             ) RETURNING id
           `, {
             replacements: [
@@ -296,18 +306,26 @@ class PharmacyController {
               parseInt(med.quantity),
               med.minStockLevel || 10,
               med.maxStockLevel || 1000,
-              supplierId, // Supplier ID added back in
+              supplierId,
               unitPrice,
+              individualUnitPrice,
               new Date(med.expiryDate),
               med.imageUrl || null,
               med.prescriptionRequired !== undefined ? med.prescriptionRequired : true,
               med.location || null,
-              med.notes || null
+              med.notes || null,
+              packSize,
+              med.packUnit || 'tablet',
+              med.dispensingUnit || med.packUnit || 'tablet',
+              med.trackByPack || false,
+              med.unitPriceType || 'PER_UNIT',
+              markedPrice,
+              markupPercentage
             ],
             transaction,
             type: sequelize.QueryTypes.INSERT
           });
-
+  
           if (result && result.length > 0) {
             medicationId = result[0].id;
             console.log('Created new medication:', medicationId);
@@ -320,7 +338,7 @@ class PharmacyController {
             });
           }
         }
-
+  
         // Create stock movement with the medication ID
         if (medicationId) {
           await sequelize.query(`
@@ -347,7 +365,7 @@ class PharmacyController {
             transaction,
             type: sequelize.QueryTypes.INSERT
           });
-
+  
           console.log('Created stock movement for medication ID:', medicationId);
         } else {
           console.error('No medication ID available for stock movement');
@@ -358,23 +376,23 @@ class PharmacyController {
           });
         }
       }
-
+  
       // Commit transaction
       await transaction.commit();
       console.log('Transaction committed successfully');
-
+  
       res.status(201).json({
         success: true,
         message: 'Inventory receipt created successfully',
         inventoryReceipt
       });
-
+  
     } catch (error) {
       if (transaction && transaction.finished !== 'rollback') {
         await transaction.rollback();
       }
       console.error('Error creating inventory receipt:', error);
-
+  
       res.status(500).json({
         success: false,
         message: 'Error creating inventory receipt',
@@ -382,7 +400,6 @@ class PharmacyController {
       });
     }
   }
-
 
   async getInventoryReceipts(req, res, next) {
     try {
@@ -581,7 +598,7 @@ class PharmacyController {
   // Stock Adjustment
   async updateStock(req, res, next) {
     const transaction = await sequelize.transaction();
-
+  
     try {
       const { id } = req.params;
       const {
@@ -592,11 +609,12 @@ class PharmacyController {
         expiryDate,
         markedPrice,
         markupPercentage,
-        storageLocation
+        storageLocation,
+        packSize
       } = req.body;
-
+  
       const medication = await Medication.findByPk(id, { transaction });
-
+  
       if (!medication) {
         await transaction.rollback();
         return res.status(404).json({
@@ -604,7 +622,7 @@ class PharmacyController {
           message: 'Medication not found'
         });
       }
-
+  
       // Validate stock adjustment
       let newStock = medication.currentStock;
       if (type === 'ADJUSTED') {
@@ -616,7 +634,7 @@ class PharmacyController {
           parseInt(quantity) : -parseInt(quantity);
         newStock += change;
       }
-
+  
       // Validate stock levels
       if (newStock < 0) {
         await transaction.rollback();
@@ -625,59 +643,82 @@ class PharmacyController {
           message: 'Invalid stock adjustment. Would result in negative stock.'
         });
       }
-
-      // Calculate new unit price if marked price and markup are provided
-      let unitPrice = medication.unitPrice;
-      if (markedPrice !== undefined && markupPercentage !== undefined) {
-        const newMarkedPrice = parseFloat(markedPrice);
-        const newMarkupPercentage = parseFloat(markupPercentage);
-        unitPrice = newMarkedPrice * (1 + newMarkupPercentage / 100);
-      }
-
+  
       // Update medication
       const updateData = {
         currentStock: newStock,
         batchNumber: batchNumber || medication.batchNumber,
         expiryDate: expiryDate || medication.expiryDate
       };
-
-      if (markedPrice !== undefined) {
+  
+      // Handle price and pack size updates
+      const updatingMarkedPrice = markedPrice !== undefined;
+      const updatingMarkupPercentage = markupPercentage !== undefined;
+      const updatingPackSize = packSize !== undefined && packSize != medication.packSize;
+      
+      if (updatingMarkedPrice) {
         updateData.markedPrice = parseFloat(markedPrice);
       }
-
-      if (markupPercentage !== undefined) {
+  
+      if (updatingMarkupPercentage) {
         updateData.markupPercentage = parseFloat(markupPercentage);
       }
-
-      if (unitPrice !== medication.unitPrice) {
-        updateData.unitPrice = unitPrice;
+      
+      if (updatingPackSize) {
+        updateData.packSize = parseInt(packSize);
       }
-
+      
+      // Recalculate unit price and individual unit price if any of these changed
+      if (updatingMarkedPrice || updatingMarkupPercentage || newStock !== medication.currentStock || updatingPackSize) {
+        // Get values for calculation
+        const newMarkedPrice = updatingMarkedPrice ? 
+          parseFloat(markedPrice) : medication.markedPrice || 0;
+          
+        const newMarkupPercentage = updatingMarkupPercentage ? 
+          parseFloat(markupPercentage) : medication.markupPercentage || 15;
+        
+        const newPackSize = updatingPackSize ? 
+          parseInt(packSize) : medication.packSize || 1;
+        
+        // Calculate new unit price (now dividing by current stock)
+        if (newStock > 0) {
+          updateData.unitPrice = (newMarkedPrice * (1 + newMarkupPercentage / 100)) / newStock;
+        } else {
+          updateData.unitPrice = newMarkedPrice * (1 + newMarkupPercentage / 100);
+        }
+        
+        // Calculate new individual unit price
+        updateData.individualUnitPrice = updateData.unitPrice / newPackSize;
+      }
+  
       if (storageLocation) {
         updateData.storageLocation = storageLocation;
       }
-
+  
       await medication.update(updateData, { transaction });
-
+  
       // Record movement
       const movementQuantity = (type === 'ADJUSTED') ?
         newStock - medication.currentStock : parseInt(quantity);
-
+  
+      // Use newly calculated unit price for the movement if available
+      const movementUnitPrice = updateData.unitPrice || medication.unitPrice;
+      
       await StockMovement.create({
         medicationId: id,
         type,
         quantity: movementQuantity,
         batchNumber: batchNumber || medication.batchNumber,
-        unitPrice,
-        totalPrice: unitPrice * Math.abs(movementQuantity),
+        unitPrice: movementUnitPrice,
+        totalPrice: movementUnitPrice * Math.abs(movementQuantity),
         reason,
         performedBy: req.user.id,
         sourceType: 'ADJUSTMENT',
         toLocation: storageLocation || medication.storageLocation
       }, { transaction });
-
+  
       await transaction.commit();
-
+  
       res.json({
         success: true,
         message: 'Stock updated successfully',
@@ -820,12 +861,12 @@ class PharmacyController {
 
   async addMedication(req, res, next) {
     const transaction = await sequelize.transaction();
-
+  
     try {
       // Validate required fields
       const requiredFields = ['name', 'batchNumber', 'category', 'type', 'strength', 'expiryDate'];
       const missingFields = requiredFields.filter(field => !req.body[field]);
-
+  
       if (missingFields.length > 0) {
         await transaction.rollback();
         return res.status(400).json({
@@ -833,12 +874,24 @@ class PharmacyController {
           message: `Missing required fields: ${missingFields.join(', ')}`
         });
       }
-
-      // Calculate unit price from marked price and markup
+  
+      // Get required values for calculation
       const markedPrice = parseFloat(req.body.markedPrice || 0);
       const markupPercentage = parseFloat(req.body.markupPercentage || 15);
-      const unitPrice = markedPrice * (1 + markupPercentage / 100);
-
+      const currentStock = parseInt(req.body.currentStock || 0);
+      const packSize = parseInt(req.body.packSize || 1);
+      
+      // Calculate unit price (price per pack) - now dividing by quantity (currentStock)
+      let unitPrice = 0;
+      if (currentStock > 0) {
+        unitPrice = (markedPrice * (1 + markupPercentage / 100)) / currentStock;
+      } else {
+        unitPrice = markedPrice * (1 + markupPercentage / 100);
+      }
+      
+      // Calculate individual unit price (price per tablet/capsule)
+      const individualUnitPrice = unitPrice / packSize;
+  
       // Process and validate the medication data
       const medicationData = {
         name: req.body.name.trim(),
@@ -848,13 +901,19 @@ class PharmacyController {
         type: req.body.type?.toUpperCase(),
         strength: req.body.strength.trim(),
         manufacturer: req.body.manufacturer?.trim() || '',
-        currentStock: parseInt(req.body.currentStock || 0),
+        currentStock,
         minStockLevel: parseInt(req.body.minStockLevel || 10),
         maxStockLevel: parseInt(req.body.maxStockLevel || 1000),
         supplierId: req.body.supplierId,
         markedPrice,
         markupPercentage,
         unitPrice,
+        individualUnitPrice,
+        packSize,
+        packUnit: req.body.packUnit?.trim() || 'tablet',
+        dispensingUnit: req.body.dispensingUnit?.trim() || req.body.packUnit?.trim() || 'tablet',
+        trackByPack: Boolean(req.body.trackByPack),
+        unitPriceType: req.body.unitPriceType || 'PER_UNIT',
         storageLocation: req.body.storageLocation || 'PHARMACY',
         expiryDate: new Date(req.body.expiryDate),
         imageUrl: req.body.imageUrl?.trim(),
@@ -863,13 +922,13 @@ class PharmacyController {
         notes: req.body.notes?.trim() || '',
         isActive: true
       };
-
+  
       // Create the medication record
       const medication = await Medication.create(medicationData, {
         transaction,
         returning: true
       });
-
+  
       // Create initial stock movement record if there's initial stock
       if (medicationData.currentStock > 0) {
         const stockMovementData = {
@@ -884,16 +943,16 @@ class PharmacyController {
           toLocation: medicationData.storageLocation,
           reason: 'Initial stock entry'
         };
-
+  
         await StockMovement.create(stockMovementData, {
           transaction,
           returning: true
         });
       }
-
+  
       // Commit the transaction
       await transaction.commit();
-
+  
       // Send success response
       return res.status(201).json({
         success: true,
@@ -903,13 +962,13 @@ class PharmacyController {
     } catch (error) {
       // Rollback transaction on error
       if (transaction) await transaction.rollback();
-
+  
       console.error('Error adding medication:', {
         name: error.name,
         message: error.message,
         stack: error.stack
       });
-
+  
       // Send error response
       return res.status(error.name === 'SequelizeValidationError' ? 400 : 500).json({
         success: false,
@@ -925,14 +984,14 @@ class PharmacyController {
 
   async updateMedication(req, res, next) {
     const transaction = await sequelize.transaction();
-
+  
     try {
       const { id } = req.params;
       const updateData = req.body;
-
+  
       // Find the medication
       const medication = await Medication.findByPk(id, { transaction });
-
+  
       if (!medication) {
         await transaction.rollback();
         return res.status(404).json({
@@ -940,33 +999,52 @@ class PharmacyController {
           message: 'Medication not found'
         });
       }
-
-      // If marked price or markup percentage is being updated, recalculate unit price
-      if (updateData.markedPrice !== undefined || updateData.markupPercentage !== undefined) {
+  
+      // If marked price, markup percentage, currentStock, or packSize is being updated, recalculate prices
+      if (updateData.markedPrice !== undefined || 
+          updateData.markupPercentage !== undefined || 
+          updateData.currentStock !== undefined ||
+          updateData.packSize !== undefined) {
+        
+        // Get the values to use in calculation, using updated values where provided
         const markedPrice = parseFloat(updateData.markedPrice !== undefined ?
-          updateData.markedPrice : medication.markedPrice);
-
+          updateData.markedPrice : medication.markedPrice || 0);
+  
         const markupPercentage = parseFloat(updateData.markupPercentage !== undefined ?
-          updateData.markupPercentage : medication.markupPercentage);
-
-        updateData.unitPrice = markedPrice * (1 + markupPercentage / 100);
+          updateData.markupPercentage : medication.markupPercentage || 15);
+  
+        const currentStock = parseInt(updateData.currentStock !== undefined ?
+          updateData.currentStock : medication.currentStock);
+  
+        const packSize = parseInt(updateData.packSize !== undefined ?
+          updateData.packSize : medication.packSize || 1);
+  
+        // Calculate new unit price (now dividing by currentStock)
+        if (currentStock > 0) {
+          updateData.unitPrice = (markedPrice * (1 + markupPercentage / 100)) / currentStock;
+        } else {
+          updateData.unitPrice = markedPrice * (1 + markupPercentage / 100);
+        }
+        
+        // Calculate new individual unit price
+        updateData.individualUnitPrice = updateData.unitPrice / packSize;
       }
-
+  
       // Track if stock quantity is being updated
       const isStockUpdated = updateData.currentStock !== undefined &&
         updateData.currentStock !== medication.currentStock;
-
+  
       // Save original stock for stock movement record
       const originalStock = medication.currentStock;
-
+  
       // Update the medication
       await medication.update(updateData, { transaction });
-
+  
       // If stock was updated, create a stock movement record
       if (isStockUpdated) {
         const newStock = parseInt(updateData.currentStock);
         const change = newStock - originalStock;
-
+  
         await StockMovement.create({
           medicationId: id,
           type: 'ADJUSTED',
@@ -980,9 +1058,9 @@ class PharmacyController {
           reason: updateData.reason || 'Medication update'
         }, { transaction });
       }
-
+  
       await transaction.commit();
-
+  
       res.json({
         success: true,
         message: 'Medication updated successfully',
