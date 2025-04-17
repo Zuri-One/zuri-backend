@@ -33,7 +33,7 @@ class Medication extends Model {
       },
       strength: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: true
       },
       manufacturer: {
         type: DataTypes.STRING,

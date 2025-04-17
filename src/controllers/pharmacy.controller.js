@@ -258,7 +258,7 @@ class PharmacyController {
               med.batchNumber,
               med.category,
               med.type,
-              med.strength,
+              med.strength || null, // Strength is now optional
               parseInt(med.quantity),
               unitPrice,
               individualUnitPrice,
@@ -301,7 +301,7 @@ class PharmacyController {
               med.batchNumber,
               med.category,
               med.type,
-              med.strength,
+              med.strength || null, // Strength is now optional
               med.manufacturer || null,
               parseInt(med.quantity),
               med.minStockLevel || 10,
@@ -863,8 +863,8 @@ class PharmacyController {
     const transaction = await sequelize.transaction();
   
     try {
-      // Validate required fields
-      const requiredFields = ['name', 'batchNumber', 'category', 'type', 'strength', 'expiryDate'];
+      // Validate required fields - strength removed from requiredFields
+      const requiredFields = ['name', 'batchNumber', 'category', 'type', 'expiryDate'];
       const missingFields = requiredFields.filter(field => !req.body[field]);
   
       if (missingFields.length > 0) {
@@ -899,7 +899,7 @@ class PharmacyController {
         batchNumber: req.body.batchNumber.trim(),
         category: req.body.category?.toUpperCase(),
         type: req.body.type?.toUpperCase(),
-        strength: req.body.strength.trim(),
+        strength: req.body.strength?.trim() || null, // Now optional, defaults to null
         manufacturer: req.body.manufacturer?.trim() || '',
         currentStock,
         minStockLevel: parseInt(req.body.minStockLevel || 10),
