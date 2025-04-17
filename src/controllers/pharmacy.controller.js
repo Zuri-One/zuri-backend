@@ -737,40 +737,40 @@ class PharmacyController {
         search,
         category,
         type,
-        supplierId,  // Added back supplierId parameter
+        supplierId,
         storageLocation,
         lowStock,
         expiringSoon,
         page = 1,
         limit = 10
       } = req.query;
-
+  
       // Build WHERE clause parts
-      let whereClause = `WHERE "isActive" = true`;
-
+      let whereClause = `WHERE m."isActive" = true`;
+  
       if (search) {
         whereClause += ` AND (
-          name ILIKE '%${search}%' OR 
-          "genericName" ILIKE '%${search}%' OR 
-          "batchNumber" ILIKE '%${search}%'
+          m.name ILIKE '%${search}%' OR 
+          m."genericName" ILIKE '%${search}%' OR 
+          m."batchNumber" ILIKE '%${search}%'
         )`;
       }
-
-      if (category) whereClause += ` AND category = '${category}'`;
-      if (type) whereClause += ` AND type = '${type}'`;
-      if (supplierId) whereClause += ` AND supplier_id = '${supplierId}'`; // Use supplier_id column
-      if (storageLocation) whereClause += ` AND "storageLocation" = '${storageLocation}'`;
-
+  
+      if (category) whereClause += ` AND m.category = '${category}'`;
+      if (type) whereClause += ` AND m.type = '${type}'`;
+      if (supplierId) whereClause += ` AND m.supplier_id = '${supplierId}'`;
+      if (storageLocation) whereClause += ` AND m."storageLocation" = '${storageLocation}'`;
+  
       if (lowStock === 'true') {
-        whereClause += ` AND "currentStock" <= "minStockLevel"`;
+        whereClause += ` AND m."currentStock" <= m."minStockLevel"`;
       }
-
+  
       if (expiringSoon === 'true') {
         const threeMonthsFromNow = new Date();
         threeMonthsFromNow.setMonth(threeMonthsFromNow.getMonth() + 3);
-        whereClause += ` AND "expiryDate" <= '${threeMonthsFromNow.toISOString()}'`;
+        whereClause += ` AND m."expiryDate" <= '${threeMonthsFromNow.toISOString()}'`;
       }
-
+  
       // Count total matching records
       const countResult = await sequelize.query(
         `SELECT COUNT(*) as count 
@@ -778,9 +778,9 @@ class PharmacyController {
          ${whereClause}`,
         { type: sequelize.QueryTypes.SELECT }
       );
-
+  
       const count = parseInt(countResult[0].count);
-
+  
       // Get paginated medications with all fields
       // Join with suppliers to get supplier information
       const medications = await sequelize.query(
@@ -799,7 +799,7 @@ class PharmacyController {
          LIMIT ${limit} OFFSET ${(parseInt(page) - 1) * parseInt(limit)}`,
         { type: sequelize.QueryTypes.SELECT }
       );
-
+  
       res.json({
         success: true,
         count,
@@ -810,7 +810,8 @@ class PharmacyController {
     } catch (error) {
       console.error('Error in getInventory:', error);
       res.status(500).json({
-        success: true,
+        success: false,
+        message: 'Error fetching inventory',
         count: 0,
         pages: 0,
         currentPage: parseInt(req.query.page || 1),
