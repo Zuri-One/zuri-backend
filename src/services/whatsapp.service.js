@@ -92,6 +92,26 @@ class WhatsAppService {
   }
 
   /**
+ * Send a queue notification to healthcare providers via WhatsApp
+ * @param {string} phoneNumber - Provider's phone number
+ * @param {string} queueNumber - Patient's queue number
+ * @param {string} patientNumber - Patient's identification number
+ * @returns {Promise<object>} - Response from Infobip API
+ */
+sendQueueNotification = async (phoneNumber, queueNumber, patientNumber) => {
+  // Use the helper method to send the template
+  return this.sendWhatsAppTemplate(
+    phoneNumber,
+    "hms_queue_message",
+    [queueNumber, patientNumber],
+    null,
+    "en"
+  );
+}
+
+
+
+  /**
    * Send a document link via WhatsApp using the hms_documents_sender template
    * @param {string} phoneNumber - Recipient's phone number
    * @param {string} documentUrl - URL to the document/receipt/prescription

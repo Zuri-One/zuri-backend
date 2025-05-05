@@ -2,8 +2,11 @@ const { LabTest, User, Patient, DepartmentQueue } = require('../models');
 const { Op, sequelize } = require('sequelize');
 const { generateLabReport } = require('../utils/pdf.util');
 const sendEmail = require('../utils/email.util');
+const WhatsAppService = require('../services/whatsapp.service');
 
 const labTestController = {
+ 
+
   /**
    * Create new lab test
    * @route POST /api/v1/lab-test
@@ -34,6 +37,15 @@ const labTestController = {
         requestedById: req.user.id
       });
   
+      // Fetch patient information
+      const patient = await Patient.findByPk(patientId);
+      if (!patient) {
+        return res.status(404).json({
+          success: false,
+          message: 'Patient not found'
+        });
+      }
+  
       const labTest = await LabTest.create({
         patientId,
         queueEntryId,
@@ -49,6 +61,42 @@ const labTestController = {
         patientId: labTest.patientId,
         status: labTest.status
       });
+  
+      // Send notifications to lab staff about new test request
+      try {
+        // Find lab department
+        const labDepartment = await Department.findOne({
+          where: { code: 'LAB' }
+        });
+  
+        if (labDepartment) {
+          // Find all active lab technicians
+          const labStaff = await User.findAll({
+            where: {
+              departmentId: labDepartment.id,
+              isActive: true,
+              role: 'LAB_TECHNICIAN'
+            },
+            attributes: ['id', 'telephone1']
+          });
+  
+          // Send WhatsApp notifications to all lab staff
+          for (const staff of labStaff) {
+            if (staff.telephone1) {
+              await WhatsAppService.sendQueueNotification(
+                staff.telephone1,
+                testType, // Using test type as queue identifier
+                patient.patientNumber
+              );
+            }
+          }
+          
+          console.log(`Notifications sent to ${labStaff.length} lab staff members`);
+        }
+      } catch (notificationError) {
+        console.error('Failed to send lab test notifications:', notificationError);
+        // Don't fail the request if notifications fail
+      }
   
       res.status(201).json({
         success: true,

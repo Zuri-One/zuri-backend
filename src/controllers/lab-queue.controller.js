@@ -1,6 +1,7 @@
 const { LabTest, Patient, User, DepartmentQueue } = require('../models');
 const { Op } = require('sequelize');
 const sequelize = require('../models').sequelize;
+const WhatsAppService = require('../services/whatsapp.service');
 
 
 /**

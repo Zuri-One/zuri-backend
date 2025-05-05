@@ -1,6 +1,7 @@
 const { DepartmentQueue, Patient, Department, User, Triage, MedicalRecord, LabTest  } = require('../models');
 const { Op } = require('sequelize');
 const sequelize = require('../models').sequelize;
+const WhatsAppService = require('../services/whatsapp.service');
 
 exports.addToQueue = async (req, res, next) => {
   try {
@@ -182,6 +183,32 @@ exports.addToQueue = async (req, res, next) => {
         ]
       });
 
+      // Notify department staff via WhatsApp
+      try {
+        // Get all staff members in the department
+        const departmentStaff = await User.findAll({
+          where: {
+            departmentId: departmentId,
+            isActive: true
+          },
+          attributes: ['id', 'telephone1']
+        });
+
+        // Send WhatsApp notifications to all department staff
+        for (const staff of departmentStaff) {
+          if (staff.telephone1) {
+            await WhatsAppService.sendQueueNotification(
+              staff.telephone1,
+              queueEntry.queueNumber.toString(),
+              completeQueueEntry.Patient.patientNumber
+            );
+          }
+        }
+      } catch (notificationError) {
+        console.error('Failed to send queue notifications:', notificationError);
+        // Don't fail the request if notifications fail
+      }
+
       res.status(201).json({
         success: true,
         message: `Successfully added to ${department.name} queue`,
@@ -202,7 +229,6 @@ exports.addToQueue = async (req, res, next) => {
     next(error);
   }
 };
-
 
 
 exports.getDepartmentQueue = async (req, res, next) => {
