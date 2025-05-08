@@ -14,7 +14,11 @@ const {
   registerPatient,
   registerAdmin,
   verifyAdminLogin,    
-  verifyStaffLogin     
+  verifyStaffLogin,
+  resetPasswordForm,
+  processPasswordReset,
+  passwordResetSuccess,
+
 } = require('../../controllers/auth.controller');
 
 const { 
@@ -611,6 +615,90 @@ router.post('/forgot-password', forgotPassword);
  *         description: Password reset successful
  */
 router.post('/reset-password', validatePasswordReset, resetPassword);
+
+
+/**
+ * @swagger
+ * /api/v1/auth/reset-password-form:
+ *   get:
+ *     summary: Display password reset form
+ *     tags: [Authentication]
+ *     parameters:
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Reset token from email
+ *       - in: query
+ *         name: setup
+ *         schema:
+ *           type: boolean
+ *         description: Whether this is initial password setup
+ *       - in: query
+ *         name: error
+ *         schema:
+ *           type: string
+ *         description: Error message from previous attempt
+ *     responses:
+ *       200:
+ *         description: Password reset form displayed
+ *       400:
+ *         description: Invalid or missing token
+ */
+router.get('/reset-password-form', resetPasswordForm);
+
+/**
+ * @swagger
+ * /api/v1/auth/process-password-reset:
+ *   post:
+ *     summary: Process password reset form submission
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - password
+ *               - confirmPassword
+ *             properties:
+ *               token:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *                 format: password
+ *               confirmPassword:
+ *                 type: string
+ *                 format: password
+ *               setup:
+ *                 type: boolean
+ *     responses:
+ *       302:
+ *         description: Redirect to success or error page
+ */
+router.post('/process-password-reset', processPasswordReset);
+
+/**
+ * @swagger
+ * /api/v1/auth/password-reset-success:
+ *   get:
+ *     summary: Display password reset success page
+ *     tags: [Authentication]
+ *     parameters:
+ *       - in: query
+ *         name: setup
+ *         schema:
+ *           type: boolean
+ *         description: Whether this was initial password setup
+ *     responses:
+ *       200:
+ *         description: Success page displayed
+ */
+router.get('/password-reset-success', passwordResetSuccess);
+
 
 /**
  * @swagger

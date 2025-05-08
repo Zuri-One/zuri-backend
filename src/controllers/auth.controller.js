@@ -88,11 +88,7 @@ exports.registerAdmin = async (req, res, next) => {
       });
     }
 
-    // Generate verification code and token
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-
-    // Create admin user
+    // Create admin user without verification fields
     const user = await User.create({
       surname,
       otherNames,
@@ -113,12 +109,7 @@ exports.registerAdmin = async (req, res, next) => {
       nationality,
       designation,
       joiningDate: new Date(),
-      emailVerificationCode: verificationCode,
-      emailVerificationToken: crypto
-        .createHash('sha256')
-        .update(verificationToken)
-        .digest('hex'),
-      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      isEmailVerified: true, // Skip email verification
       isActive: true,
       status: 'active'
     });
@@ -132,20 +123,23 @@ exports.registerAdmin = async (req, res, next) => {
       employeeId: user.employeeId
     });
 
-    // Send verification email asynchronously
-    try {
-      const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
-      await sendEmail({
-        to: user.email,
-        subject: 'Verify your email - Zuri Health Admin Account',
-        html: generateVerificationEmail(
-          `${user.surname} ${user.otherNames}`,
-          verificationUrl,
-          verificationCode
-        )
-      });
+    // Generate reset token for initial password setup
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedResetToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
 
-      // Send welcome email with login instructions
+    // Update user with reset token
+    user.resetPasswordToken = hashedResetToken;
+    user.resetPasswordExpires = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
+    await user.save();
+
+    // Create reset URL
+    const resetUrl = `${process.env.BACKEND_URL}/api/v1/auth/reset-password-form?token=${resetToken}&setup=true`;
+
+    // Send only the welcome email with password setup link
+    try {
       await sendEmail({
         to: user.email,
         subject: 'Welcome to Zuri Health - Admin Account Created',
@@ -159,21 +153,26 @@ exports.registerAdmin = async (req, res, next) => {
               <p><strong>Employee ID:</strong> ${user.employeeId}</p>
               <p><strong>Role:</strong> Administrator</p>
             </div>
-            <p>You can access the Zuri Health Management System at: <a href="${process.env.FRONTEND_URL}">${process.env.FRONTEND_URL}</a></p>
-            <p>For security reasons, we strongly recommend changing your password after your first login.</p>
-            <div style="margin: 20px 0; padding: 15px; border-left: 4px solid #0066cc;">
-              <p><strong>Important:</strong></p>
-              <p>Please check your email for a separate verification link to complete your account setup.</p>
+            
+            <p>To set up your password and access the system, please click the button below:</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">Set Your Password</a>
             </div>
+            
+            <p>This link will expire in 72 hours for security reasons.</p>
+            
+            <p>You can access the Zuri Health Management System at: <a href="${process.env.FRONTEND_URL}">${process.env.FRONTEND_URL}</a></p>
+            
             <p>If you have any questions or need assistance, please contact the system support team.</p>
             <p>Best regards,<br>Zuri Health Team</p>
           </div>
         `
       });
       
-      console.log(`Admin registration emails sent to ${email}`);
+      console.log(`Admin welcome email with password setup link sent to ${email}`);
     } catch (emailError) {
-      console.error('Failed to send admin registration emails:', emailError);
+      console.error('Failed to send admin welcome email:', emailError);
       // Email failure doesn't affect registration success
     }
 
@@ -182,6 +181,321 @@ exports.registerAdmin = async (req, res, next) => {
     next(error);
   }
 };
+
+
+exports.resetPasswordForm = async (req, res, next) => {
+  try {
+    const { token, setup, error } = req.query;
+    
+    if (!token) {
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Invalid Reset Link</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+            .error-container { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="error-container">
+            <h2>Invalid Reset Link</h2>
+            <p>The password reset link is invalid or missing a required token.</p>
+            <p>Please request a new password reset link.</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+    
+    // Verify token exists in database (without revealing if it's valid)
+    // This just checks if any user has a reset token, without revealing which user
+    const anyValidToken = await User.findOne({
+      where: {
+        resetPasswordToken: crypto.createHash('sha256').update(token).digest('hex'),
+        resetPasswordExpires: { [Op.gt]: new Date() }
+      }
+    });
+    
+    // Render the form
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${setup === 'true' ? 'Set Your Password' : 'Reset Your Password'}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f7f9fc;
+            margin: 0;
+            padding: 0;
+          }
+          .container {
+            max-width: 500px;
+            margin: 40px auto;
+            padding: 30px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 24px;
+          }
+          .form-group {
+            margin-bottom: 20px;
+          }
+          label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+          }
+          input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+          }
+          button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 14px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            font-weight: bold;
+          }
+          button:hover {
+            background-color: #45a049;
+          }
+          .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: ${error ? 'block' : 'none'};
+          }
+          .password-requirements {
+            font-size: 13px;
+            color: #666;
+            margin-top: 8px;
+          }
+          .password-requirements ul {
+            margin-top: 5px;
+            padding-left: 15px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${setup === 'true' ? 'Set Your Password' : 'Reset Your Password'}</h1>
+          </div>
+          
+          <div class="error-message" ${!error ? 'style="display:none"' : ''}>
+            ${error || ''}
+          </div>
+          
+          <form action="${process.env.BACKEND_URL}/api/v1/auth/process-password-reset" method="POST">
+            <input type="hidden" name="token" value="${token}">
+            <input type="hidden" name="setup" value="${setup === 'true' ? 'true' : 'false'}">
+            
+            <div class="form-group">
+              <label for="password">New Password</label>
+              <input type="password" id="password" name="password" required>
+              <div class="password-requirements">
+                Password requirements:
+                <ul>
+                  <li>At least 8 characters</li>
+                  <li>At least one uppercase letter</li>
+                  <li>At least one lowercase letter</li>
+                  <li>At least one number</li>
+                  <li>At least one special character</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="confirmPassword">Confirm New Password</label>
+              <input type="password" id="confirmPassword" name="confirmPassword" required>
+            </div>
+            
+            <button type="submit">${setup === 'true' ? 'Set Password' : 'Reset Password'}</button>
+          </form>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error('Error rendering reset form:', error);
+    next(error);
+  }
+};
+
+exports.processPasswordReset = async (req, res, next) => {
+  try {
+    const { token, password, confirmPassword, setup } = req.body;
+    
+    // Validate input
+    if (!token) {
+      return res.redirect(`/api/v1/auth/reset-password-form?error=Missing+token`);
+    }
+    
+    if (!password || password.length < 8) {
+      return res.redirect(`/api/v1/auth/reset-password-form?token=${token}&setup=${setup}&error=Password+must+be+at+least+8+characters+long`);
+    }
+    
+    if (password !== confirmPassword) {
+      return res.redirect(`/api/v1/auth/reset-password-form?token=${token}&setup=${setup}&error=Passwords+do+not+match`);
+    }
+    
+    // Validate password strength
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasLowercase = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[^A-Za-z0-9]/.test(password);
+    
+    if (!hasUppercase || !hasLowercase || !hasNumber || !hasSpecial) {
+      return res.redirect(`/api/v1/auth/reset-password-form?token=${token}&setup=${setup}&error=Password+must+include+uppercase+and+lowercase+letters,+numbers,+and+special+characters`);
+    }
+    
+    // Hash the token to compare with stored hashed token
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+    
+    // Find user with this token
+    const user = await User.findOne({
+      where: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { [Op.gt]: new Date() }
+      }
+    });
+    
+    if (!user) {
+      return res.redirect(`/api/v1/auth/reset-password-form?token=${token}&setup=${setup}&error=Invalid+or+expired+reset+token.+Please+request+a+new+password+reset+link.`);
+    }
+    
+    // Update password
+    user.password = password;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await user.save();
+    
+    // Send confirmation email
+    await sendEmail({
+      to: user.email,
+      subject: `Password ${setup === 'true' ? 'Set' : 'Reset'} Successfully - Zuri Health`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Password ${setup === 'true' ? 'Set' : 'Changed'} Successfully</h2>
+          <p>Hello ${user.surname} ${user.otherNames},</p>
+          <p>Your password for Zuri Health has been ${setup === 'true' ? 'set' : 'changed'} successfully.</p>
+          <p>If you did not make this change, please contact our support team immediately.</p>
+          <div style="margin: 30px 0; padding: 10px; background-color: #f5f5f5; border-left: 4px solid #4CAF50;">
+            <p style="margin-top: 0;"><strong>Account Details:</strong></p>
+            <p>Email: ${user.email}</p>
+            <p>Role: ${user.role}</p>
+            ${user.employeeId ? `<p>Employee ID: ${user.employeeId}</p>` : ''}
+          </div>
+          <p>You can now login with your ${setup === 'true' ? 'new' : ''} password.</p>
+          <p>Best regards,<br>Zuri Health Team</p>
+        </div>
+      `
+    });
+    
+    // Redirect to success page
+    return res.redirect(`/api/v1/auth/password-reset-success?setup=${setup}`);
+    
+  } catch (error) {
+    console.error('Error processing password reset:', error);
+    return res.redirect(`/api/v1/auth/reset-password-form?token=${req.body.token || ''}&setup=${req.body.setup || ''}&error=An+unexpected+error+occurred.+Please+try+again.`);
+  }
+};
+
+exports.passwordResetSuccess = (req, res) => {
+  const { setup } = req.query;
+  const isSetup = setup === 'true';
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Password ${isSetup ? 'Set' : 'Reset'} Successfully</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          background-color: #f7f9fc;
+          margin: 0;
+          padding: 0;
+        }
+        .container {
+          max-width: 500px;
+          margin: 40px auto;
+          padding: 30px;
+          background-color: #fff;
+          border-radius: 8px;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+          text-align: center;
+        }
+        .success-icon {
+          font-size: 48px;
+          color: #4CAF50;
+          margin-bottom: 20px;
+        }
+        h1 {
+          color: #2c3e50;
+          margin-bottom: 20px;
+          font-size: 24px;
+        }
+        .button {
+          display: inline-block;
+          background-color: #4CAF50;
+          color: white;
+          text-decoration: none;
+          padding: 12px 24px;
+          border-radius: 4px;
+          font-weight: bold;
+          margin-top: 20px;
+        }
+        .button:hover {
+          background-color: #45a049;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="success-icon">✓</div>
+        <h1>Password ${isSetup ? 'Set' : 'Reset'} Successfully</h1>
+        <p>Your password has been ${isSetup ? 'set' : 'reset'} successfully.</p>
+        <p>You can now log in to your account using your new password.</p>
+        <a href="${process.env.FRONTEND_URL}/login" class="button">Go to Login</a>
+      </div>
+    </body>
+    </html>
+  `);
+};
+
 
 exports.staffLogin = async (req, res, next) => {
   try {
@@ -767,6 +1081,7 @@ const generatePatientNumber = async () => {
 };
 
 
+
 exports.register = async (req, res, next) => {
   try {
     const {
@@ -880,15 +1195,7 @@ exports.register = async (req, res, next) => {
       });
     }
 
-    // Generate verification code and token
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    
-    // Hash password
-    // const salt = await bcrypt.genSalt(10);
-    // const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create staff user
+    // Create staff user, but don't set verification fields
     const user = await User.create({
       surname,
       otherNames,
@@ -917,12 +1224,7 @@ exports.register = async (req, res, next) => {
       dutySchedule: dutySchedule || {},
       workSchedule: workSchedule || {},
       joiningDate: new Date(),
-      emailVerificationCode: verificationCode,
-      emailVerificationToken: crypto
-        .createHash('sha256')
-        .update(verificationToken)
-        .digest('hex'),
-      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      isEmailVerified: true, // Set this to true to skip verification
       isActive: true,
       status: 'active'
     });
@@ -936,10 +1238,49 @@ exports.register = async (req, res, next) => {
       employeeId: user.employeeId
     });
 
+    // Generate reset token for initial password setup
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedResetToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex');
+
+    // Update user with reset token
+    user.resetPasswordToken = hashedResetToken;
+    user.resetPasswordExpires = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
+    await user.save();
+
+    // Create reset URL with setup flag - use the correct route
+    const resetUrl = `${process.env.BACKEND_URL}/api/v1/auth/reset-password-form?token=${resetToken}&setup=true`;
+
+    // Fetch department name if department ID is provided
+    let departmentName = 'Not assigned';
+    let primaryDepartmentName = 'Not assigned';
+    
     try {
+      if (user.departmentId) {
+        const department = await Department.findByPk(user.departmentId);
+        if (department) {
+          departmentName = department.name;
+        }
+      }
+      
+      if (user.primaryDepartmentId) {
+        const primaryDepartment = await Department.findByPk(user.primaryDepartmentId);
+        if (primaryDepartment) {
+          primaryDepartmentName = primaryDepartment.name;
+        }
+      }
+    } catch (deptError) {
+      console.error('Error fetching department info:', deptError);
+      // Continue with the default values if there's an error
+    }
+
+    try {
+      // Only send the welcome email with password setup link
       await sendEmail({
         to: user.email,
-        subject: 'Welcome to Zuri Health - Registration Successful',
+        subject: 'Welcome to Zuri Health - Set Your Password',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2>Welcome to Zuri Health!</h2>
@@ -949,39 +1290,29 @@ exports.register = async (req, res, next) => {
               <p><strong>Email:</strong> ${user.email}</p>
               <p><strong>Employee ID:</strong> ${user.employeeId}</p>
               <p><strong>Role:</strong> ${user.role}</p>
-              <p><strong>Password:</strong> ${password}</p>
+              <p><strong>Department:</strong> ${departmentName}</p>
+              ${primaryDepartmentName !== 'Not assigned' ? `<p><strong>Primary Department:</strong> ${primaryDepartmentName}</p>` : ''}
             </div>
-            <p>You can access the Zuri Health Management System at: <a href="https://hms.zuri.health">hms.zuri.health</a></p>
-            <p>For security reasons, we strongly recommend changing your password after your first login.</p>
-            <div style="margin: 20px 0; padding: 15px; border-left: 4px solid #0066cc;">
-              <p><strong>Important:</strong></p>
-              <p>Please check your email for a separate verification link to complete your account setup.</p>
+            
+            <p>To set up your password and access the system, please click the button below:</p>
+            <p>To access the platform, go to https://hms.zuri.health/</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">Set Your Password</a>
             </div>
+            
+            <p>This link will expire in 72 hours for security reasons.</p>
+            
+            <p>You can access the Zuri Health Management System at: <a href="${process.env.FRONTEND_URL}">${process.env.FRONTEND_URL}</a></p>
+            
             <p>If you have any questions or need assistance, please contact your system administrator.</p>
             <p>Best regards,<br>Zuri Health Team</p>
           </div>
         `
       });
-      console.log(`Registration confirmation email sent to ${email}`);
-    } catch (confirmationEmailError) {
-      console.error('Failed to send registration confirmation email:', confirmationEmailError);
-      // Email failure doesn't affect registration success
-    }
-    // Attempt to send verification email asynchronously
-    try {
-      const verificationUrl = `${process.env.FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
-      await sendEmail({
-        to: user.email,
-        subject: 'Verify your email - Zuri Health Staff',
-        html: generateVerificationEmail(
-          `${user.surname} ${user.otherNames}`,
-          verificationUrl,
-          verificationCode
-        )
-      });
-      console.log(`Verification email sent to ${email}`);
+      console.log(`Welcome email with password setup link sent to ${email}`);
     } catch (emailError) {
-      console.error('Failed to send verification email:', emailError);
+      console.error('Failed to send welcome email:', emailError);
       // Email failure doesn't affect registration success
     }
 
@@ -1227,44 +1558,71 @@ exports.forgotPassword = async (req, res, next) => {
     if (!user) {
       console.log('No user found with email:', email);
       return res.status(200).json({
-        message: 'If this email exists, you will receive a password reset code'
+        message: 'If this email exists, you will receive a password reset link'
       });
     }
 
     console.log('User found:', { userId: user.id, email: user.email });
 
-    // Generate reset code
-    const resetCode = generateResetCode();
-    console.log('Generated reset code for user:', resetCode);
-
-    // Hash reset code
-    const hashedResetCode = crypto
+    // Generate reset token (more secure than just a code)
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedResetToken = crypto
       .createHash('sha256')
-      .update(resetCode)
+      .update(resetToken)
       .digest('hex');
 
-    // Update user with reset code
-    user.resetPasswordToken = hashedResetCode;
-    user.resetPasswordExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    // Update user with reset token
+    user.resetPasswordToken = hashedResetToken;
+    user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await user.save();
+
+    // Create reset URL - use new form-based URL
+    const resetUrl = `${process.env.BACKEND_URL}/api/v1/auth/reset-password-form?token=${resetToken}`;
+
+    // Create email with reset link
+    const resetEmail = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>Password Reset Request</h2>
+        <p>Hello ${user.surname} ${user.otherNames},</p>
+        <p>You requested to reset your password for your Zuri Health account.</p>
+        
+        <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+          <p><strong>User Details:</strong></p>
+          <p>Name: ${user.surname} ${user.otherNames}</p>
+          <p>Email: ${user.email}</p>
+          <p>Role: ${user.role}</p>
+          ${user.employeeId ? `<p>Employee ID: ${user.employeeId}</p>` : ''}
+        </div>
+        
+        <p>Please click the button below to reset your password:</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetUrl}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">Reset Your Password</a>
+        </div>
+        
+        <p>If you did not request this password reset, please ignore this email or contact support if you have concerns.</p>
+        
+        <p>This link will expire in 1 hour for security reasons.</p>
+        
+        <p>Best regards,<br>Zuri Health Team</p>
+      </div>
+    `;
 
     await sendEmail({
       to: user.email,
-      subject: 'Password Reset Code - Zuri Health',
-      html: generatePasswordResetEmail(user.name, resetCode)
+      subject: 'Password Reset - Zuri Health',
+      html: resetEmail
     });
 
-    console.log('Reset code email sent successfully to:', email);
+    console.log('Reset link email sent successfully to:', email);
 
     res.status(200).json({
-      message: 'If this email exists, you will receive a password reset code'
+      message: 'If this email exists, you will receive a password reset link'
     });
 
   } catch (error) {
     console.error('Password reset error:', error);
-    res.status(500).json({
-      message: 'An error occurred while processing your request'
-    });
+    next(error);
   }
 };
 
@@ -1272,6 +1630,7 @@ exports.resetPassword = async (req, res, next) => {
   try {
     const { code, password } = req.body;
 
+    // For token-based reset, hash the token to compare
     const hashedCode = crypto
       .createHash('sha256')
       .update(code)
@@ -1288,7 +1647,7 @@ exports.resetPassword = async (req, res, next) => {
 
     if (!user) {
       return res.status(400).json({
-        message: 'Invalid or expired reset code'
+        message: 'Invalid or expired reset token'
       });
     }
 
@@ -1309,7 +1668,22 @@ exports.resetPassword = async (req, res, next) => {
     await sendEmail({
       to: user.email,
       subject: 'Password Changed Successfully - Zuri Health',
-      html: generatePasswordChangeConfirmationEmail(user.name)
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Password Changed Successfully</h2>
+          <p>Hello ${user.surname} ${user.otherNames},</p>
+          <p>Your password for Zuri Health has been changed successfully.</p>
+          <p>If you did not make this change, please contact our support team immediately.</p>
+          <div style="margin: 30px 0; padding: 10px; background-color: #f5f5f5; border-left: 4px solid #4CAF50;">
+            <p style="margin-top: 0;"><strong>Account Details:</strong></p>
+            <p>Email: ${user.email}</p>
+            <p>Role: ${user.role}</p>
+            ${user.employeeId ? `<p>Employee ID: ${user.employeeId}</p>` : ''}
+          </div>
+          <p>You can now login with your new password.</p>
+          <p>Best regards,<br>Zuri Health Team</p>
+        </div>
+      `
     });
 
     res.json({
