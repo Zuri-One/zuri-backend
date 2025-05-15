@@ -1,28 +1,8 @@
-// reset-hudson-flavia.js
+// reset-dana.js
 const axios = require('axios');
-const fs = require('fs');
 
 // Configuration
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:10000';
-const BEARER_TOKEN = process.env.BEARER_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdlZWNhNDQ4LWNhOTItNGYxOS1hZTc0LWY1MGZlMTVkY2QzYyIsInJvbGUiOiJBRE1JTiIsInBlcm1pc3Npb25zIjpbImFsbCJdLCJpYXQiOjE3NDczMTg3MTQsImV4cCI6MTc0NzQwNTExNH0.JEHC16bQ178H0fzL10wkoTnaHRP_fg5jVrX6RUZhR_I';
-
-// Helper function to log responses
-const logResponse = (name, action, response, error = null) => {
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    user: name,
-    action: action,
-    success: !error,
-    data: error ? null : response.data,
-    error: error ? (error.response ? error.response.data : error.message) : null,
-    status: error ? (error.response ? error.response.status : 'ERROR') : response.status
-  };
-  
-  console.log(`${logEntry.success ? '✅' : '❌'} ${name} - ${action}: ${logEntry.success ? 'Success' : 'Failed'}`);
-  
-  // Append to log file
-  fs.appendFileSync('password-resets.log', JSON.stringify(logEntry, null, 2) + ',\n');
-};
 
 // Function to send password reset link
 const sendPasswordResetLink = async (email) => {
@@ -39,57 +19,40 @@ const sendPasswordResetLink = async (email) => {
       { headers }
     );
     
+    console.log(`✅ Password reset email sent successfully to ${email}!`);
+    console.log(`📊 Status: ${response.status}`);
+    
+    if (response.data) {
+      console.log(`📊 Response: ${JSON.stringify(response.data, null, 2)}`);
+    }
+    
     return response;
   } catch (error) {
     console.error(`❌ Error sending reset link: ${error.message}`);
+    if (error.response) {
+      console.error(`Response status: ${error.response.status}`);
+      console.error(`Response data:`, error.response.data);
+    }
     throw error;
   }
 };
 
 // Main function
-const sendResets = async () => {
-  // Initialize log file
-  fs.writeFileSync('password-resets.log', '[\n');
+const resetDana = async () => {
+  const danaEmail = "danakemuma@gmail.com";
+  
+  console.log(`🔄 Starting password reset process for Dana Kemuma Nyangaresi...`);
   
   try {
-    // List of users to send password resets to
-    const usersToReset = [
-      { name: "Hudson Vulimu", email: "kamandehudson@gmail.com" },
-      { name: "Flavia Bagatya", email: "flavia@zuri.health" }
-    ];
-    
-    console.log(`🔄 Sending password reset emails to ${usersToReset.length} users...\n`);
-    
-    // Process each user
-    for (const [index, user] of usersToReset.entries()) {
-      console.log(`Processing ${index + 1}/${usersToReset.length}: ${user.name} (${user.email})`);
-      
-      try {
-        const response = await sendPasswordResetLink(user.email);
-        logResponse(user.name, "password reset", response);
-        
-        // Add a small delay between requests
-        if (index < usersToReset.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-      } catch (error) {
-        logResponse(user.name, "password reset", null, error);
-      }
-    }
-    
+    await sendPasswordResetLink(danaEmail);
+    console.log("\n✅ Password reset link sent successfully to Dana!");
   } catch (error) {
-    console.error(`❌ General error: ${error.message}`);
+    console.error(`\n❌ Failed to send password reset link to Dana.`);
   }
-  
-  // Close log file
-  fs.appendFileSync('password-resets.log', '\n]');
-  
-  console.log("\n✅ Password reset process completed!");
-  console.log("📋 Check password-resets.log for detailed results");
 };
 
-// Run the main function
-sendResets().catch(err => {
+// Run the script
+resetDana().catch(err => {
   console.error('Script execution failed:', err);
   process.exit(1);
 });
