@@ -1573,7 +1573,7 @@ exports.forgotPassword = async (req, res, next) => {
 
     // Update user with reset token
     user.resetPasswordToken = hashedResetToken;
-    user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    user.resetPasswordExpires = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
     await user.save();
 
     // Create reset URL - use new form-based URL
