@@ -1,4 +1,4 @@
-// add-user-send-resets.js
+// reset-hudson-flavia.js
 const axios = require('axios');
 const fs = require('fs');
 
@@ -21,39 +21,7 @@ const logResponse = (name, action, response, error = null) => {
   console.log(`${logEntry.success ? '✅' : '❌'} ${name} - ${action}: ${logEntry.success ? 'Success' : 'Failed'}`);
   
   // Append to log file
-  fs.appendFileSync('user-actions.log', JSON.stringify(logEntry, null, 2) + ',\n');
-};
-
-// Format phone number
-const formatPhoneNumber = (phone) => {
-  if (!phone) return null;
-  if (phone.startsWith('+')) return phone;
-  
-  let cleanNumber = phone.replace(/^0+/, '');
-  return `+254${cleanNumber}`;
-};
-
-// Function to create a new user
-const createUser = async (userData) => {
-  try {
-    console.log(`➕ Creating new user: ${userData.email}`);
-    
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${BEARER_TOKEN}`
-    };
-    
-    const response = await axios.post(
-      `${API_BASE_URL}/api/v1/auth/register`,
-      userData,
-      { headers }
-    );
-    
-    return response;
-  } catch (error) {
-    console.error(`❌ Error creating user: ${error.message}`);
-    throw error;
-  }
+  fs.appendFileSync('password-resets.log', JSON.stringify(logEntry, null, 2) + ',\n');
 };
 
 // Function to send password reset link
@@ -79,82 +47,49 @@ const sendPasswordResetLink = async (email) => {
 };
 
 // Main function
-const processUsers = async () => {
+const sendResets = async () => {
   // Initialize log file
-  fs.writeFileSync('user-actions.log', '[\n');
+  fs.writeFileSync('password-resets.log', '[\n');
   
   try {
-    // 1. Create new user - Evangeline Wanjiru
-    const evangelineData = {
-      surname: "Wanjiru",
-      otherNames: "Evangeline",
-      email: "evangeline@zuri.health",
-      password: "Password123",
-      role: "RECEPTIONIST",
-      departmentId: "328c72ad-7689-4cdb-9995-77c2d54f3775", // Reception department
-      primaryDepartmentId: "328c72ad-7689-4cdb-9995-77c2d54f3775",
-      employeeId: "ZH-EW-2025",
-      telephone1: formatPhoneNumber("0718842424"),
-      gender: "FEMALE",
-      dateOfBirth: "1995-05-15", // Assuming a birth date
-      town: "Nairobi",
-      areaOfResidence: "Nairobi",
-      idType: "NATIONAL_ID",
-      idNumber: "29876543", // Generated ID number
-      nationality: "Kenyan",
-      designation: "Receptionist"
-    };
-    
-    console.log("\n== Creating new receptionist: Evangeline Wanjiru ==");
-    try {
-      const createResponse = await createUser(evangelineData);
-      logResponse("Evangeline Wanjiru", "create", createResponse);
-    } catch (error) {
-      if (error.response && error.response.data && error.response.data.message && 
-          error.response.data.message.includes("already registered")) {
-        console.log(`⚠️ Email evangeline@zuri.health already exists. Will still send password reset.`);
-      } else {
-        throw error;
-      }
-    }
-    
-    // 2. Send password reset emails
-    const emailsToReset = [
-      { name: "Evangeline Wanjiru", email: "evangeline@zuri.health" },
-      { name: "Joy John", email: "joy@zuri.health" },
-      { name: "Antony Ndegwa", email: "antony@zuri.health" }
+    // List of users to send password resets to
+    const usersToReset = [
+      { name: "Hudson Vulimu", email: "kamandehudson@gmail.com" },
+      { name: "Flavia Bagatya", email: "flavia@zuri.health" }
     ];
     
-    console.log("\n== Sending password reset emails ==");
-    for (const user of emailsToReset) {
+    console.log(`🔄 Sending password reset emails to ${usersToReset.length} users...\n`);
+    
+    // Process each user
+    for (const [index, user] of usersToReset.entries()) {
+      console.log(`Processing ${index + 1}/${usersToReset.length}: ${user.name} (${user.email})`);
+      
       try {
-        const resetResponse = await sendPasswordResetLink(user.email);
-        logResponse(user.name, "password reset", resetResponse);
+        const response = await sendPasswordResetLink(user.email);
+        logResponse(user.name, "password reset", response);
         
         // Add a small delay between requests
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (index < usersToReset.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       } catch (error) {
         logResponse(user.name, "password reset", null, error);
       }
     }
     
   } catch (error) {
-    console.error(`❌ Error in process: ${error.message}`);
-    if (error.response) {
-      console.error(`Response status: ${error.response.status}`);
-      console.error(`Response data:`, error.response.data);
-    }
+    console.error(`❌ General error: ${error.message}`);
   }
   
   // Close log file
-  fs.appendFileSync('user-actions.log', '\n]');
+  fs.appendFileSync('password-resets.log', '\n]');
   
-  console.log("\n✅ Process completed!");
-  console.log("📋 Check user-actions.log for detailed results");
+  console.log("\n✅ Password reset process completed!");
+  console.log("📋 Check password-resets.log for detailed results");
 };
 
 // Run the main function
-processUsers().catch(err => {
+sendResets().catch(err => {
   console.error('Script execution failed:', err);
   process.exit(1);
 });
