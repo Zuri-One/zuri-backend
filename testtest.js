@@ -77,43 +77,19 @@ const generateRandomID = (country = 'Kenya') => {
   return id;
 };
 
-// Function to find a user by email
-const findUserByEmail = async (email) => {
+// Function to update a user using the correct endpoint
+const updateUserDetails = async (userId, updateData) => {
   try {
-    console.log(`🔍 Looking up user: ${email}`);
-    
-    const headers = {
-      'Authorization': `Bearer ${BEARER_TOKEN}`
-    };
-    
-    const response = await axios.get(
-      `${API_BASE_URL}/api/v1/users/search?email=${encodeURIComponent(email)}`,
-      { headers }
-    );
-    
-    if (response.data && response.data.data && response.data.data.length > 0) {
-      return response.data.data[0];
-    }
-    
-    return null;
-  } catch (error) {
-    console.error(`❌ Error finding user: ${error.message}`);
-    return null;
-  }
-};
-
-// Function to update a user
-const updateUser = async (userId, updateData) => {
-  try {
-    console.log(`📝 Updating user ID: ${userId}`);
+    console.log(`📝 Updating user ID: ${userId} with staff/update-details endpoint`);
     
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${BEARER_TOKEN}`
     };
     
+    // Use the staff/:id/update-details endpoint that exists in your API
     const response = await axios.put(
-      `${API_BASE_URL}/api/v1/users/${userId}`,
+      `${API_BASE_URL}/api/v1/users/staff/${userId}/update-details`,
       updateData,
       { headers }
     );
@@ -135,6 +111,7 @@ const createUser = async (userData) => {
       'Authorization': `Bearer ${BEARER_TOKEN}`
     };
     
+    // Use the register endpoint from your auth routes
     const response = await axios.post(
       `${API_BASE_URL}/api/v1/auth/register`,
       userData,
@@ -157,6 +134,7 @@ const sendPasswordResetLink = async (email) => {
       'Content-Type': 'application/json'
     };
     
+    // Use the forgotPassword endpoint from your auth routes
     const response = await axios.post(
       `${API_BASE_URL}/api/v1/auth/forgot-password`,
       { email },
@@ -170,17 +148,20 @@ const sendPasswordResetLink = async (email) => {
   }
 };
 
-// Main function to process user updates
+// Main function to process users
 const processUsers = async () => {
   // Initialize log file
   fs.writeFileSync('user-updates.log', '[\n');
   
-  // Users to be updated or created
+  // Define all users to be processed
   const usersToProcess = [
+    // --- EXISTING USER UPDATES ---
+    
     // 1. Cynthia Mwihaki - Update Triage Nurse
     {
       action: "update",
       email: "cynthia@zuri.health",
+      userId: "a3070c0b-eb6b-415b-89e0-d1023729c894",
       userData: {
         surname: "Mwihaki",
         otherNames: "Cynthia",
@@ -203,6 +184,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "santaseps@gmail.com",
+      userId: "517acc86-74b4-420f-9715-c8127d419815",
       userData: {
         surname: "Odoyo",
         otherNames: "Santa",
@@ -225,6 +207,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "malcolm@zuri.health",
+      userId: "af164630-2646-4d6d-8d78-a70ecc08b14a",
       userData: {
         surname: "Mwai",
         otherNames: "Malcolm",
@@ -247,6 +230,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "lillian.masika@zuri.health",
+      userId: "e7d1137d-2e6a-48f1-ad7e-3af8a00c28c3",
       userData: {
         surname: "Masika",
         otherNames: "Lillian",
@@ -272,6 +256,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "antony@zuri.health",
+      userId: "e4839717-1f77-4c45-b7ed-853b95e758ec",
       userData: {
         surname: "Ndegwa",
         otherNames: "Antony",
@@ -297,6 +282,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "lab@zuri.health",
+      userId: "dd866524-ec67-4040-a3e8-9c6a7fb6d967",
       userData: {
         surname: "Bosibori",
         otherNames: "Doreen",
@@ -322,6 +308,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "kamandehudson@gmail.com",
+      userId: "c5eec182-2c83-4220-b3d6-09028451aa0c",
       userData: {
         surname: "Vulimu",
         otherNames: "Hudson",
@@ -347,6 +334,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "kathomiwinner8@gmail.com",
+      userId: "9f955010-87ae-463c-af5e-9db20859de31",
       userData: {
         surname: "Kathomi",
         otherNames: "Winner",
@@ -366,31 +354,33 @@ const processUsers = async () => {
     },
     
     // 9. Joy John - Update Triage Nurse (Nigerian)
-    {
-      action: "update",
-      email: "joy@zuri.health",
-      userData: {
-        surname: "John",
-        otherNames: "Joy",
-        telephone1: formatPhoneNumber("0798520758"),
-        gender: "FEMALE",
-        dateOfBirth: "2000-02-02",
-        departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
-        primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
-        employeeId: "ZH-JJ-2025",
-        town: "Nairobi",
-        areaOfResidence: "Nairobi",
-        idType: "NATIONAL_ID",
-        idNumber: "40123456",
-        nationality: "Nigerian",
-        designation: "Triage Nurse"
-      }
-    },
+{
+  action: "update",
+  email: "joy@zuri.health",
+  userId: "86cc78b1-6ff6-48d0-9878-a5636c822db9",
+  userData: {
+    surname: "John",
+    otherNames: "Joy",
+    telephone1: "+2347014391050", // Updated Nigerian phone number
+    gender: "FEMALE",
+    dateOfBirth: "2000-02-02",
+    departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
+    primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
+    employeeId: "ZH-JJ-2025",
+    town: "Nairobi",
+    areaOfResidence: "Nairobi",
+    idType: "NATIONAL_ID",
+    idNumber: "40123456",
+    nationality: "Nigerian",
+    designation: "Triage Nurse"
+  }
+},
     
     // 10. Brian Kimondo - Update Doctor
     {
       action: "update",
       email: "bkimondo60@gmail.com",
+      userId: "ec3b5924-7b11-45d5-b680-329a08135eff",
       userData: {
         surname: "Kimondo",
         otherNames: "Brian",
@@ -415,7 +405,8 @@ const processUsers = async () => {
     // 11. Daphine Kamau - Update Customer Care (fix email & add more details)
     {
       action: "update",
-      email: "customercareke@zuri.health", // Find by current email
+      email: "customercareke@zuri.health", 
+      userId: "4a3106ff-10eb-4d6d-ab7d-f17259cddf45",
       userData: {
         surname: "Kamau",
         otherNames: "Daphine",
@@ -439,6 +430,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "customercareke1@zuri.health", 
+      userId: "ecdb6b74-8c9a-4cf2-a7b5-2b9a79d628ae",
       userData: {
         surname: "Mutua",
         otherNames: "Rose",
@@ -461,6 +453,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "georgina@zuri.health",
+      userId: "50ab7923-a67d-4284-8f10-b4c1aa28c9a4",
       userData: {
         surname: "Nyaka",
         otherNames: "Georgina",
@@ -486,6 +479,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "barbara@zuri.health",
+      userId: "6b72db6e-e36c-4b87-b3c0-2a14d97cb96c",
       userData: {
         surname: "Tarno",
         otherNames: "Barbara",
@@ -512,6 +506,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "isaacw@identifyafrica.io",
+      userId: "8e08496d-d716-4ccf-8957-e366fcae10b5",
       userData: {
         surname: "Wambiri",
         otherNames: "David",
@@ -524,7 +519,7 @@ const processUsers = async () => {
         town: "Nairobi",
         areaOfResidence: "Nairobi",
         idType: "NATIONAL_ID",
-        idNumber: generateRandomID(),
+        idNumber: "34978621",
         nationality: "Kenyan",
         designation: "Triage Nurse",
         specialization: ["Triage Nursing", "Emergency Care"]
@@ -535,6 +530,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "ngolo@zuri.health",
+      userId: "92cc6b6a-456f-49f5-bd69-0644a9b4706f",
       userData: {
         surname: "Ngolo",
         otherNames: "Erick Onyango",
@@ -560,6 +556,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "irene@zuri.health",
+      userId: "27333a8d-b96d-4a4b-82f8-178aa323cc0b",
       userData: {
         surname: "Muthoni",
         otherNames: "Irene",
@@ -585,6 +582,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "sally.masika@zuri.health",
+      userId: "92c82818-790c-4e6f-b74c-bbb33c515a31",
       userData: {
         surname: "Masika",
         otherNames: "Sally",
@@ -610,6 +608,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "abigael@zuri.health",
+      userId: "1369d14c-daad-409d-b272-3bc3ffc0d564",
       userData: {
         surname: "Mwangi",
         otherNames: "Abigael",
@@ -635,6 +634,7 @@ const processUsers = async () => {
     {
       action: "update",
       email: "esther@zuri.health",
+      userId: "747d9c52-4a3b-4abe-a0c6-e5fe45e348eb",
       userData: {
         surname: "Ogembo",
         otherNames: "Esther",
@@ -765,30 +765,59 @@ const processUsers = async () => {
         designation: "Laboratory Technologist"
       }
     },
+
+    {
+      "action": "create",
+      "userData": {
+        "surname": "Agu",
+        "otherNames": "Rosemary Nkiru",
+        "email": "rosemary.agu@zuri.health",
+        "password": "Password123",
+        "role": "NURSE",
+        "departmentId": "725380c2-0120-4e90-a9e6-72120c035cf0",
+        "primaryDepartmentId": "725380c2-0120-4e90-a9e6-72120c035cf0",
+        "employeeId": "ZH-ARN-2025",
+        "licenseNumber": "KNL-67842",
+        "specialization": ["Triage Nursing", "Pediatric Nursing"],
+        "qualification": ["BSc. Nursing"],
+        "telephone1": "+254745031123",
+        "gender": "FEMALE",
+        "dateOfBirth": "1994-08-15",
+        "town": "Nairobi",
+        "areaOfResidence": "Nairobi",
+        "idType": "NATIONAL_ID",
+        "idNumber": "28945632",
+        "nationality": "Nigerian",
+        "designation": "Triage Nurse"
+      }
+    },
     
     // 5. Dana Kemuma Nyangaresi - Create New Nurse
-    {
-      action: "create",
-      userData: {
-        surname: "Nyangaresi",
-        otherNames: "Dana Kemuma",
-        email: "danakemuma@gmail.com",
-        password: "Password123",
-        role: "NURSE",
-        departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
-        primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
-        employeeId: "ZH-DKN-2025",
-        telephone1: formatPhoneNumber("0745277329"),
-        gender: "FEMALE",
-        dateOfBirth: generateRandomDOB(),
-        town: "Nairobi",
-        areaOfResidence: "Nairobi",
-        idType: "NATIONAL_ID",
-        idNumber: generateRandomID(),
-        nationality: "Kenyan",
-        designation: "Nurse"
-      }
-    }
+{
+  action: "create",
+  userData: {
+    surname: "Nyangaresi",
+    otherNames: "Dana Kemuma",
+    email: "danakemuma@gmail.com",
+    password: "Password123",
+    role: "NURSE",
+    departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
+    primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
+    employeeId: "ZH-DKN-2025",
+    licenseNumber: "KNL-" + Math.floor(10000 + Math.random() * 90000), // Added license number
+    specialization: ["Triage Nursing"],
+    qualification: ["BSc. Nursing"],
+    telephone1: formatPhoneNumber("0745277329"),
+    gender: "FEMALE",
+    dateOfBirth: generateRandomDOB(),
+    town: "Nairobi",
+    areaOfResidence: "Nairobi",
+    idType: "NATIONAL_ID",
+    idNumber: generateRandomID(),
+    nationality: "Kenyan",
+    designation: "Nurse"
+  }
+}
   ];
   
   console.log(`🚀 Starting processing of ${usersToProcess.length} users...`);
@@ -801,37 +830,42 @@ const processUsers = async () => {
       console.log(`\nProcessing ${index + 1}/${usersToProcess.length}: ${userInfo.action === "create" ? userInfo.userData.email : userInfo.email}`);
       
       if (userInfo.action === "update") {
-        // Find user by email first
-        const user = await findUserByEmail(userInfo.email);
-        
-        if (user) {
-          console.log(`Found user with ID: ${user.id}`);
+        try {
+          // Update user using the update-details endpoint
+          const response = await updateUserDetails(userInfo.userId, userInfo.userData);
+          logResponse(`${userInfo.userData.otherNames} ${userInfo.userData.surname}`, "update", response);
           
-          // Update user
-          const response = await updateUser(user.id, userInfo.userData);
-          logResponse(`${user.otherNames} ${user.surname}`, "update", response);
-          
-          // Add to password reset list
+          // Add to password reset list - use the new email if it was updated
           resetPasswordsList.push(userInfo.userData.email || userInfo.email);
-        } else {
-          console.log(`⚠️ User not found: ${userInfo.email}`);
+          
+        } catch (error) {
+          console.error(`❌ Error updating user ${userInfo.email}: ${error.message}`);
+          if (error.response) {
+            console.error(`Response status: ${error.response.status}`);
+            console.error('Response data:', error.response.data);
+          }
         }
       } else if (userInfo.action === "create") {
-        // Create new user
         try {
+          // Create new user
           const response = await createUser(userInfo.userData);
           logResponse(`${userInfo.userData.otherNames} ${userInfo.userData.surname}`, "create", response);
           
           // Add to password reset list
           resetPasswordsList.push(userInfo.userData.email);
+          
         } catch (error) {
-          // Check if this is a duplicate error
-          if (error.response && error.response.data && error.response.data.error && 
-              error.response.data.error.includes("email already exists")) {
+          // Check if this is a duplicate error - still add to password reset list
+          if (error.response && error.response.data && error.response.data.message && 
+              error.response.data.message.includes("already registered")) {
             console.log(`⚠️ Email already exists: ${userInfo.userData.email}. Will send password reset anyway.`);
             resetPasswordsList.push(userInfo.userData.email);
           } else {
-            throw error;
+            console.error(`❌ Error creating user: ${error.message}`);
+            if (error.response) {
+              console.error(`Response status: ${error.response.status}`);
+              console.error('Response data:', error.response.data);
+            }
           }
         }
       }
@@ -840,11 +874,7 @@ const processUsers = async () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
     } catch (error) {
-      console.error(`❌ Error processing user: ${error.message}`);
-      if (error.response) {
-        console.error(`Response status: ${error.response.status}`);
-        console.error('Response data:', error.response.data);
-      }
+      console.error(`❌ General error processing user: ${error.message}`);
     }
   }
   
@@ -858,7 +888,7 @@ const processUsers = async () => {
       const response = await sendPasswordResetLink(email);
       logResponse(email, "password reset", response);
       
-      // Add small delay between reset requests
+      // Add small delay between reset requests to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error) {
       logResponse(email, "password reset", null, error);
