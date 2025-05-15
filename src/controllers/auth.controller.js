@@ -489,7 +489,7 @@ exports.passwordResetSuccess = (req, res) => {
         <h1>Password ${isSetup ? 'Set' : 'Reset'} Successfully</h1>
         <p>Your password has been ${isSetup ? 'set' : 'reset'} successfully.</p>
         <p>You can now log in to your account using your new password.</p>
-        <a href="${process.env.FRONTEND_URL}/login" class="button">Go to Login</a>
+        <a href="${process.env.FRONTEND_URL}/auth/staff-login" class="button">Go to Login</a>
       </div>
     </body>
     </html>

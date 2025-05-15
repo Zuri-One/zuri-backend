@@ -1,648 +1,751 @@
-// add-all-users.js
-require('dotenv').config();
-const { User, Department } = require('./src/models');
-const crypto = require('crypto');
-const sendEmail = require('./src/utils/email.util');
-const { Op } = require('sequelize');
-const bcrypt = require('bcryptjs');
+// add-users.js
+const axios = require('axios');
+const fs = require('fs');
 
-// Utility function to generate a random date of birth between 1995-1999
+// Configuration
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:10000';
+const BEARER_TOKEN = process.env.BEARER_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdlZWNhNDQ4LWNhOTItNGYxOS1hZTc0LWY1MGZlMTVkY2QzYyIsInJvbGUiOiJBRE1JTiIsInBlcm1pc3Npb25zIjpbImFsbCJdLCJpYXQiOjE3NDczMTg3MTQsImV4cCI6MTc0NzQwNTExNH0.JEHC16bQ178H0fzL10wkoTnaHRP_fg5jVrX6RUZhR_I';
+
+// Helper function to log responses
+const logResponse = (name, response, error = null) => {
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    user: name,
+    success: !error,
+    data: error ? null : response.data,
+    error: error ? (error.response ? error.response.data : error.message) : null,
+    status: error ? (error.response ? error.response.status : 'ERROR') : response.status
+  };
+  
+  console.log(`${logEntry.success ? '✅' : '❌'} ${name}: ${logEntry.success ? 'Success' : 'Failed'}`);
+  
+  // Append to log file
+  fs.appendFileSync('user-registration.log', JSON.stringify(logEntry, null, 2) + ',\n');
+};
+
+// Generate random date of birth (between 25-45 years ago)
 const generateRandomDOB = () => {
-  const start = new Date('1995-01-01');
-  const end = new Date('1999-12-31');
-  const randomDate = new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
-  return randomDate.toISOString().split('T')[0];
+  const today = new Date();
+  const minAge = 25;
+  const maxAge = 45;
+  const randomYears = Math.floor(Math.random() * (maxAge - minAge + 1)) + minAge;
+  const randomMonth = Math.floor(Math.random() * 12);
+  const randomDay = Math.floor(Math.random() * 28) + 1; // Avoid edge cases with month lengths
+  
+  const dob = new Date(today.getFullYear() - randomYears, randomMonth, randomDay);
+  return dob.toISOString().split('T')[0]; // YYYY-MM-DD format
 };
 
-// Utility function to generate a random ID number (8 digits)
-const generateRandomID = () => {
-  return Math.floor(10000000 + Math.random() * 90000000).toString();
+// Generate random ID number (8 digits for Kenya, 9 digits for Uganda, 11 digits for Nigeria)
+const generateRandomID = (country = 'Kenya') => {
+  let digits = 8; // Default for Kenya
+  
+  if (country === 'Uganda') {
+    digits = 9;
+  } else if (country === 'Nigeria') {
+    digits = 11;
+  }
+  
+  let id = '';
+  for (let i = 0; i < digits; i++) {
+    id += Math.floor(Math.random() * 10);
+  }
+  return id;
 };
 
-// Function to create a user and send welcome email
-const createUser = async (userData) => {
+// Format phone number to include country code with + prefix
+const formatPhoneNumber = (phone, country = 'Kenya') => {
+  if (!phone) return null;
+  
+  // Already has + prefix
+  if (phone.startsWith('+')) return phone;
+  
+  // Remove any leading zeros
+  let cleanNumber = phone.replace(/^0+/, '');
+  
+  // Add country code based on country
+  if (country === 'Kenya') {
+    return `+254${cleanNumber}`;
+  } else if (country === 'Uganda') {
+    return `+256${cleanNumber}`;
+  } else if (country === 'Nigeria') {
+    return `+234${cleanNumber}`;
+  }
+  
+  // Default to Kenya if country not specified
+  return `+254${cleanNumber}`;
+};
+
+// Check if user exists and delete if necessary
+const checkAndDeleteUser = async (email) => {
   try {
-    console.log(`\n📋 Processing user: ${userData.otherNames} ${userData.surname}`);
+    console.log(`🔍 Checking if user exists: ${email}`);
     
-    // Check if user already exists
-    const existingUser = await User.findOne({
-      where: {
-        [Op.or]: [
-          { email: userData.email.toLowerCase() },
-          { employeeId: userData.employeeId }
-        ]
-      }
-    });
-
-    if (existingUser) {
-      console.log(`⚠️ User with email ${userData.email} or employee ID ${userData.employeeId} already exists. Skipping.`);
-      return null;
+    const headers = {
+      'Authorization': `Bearer ${BEARER_TOKEN}`
+    };
+    
+    // First, try to find the user by email
+    const findResponse = await axios.get(
+      `${API_BASE_URL}/api/v1/users/search?email=${encodeURIComponent(email)}`,
+      { headers }
+    );
+    
+    if (findResponse.data && findResponse.data.data && findResponse.data.data.length > 0) {
+      const userId = findResponse.data.data[0].id;
+      console.log(`🔍 Found existing user with ID: ${userId}`);
+      
+      // Delete the user
+      console.log(`🗑️ Deleting user with ID: ${userId}`);
+      const deleteResponse = await axios.delete(
+        `${API_BASE_URL}/api/v1/users/${userId}`,
+        { headers }
+      );
+      
+      console.log(`✅ User deleted successfully: ${email}`);
+      return true;
     }
-
-    // Create the user
-    console.log(`Creating user with role: ${userData.role}, department: ${userData.departmentId}`);
-    const user = await User.create({
-      ...userData,
-      email: userData.email.toLowerCase(),
-      isEmailVerified: true,
-      isActive: true,
-      status: 'active',
-      joiningDate: new Date()
-    });
-
-    console.log(`✅ User created successfully: ${user.id}`);
-
-    // Generate reset token for password setup
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const hashedResetToken = crypto
-      .createHash('sha256')
-      .update(resetToken)
-      .digest('hex');
-
-    // Update user with reset token
-    user.resetPasswordToken = hashedResetToken;
-    user.resetPasswordExpires = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 hours
-    await user.save();
-
-    // Create password reset URL
-    const resetUrl = `${process.env.BACKEND_URL}/api/v1/auth/reset-password-form?token=${resetToken}&setup=true`;
-
-    // Fetch department name
-    let departmentName = 'Not assigned';
-    try {
-      if (user.departmentId) {
-        const department = await Department.findByPk(user.departmentId);
-        if (department) {
-          departmentName = department.name;
-        }
-      }
-    } catch (error) {
-      console.error(`Error fetching department: ${error.message}`);
-    }
-
-    // Send welcome email
-    console.log(`📧 Sending welcome email to ${user.email}...`);
     
-    await sendEmail({
-      to: user.email,
-      subject: 'Welcome to Zuri Health - Set Your Password',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Welcome to Zuri Health!</h2>
-          <p>Dear ${user.surname} ${user.otherNames},</p>
-          <p>Your staff account has been successfully created with the following details:</p>
-          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <p><strong>Email:</strong> ${user.email}</p>
-            <p><strong>Employee ID:</strong> ${user.employeeId}</p>
-            <p><strong>Role:</strong> ${user.role}</p>
-            <p><strong>Department:</strong> ${departmentName}</p>
-          </div>
-          
-          <p>To set up your password and access the system, please click the button below:</p>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${resetUrl}" style="background-color: #4CAF50; color: white; padding: 12px 20px; text-decoration: none; border-radius: 4px; font-weight: bold; display: inline-block;">Set Your Password</a>
-          </div>
-          
-          <p>This link will expire in 72 hours for security reasons.</p>
-          
-          <p>You can access the Zuri Health Management System at: <a href="${process.env.FRONTEND_URL}">${process.env.FRONTEND_URL}</a></p>
-          
-          <p>If you have any questions or need assistance, please contact your system administrator.</p>
-          <p>Best regards,<br>Zuri Health Team</p>
-        </div>
-      `
-    });
-    
-    console.log(`✅ Welcome email sent to ${user.email}`);
-    return user;
+    console.log(`✅ No existing user found with email: ${email}`);
+    return false;
   } catch (error) {
-    console.error(`❌ Error creating user: ${error.message}`);
-    if (error.errors) {
-      error.errors.forEach(err => console.error(`  - ${err.message}`));
-    }
-    return null;
+    console.error(`❌ Error checking/deleting user: ${error.message}`);
+    return false;
   }
 };
 
-// Main function to add all users
-const addAllUsers = async () => {
-  try {
-    console.log('🚀 Starting user creation process...');
+// Create users one by one
+const createUsers = async () => {
+  // Initialize log file
+  fs.writeFileSync('user-registration.log', '[\n');
+  
+  // Common headers
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${BEARER_TOKEN}`
+  };
+  
+  const users = [
+    // 1. Cynthia Mwihaki - Triage Nurse
+    {
+      surname: "Mwihaki",
+      otherNames: "Cynthia",
+      email: "cynthia@zuri.health",
+      password: "Password123",
+      role: "NURSE",
+      departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
+      primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
+      employeeId: "ZH-CM-2025",
+      telephone1: formatPhoneNumber("0722268494"),
+      gender: "FEMALE",
+      dateOfBirth: "1994-06-23",
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "30711427",
+      nationality: "Kenyan",
+      designation: "Triage Nurse"
+    },
     
-    // First, fetch all departments to get IDs
-    console.log('📚 Fetching departments...');
-    const departments = await Department.findAll();
+    // 2. Santa Odoyo - Triage Nurse
+    {
+      surname: "Odoyo",
+      otherNames: "Santa",
+      email: "santaseps@gmail.com",
+      password: "Password123",
+      role: "NURSE",
+      departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
+      primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
+      employeeId: "ZH-SO-2025",
+      telephone1: formatPhoneNumber("0796671566"),
+      gender: "FEMALE",
+      dateOfBirth: "1998-03-09",
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "34476319",
+      nationality: "Kenyan",
+      designation: "Triage Nurse"
+    },
     
-    // Create a map of department name to ID for easier lookup
-    const departmentMap = {};
-    departments.forEach(dept => {
-      departmentMap[dept.name.toLowerCase()] = dept.id;
-      // Also add code mapping for easier lookup
-      if (dept.code) {
-        departmentMap[dept.code.toLowerCase()] = dept.id;
-      }
-    });
+    // 3. Malcolm Mwai - Triage Nurse
+    {
+      surname: "Mwai",
+      otherNames: "Malcolm",
+      email: "malcolm@zuri.health",
+      password: "Password123",
+      role: "NURSE",
+      departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
+      primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
+      employeeId: "ZH-MM-2025",
+      telephone1: formatPhoneNumber("0705741285"),
+      gender: "MALE",
+      dateOfBirth: "1997-07-02",
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "33565702",
+      nationality: "Kenyan",
+      designation: "Triage Nurse - Nutrition"
+    },
     
-    console.log('Department map created:');
-    Object.keys(departmentMap).forEach(key => {
-      console.log(`  - ${key}: ${departmentMap[key]}`);
-    });
-
-    // Helper function to find department ID
-    const findDepartmentId = (departmentInfo) => {
-      if (!departmentInfo) return null;
-      
-      // Try exact match
-      const deptLower = departmentInfo.toLowerCase();
-      if (departmentMap[deptLower]) return departmentMap[deptLower];
-      
-      // Try partial matches
-      for (const [key, value] of Object.entries(departmentMap)) {
-        if (deptLower.includes(key) || key.includes(deptLower)) {
-          return value;
-        }
-      }
-      
-      // Special mappings
-      if (deptLower.includes('triage')) return departmentMap['triage-001'] || departmentMap['triage'];
-      if (deptLower.includes('gen') && deptLower.includes('med')) return departmentMap['gen_med'];
-      if (deptLower.includes('lab')) return departmentMap['lab'] || departmentMap['laboratory'];
-      if (deptLower.includes('recep')) return departmentMap['recp-001'] || departmentMap['reception'];
-      if (deptLower.includes('pharm')) return departmentMap['phar'] || departmentMap['pharmacy'];
-      if (deptLower.includes('med')) return departmentMap['gen_med'] || departmentMap['medical'];
-      
-      // Default to General Medicine if no match found
-      return departmentMap['gen_med'] || null;
-    };
-
-    // Define users data
-    const usersData = [
-      // 1. Cynthia Mwihaki
-      {
-        surname: 'Mwihaki',
-        otherNames: 'Cynthia',
-        email: 'cynthia@zuri.health',
-        password: 'Password123',
-        role: 'NURSE',
-        departmentId: findDepartmentId('triage'),
-        employeeId: 'ZH-CM-2025',
-        telephone1: '0722268494',
-        gender: 'FEMALE',
-        dateOfBirth: '1994-06-23',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '30711427',
-        nationality: 'Kenyan',
-        licenseNumber: 'KNL-' + Math.floor(10000 + Math.random() * 90000),
-        designation: 'Triage Nurse'
-      },
-      
-      // 2. Santa Odoyo
-      {
-        surname: 'Odoyo',
-        otherNames: 'Santa',
-        email: 'santaseps@gmail.com',
-        password: 'Password123',
-        role: 'NURSE',
-        departmentId: findDepartmentId('triage'),
-        employeeId: 'ZH-SO-2025',
-        telephone1: '0796671566',
-        gender: 'FEMALE',
-        dateOfBirth: '1998-03-09',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '34476319',
-        nationality: 'Kenyan',
-        licenseNumber: 'KNL-' + Math.floor(10000 + Math.random() * 90000),
-        designation: 'Triage Nurse'
-      },
-      
-      // 3. Malcolm Mwai
-      {
-        surname: 'Mwai',
-        otherNames: 'Malcolm',
-        email: 'malcolm@zuri.health',
-        password: 'Password123',
-        role: 'NURSE',
-        departmentId: findDepartmentId('triage'),
-        employeeId: 'ZH-MM-2025',
-        telephone1: '0705741285',
-        gender: 'MALE',
-        dateOfBirth: '1997-07-02',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '33565702',
-        nationality: 'Kenyan',
-        licenseNumber: 'KNL-' + Math.floor(10000 + Math.random() * 90000),
-        designation: 'Triage Nurse - Nutrition'
-      },
-      
-      // 4. Lillian Masika
-      {
-        surname: 'Masika',
-        otherNames: 'Lillian',
-        email: 'Lillian.masika@zuri.health',
-        password: 'Password123',
-        role: 'DOCTOR',
-        departmentId: findDepartmentId('gen_med'),
-        employeeId: 'ZH-LM-2025',
-        licenseNumber: 'KMD-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["General Medicine"],
-        qualification: ["MD"],
-        telephone1: '0701483535',
-        gender: 'FEMALE',
-        dateOfBirth: '1997-02-15',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '30602928',
-        nationality: 'Kenyan',
-        designation: 'General Medicine Doctor'
-      },
-      
-      // 5. Antony Ndegwa
-      {
-        surname: 'Ndegwa',
-        otherNames: 'Antony',
-        email: 'antony@zuri.health',
-        password: 'Password123',
-        role: 'DOCTOR',
-        departmentId: findDepartmentId('gen_med'),
-        employeeId: 'ZH-AN-2025',
-        licenseNumber: 'KMD-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["General Medicine"],
-        qualification: ["MD"],
-        telephone1: '0795191768',
-        gender: 'MALE',
-        dateOfBirth: '1995-06-01',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '32401469',
-        nationality: 'Kenyan',
-        designation: 'General Medicine Doctor'
-      },
-      
-      // 6. Doreen Bosibori
-      {
-        surname: 'Bosibori',
-        otherNames: 'Doreen',
-        email: 'lab@zuri.health',
-        password: 'Password123',
-        role: 'LAB_TECHNICIAN',
-        departmentId: findDepartmentId('lab'),
-        employeeId: 'ZH-DB-2025',
-        licenseNumber: 'KLT-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["Medical Laboratory"],
-        qualification: ["BSc. Medical Laboratory Sciences"],
-        telephone1: '0797623652',
-        gender: 'FEMALE',
-        dateOfBirth: '1996-07-26',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '33070539',
-        nationality: 'Kenyan',
-        designation: 'Laboratory Technician'
-      },
-      
-      // 7. Hudson Vulimu
-      {
-        surname: 'Vulimu',
-        otherNames: 'Hudson',
-        email: 'kamandehudson@gmail.com',
-        password: 'Password123',
-        role: 'LAB_TECHNICIAN',
-        departmentId: findDepartmentId('lab'),
-        employeeId: 'ZH-HV-2025',
-        licenseNumber: 'KLT-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["Medical Laboratory"],
-        qualification: ["BSc. Medical Laboratory Sciences"],
-        telephone1: '0703971845',
-        gender: 'MALE',
-        dateOfBirth: '1995-06-26',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '31871555',
-        nationality: 'Kenyan',
-        designation: 'Laboratory Technician'
-      },
-      
-      // 8. Winner Kathomi
-      {
-        surname: 'Kathomi',
-        otherNames: 'Winner',
-        email: 'kathomiwinner8@gmail.com',
-        password: 'Password123',
-        role: 'RECEPTIONIST',
-        departmentId: findDepartmentId('reception'),
-        employeeId: 'ZH-WK-2025',
-        telephone1: '0792823276',
-        gender: 'FEMALE',
-        dateOfBirth: '1998-12-09',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '35822622',
-        nationality: 'Kenyan',
-        designation: 'Receptionist'
-      },
-      
-      // 9. Joy John
-      {
-        surname: 'John',
-        otherNames: 'Joy',
-        email: 'joy@zuri.health',
-        password: 'Password123',
-        role: 'NURSE',
-        departmentId: findDepartmentId('triage'),
-        employeeId: 'ZH-JJ-2025',
-        licenseNumber: 'KNL-' + Math.floor(10000 + Math.random() * 90000),
-        telephone1: '0798520758',
-        gender: 'FEMALE',
-        dateOfBirth: '2000-02-02',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: generateRandomID(),
-        nationality: 'Nigerian',
-        designation: 'Triage Nurse'
-      },
-      
-      // 10. Brian Kimondo
-      {
-        surname: 'Kimondo',
-        otherNames: 'Brian',
-        email: 'bkimondo60@gmail.com',
-        password: 'Password123',
-        role: 'DOCTOR',
-        departmentId: findDepartmentId('gen_med'),
-        employeeId: 'ZH-BK-2025',
-        licenseNumber: 'KMD-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["General Medicine"],
-        qualification: ["MD"],
-        telephone1: '0703316232',
-        gender: 'MALE',
-        dateOfBirth: '2001-09-12',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '38620117',
-        nationality: 'Kenyan',
-        designation: 'General Medicine Doctor'
-      },
-      
-      // 11. Irene Muthoni
-      {
-        surname: 'Muthoni',
-        otherNames: 'Irene',
-        email: 'irene@zuri.health',
-        password: 'Password123',
-        role: 'DOCTOR',
-        departmentId: findDepartmentId('gen_med'),
-        employeeId: 'ZH-IM-2025',
-        licenseNumber: 'KMD-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["General Medicine"],
-        qualification: ["MD"],
-        telephone1: '0723877226',
-        gender: 'FEMALE',
-        dateOfBirth: generateRandomDOB(),
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: generateRandomID(),
-        nationality: 'Kenyan',
-        designation: 'General Medicine Doctor'
-      },
-      
-      // 12. Esther Ogembo
-      {
-        surname: 'Ogembo',
-        otherNames: 'Esther',
-        email: 'esther@zuri.health',
-        password: 'Password123',
-        role: 'DOCTOR',
-        departmentId: findDepartmentId('gen_med'),
-        employeeId: 'ZH-EO-2025',
-        licenseNumber: 'KMD-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["General Medicine"],
-        qualification: ["MD"],
-        telephone1: '0701432231',
-        gender: 'FEMALE',
-        dateOfBirth: '1992-02-22',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '28737344',
-        nationality: 'Kenyan',
-        designation: 'General Medicine Doctor'
-      },
-      
-      // 13. Erick Onyango Ngolo
-      {
-        surname: 'Ngolo',
-        otherNames: 'Erick Onyango',
-        email: 'ngolo@zuri.health',
-        password: 'Password123',
-        role: 'DOCTOR',
-        departmentId: findDepartmentId('gen_med'),
-        employeeId: 'ZH-EN-2025',
-        licenseNumber: 'KMD-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["General Medicine"],
-        qualification: ["MD"],
-        telephone1: '0708159270',
-        gender: 'MALE',
-        dateOfBirth: '1996-05-28',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '33233245',
-        nationality: 'Kenyan',
-        designation: 'General Medicine Doctor'
-      },
-      
-      // 14. Georgina Nyaka
-      {
-        surname: 'Nyaka',
-        otherNames: 'Georgina',
-        email: 'georgina@zuri.health',
-        password: 'Password123',
-        role: 'DOCTOR',
-        departmentId: findDepartmentId('gen_med'),
-        employeeId: 'ZH-GN-2025',
-        licenseNumber: 'KMD-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["General Medicine"],
-        qualification: ["MD"],
-        telephone1: '0703229202',
-        gender: 'FEMALE',
-        dateOfBirth: generateRandomDOB(),
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: generateRandomID(),
-        nationality: 'Kenyan',
-        designation: 'Medical Doctor'
-      },
-      
-      // 15. Barbara Tarno
-      {
-        surname: 'Tarno',
-        otherNames: 'Barbara',
-        email: 'barbara@zuri.health',
-        password: 'Password123',
-        role: 'DOCTOR',
-        departmentId: findDepartmentId('gen_med'),
-        employeeId: 'ZH-BT-2025',
-        licenseNumber: 'KMD-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["General Medicine"],
-        qualification: ["MD"],
-        telephone1: '0717700049',
-        gender: 'FEMALE',
-        dateOfBirth: generateRandomDOB(),
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: generateRandomID(),
-        nationality: 'Kenyan',
-        designation: 'Senior Medical Manager'
-      },
-      
-      // 16. Abigael Mwangi
-      {
-        surname: 'Mwangi',
-        otherNames: 'Abigael',
-        email: 'abigael@zuri.health',
-        password: 'Password123',
-        role: 'PHARMACIST',
-        departmentId: findDepartmentId('pharmacy'),
-        employeeId: 'ZH-AM-2025',
-        licenseNumber: 'KPH-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["Pharmacy"],
-        qualification: ["BPharm"],
-        telephone1: '0723833689',
-        gender: 'FEMALE',
-        dateOfBirth: '1991-11-24',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '29112793',
-        nationality: 'Kenyan',
-        designation: 'Pharmacist'
-      },
-      
-      // 17. Sally Masika
-      {
-        surname: 'Masika',
-        otherNames: 'Sally',
-        email: 'sally.masika@zuri.health',
-        password: 'Password123',
-        role: 'PHARMACIST',
-        departmentId: findDepartmentId('pharmacy'),
-        employeeId: 'ZH-SM-2025',
-        licenseNumber: 'KPH-' + Math.floor(10000 + Math.random() * 90000),
-        specialization: ["Pharmacy"],
-        qualification: ["BPharm"],
-        telephone1: '0723239335',
-        gender: 'FEMALE',
-        dateOfBirth: '1991-05-16',
-        town: 'Nairobi',
-        areaOfResidence: 'Nairobi',
-        idType: 'NATIONAL_ID',
-        idNumber: '28194583',
-        nationality: 'Kenyan',
-        designation: 'Pharmacist'
-      }
-    ];
-
-    // Process users sequentially
-    console.log(`🔄 Processing ${usersData.length} users...`);
+    // 4. Lillian Masika - Doctor
+    {
+      surname: "Masika",
+      otherNames: "Lillian",
+      email: "Lillian.masika@zuri.health",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // General Medicine
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-LM-2025",
+      licenseNumber: "KMD-12345",
+      specialization: ["General Medicine"],
+      qualification: ["MD"],
+      telephone1: formatPhoneNumber("0701483535"),
+      gender: "FEMALE",
+      dateOfBirth: "1997-02-15",
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "30602928",
+      nationality: "Kenyan",
+      designation: "General Medicine Doctor"
+    },
     
-    const results = {
-      success: 0,
-      failed: 0,
-      skipped: 0,
-      users: []
-    };
+    // 5. Antony Ndegwa - Doctor
+    {
+      surname: "Ndegwa",
+      otherNames: "Antony",
+      email: "antony@zuri.health",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // General Medicine
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-AN-2025",
+      licenseNumber: "KMD-23456",
+      specialization: ["General Medicine"],
+      qualification: ["MD"],
+      telephone1: formatPhoneNumber("0795191768"),
+      gender: "MALE",
+      dateOfBirth: "1995-06-01",
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "32401469",
+      nationality: "Kenyan",
+      designation: "General Medicine Doctor"
+    },
     
-    for (const [index, userData] of usersData.entries()) {
-      console.log(`\n== Processing user ${index + 1}/${usersData.length}: ${userData.otherNames} ${userData.surname} ==`);
-      try {
-        const user = await createUser(userData);
-        if (user) {
-          results.success++;
-          results.users.push({
-            name: `${userData.otherNames} ${userData.surname}`,
-            email: userData.email,
-            result: 'SUCCESS'
-          });
-        } else {
-          results.skipped++;
-          results.users.push({
-            name: `${userData.otherNames} ${userData.surname}`,
-            email: userData.email,
-            result: 'SKIPPED'
-          });
-        }
-      } catch (error) {
-        console.error(`Error processing user ${userData.email}: ${error.message}`);
-        results.failed++;
-        results.users.push({
-          name: `${userData.otherNames} ${userData.surname}`,
-          email: userData.email,
-          result: 'FAILED',
-          error: error.message
-        });
-      }
+    // 6. Doreen Bosibori - Lab Technologist
+    {
+      surname: "Bosibori",
+      otherNames: "Doreen",
+      email: "lab@zuri.health",
+      password: "Password123",
+      role: "LAB_TECHNICIAN", // Keep role as LAB_TECHNICIAN for database compatibility
+      departmentId: "1e4f468c-4e26-4350-8bce-cb62069ebd55", // Laboratory
+      primaryDepartmentId: "1e4f468c-4e26-4350-8bce-cb62069ebd55",
+      employeeId: "ZH-DB-2025",
+      licenseNumber: "KLT-12345",
+      specialization: ["Medical Laboratory"],
+      qualification: ["BSc. Medical Laboratory Sciences"],
+      telephone1: formatPhoneNumber("0797623652"),
+      gender: "FEMALE",
+      dateOfBirth: "1996-07-26",
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "33070539",
+      nationality: "Kenyan",
+      designation: "Laboratory Technologist"
+    },
+    
+    // 7. Hudson Vulimu - Lab Technologist
+    {
+      surname: "Vulimu",
+      otherNames: "Hudson",
+      email: "kamandehudson@gmail.com",
+      password: "Password123",
+      role: "LAB_TECHNICIAN", // Keep role as LAB_TECHNICIAN for database compatibility
+      departmentId: "1e4f468c-4e26-4350-8bce-cb62069ebd55", // Laboratory
+      primaryDepartmentId: "1e4f468c-4e26-4350-8bce-cb62069ebd55",
+      employeeId: "ZH-HV-2025",
+      licenseNumber: "KLT-23456",
+      specialization: ["Medical Laboratory"],
+      qualification: ["BSc. Medical Laboratory Sciences"],
+      telephone1: formatPhoneNumber("0703971845"),
+      gender: "MALE",
+      dateOfBirth: "1995-06-26",
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "31871555",
+      nationality: "Kenyan",
+      designation: "Laboratory Technologist"
+    },
+    
+    // 8. Winner Kathomi - Receptionist
+    {
+      surname: "Kathomi",
+      otherNames: "Winner",
+      email: "kathomiwinner8@gmail.com",
+      password: "Password123",
+      role: "RECEPTIONIST",
+      departmentId: "328c72ad-7689-4cdb-9995-77c2d54f3775", // Reception
+      primaryDepartmentId: "328c72ad-7689-4cdb-9995-77c2d54f3775",
+      employeeId: "ZH-WK-2025",
+      telephone1: formatPhoneNumber("0792823276"),
+      gender: "FEMALE",
+      dateOfBirth: "1998-12-09",
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "35822622",
+      nationality: "Kenyan",
+      designation: "Receptionist"
+    },
+    
+    // 9. Joy John - Triage Nurse (Nigerian)
+    {
+      surname: "John",
+      otherNames: "Joy",
+      email: "joy@zuri.health",
+      password: "Password123",
+      role: "NURSE",
+      departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
+      primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
+      employeeId: "ZH-JJ-2025",
+      telephone1: formatPhoneNumber("0798520758"),
+      gender: "FEMALE",
+      dateOfBirth: "2000-02-02",
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "40123456",
+      nationality: "Nigerian",
+      designation: "Triage Nurse"
+    },
+    
+    // 10. Brian Kimondo - Doctor
+    {
+      surname: "Kimondo",
+      otherNames: "Brian",
+      email: "bkimondo60@gmail.com",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // General Medicine
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-BK-2025",
+      licenseNumber: "KMD-34567",
+      specialization: ["General Medicine"],
+      qualification: ["MD"],
+      telephone1: formatPhoneNumber("0703316232"),
+      gender: "MALE",
+      dateOfBirth: "2001-09-12",
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "38620117",
+      nationality: "Kenyan",
+      designation: "General Medicine Doctor"
+    },
+    
+    // 11. Rose Mutua - Customer Care
+    {
+      surname: "Mutua",
+      otherNames: "Rose",
+      email: "customercareke1@zuri.health", // Added separate email to avoid conflict
+      password: "Password123",
+      role: "RECEPTIONIST",
+      departmentId: "328c72ad-7689-4cdb-9995-77c2d54f3775", // Reception
+      primaryDepartmentId: "328c72ad-7689-4cdb-9995-77c2d54f3775",
+      employeeId: "ZH-RM-2025",
+      telephone1: formatPhoneNumber("0799713631"),
+      gender: "FEMALE",
+      dateOfBirth: generateRandomDOB(),
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: generateRandomID(),
+      nationality: "Kenyan",
+      designation: "Customer Care Representative"
+    },
+    
+    // 12. Daphine Kamau - Customer Care
+    {
+      surname: "Kamau",
+      otherNames: "Daphine",
+      email: "daphinekamau2018@gmail.com", // Updated with correct email
+      password: "Password123",
+      role: "RECEPTIONIST",
+      departmentId: "328c72ad-7689-4cdb-9995-77c2d54f3775", // Reception
+      primaryDepartmentId: "328c72ad-7689-4cdb-9995-77c2d54f3775",
+      employeeId: "ZH-DK-2025",
+      telephone1: formatPhoneNumber("0790441059"),
+      gender: "FEMALE",
+      dateOfBirth: "1999-07-21", // Added actual DOB from data
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "37013633", // Added actual ID from data
+      nationality: "Kenyan",
+      designation: "Customer Care Representative"
+    },
+    
+    // 13. Flavia Bagatya - Doctor (Ugandan)
+    {
+      surname: "Bagatya",
+      otherNames: "Flavia",
+      email: "flavia@zuri.health",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // Medical department
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-FB-2025",
+      licenseNumber: "UMD-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["General Medicine"],
+      qualification: ["MD"],
+      telephone1: "+256773658244", // Already has country code
+      gender: "FEMALE",
+      dateOfBirth: generateRandomDOB(),
+      town: "Kampala",
+      areaOfResidence: "Kampala",
+      idType: "NATIONAL_ID",
+      idNumber: generateRandomID("Uganda"),
+      nationality: "Ugandan",
+      designation: "Medical Doctor"
+    },
+    
+    // 14. Dennis Ombese Mandere - Mental Health
+    {
+      surname: "Mandere",
+      otherNames: "Dennis Ombese",
+      email: "Dennisombese88@gmail.com",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // General Medicine
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-DOM-2025",
+      licenseNumber: "KMD-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["Mental Health & Wellness"],
+      qualification: ["MD", "MSc. Mental Health"],
+      telephone1: formatPhoneNumber("0719440456"),
+      gender: "MALE",
+      dateOfBirth: generateRandomDOB(),
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: generateRandomID(),
+      nationality: "Kenyan",
+      designation: "Mental Health Specialist"
+    },
+    
+    // 15. Georgina Nyaka - Doctor
+    {
+      surname: "Nyaka",
+      otherNames: "Georgina",
+      email: "georgina@zuri.health",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // Medical department
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-GN-2025",
+      licenseNumber: "KMD-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["General Medicine"],
+      qualification: ["MD"],
+      telephone1: formatPhoneNumber("0703229202"),
+      gender: "FEMALE",
+      dateOfBirth: generateRandomDOB(),
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: generateRandomID(),
+      nationality: "Kenyan",
+      designation: "Medical Doctor"
+    },
+    
+    // 16. Barbara Tarno - Doctor
+    {
+      surname: "Tarno",
+      otherNames: "Barbara",
+      email: "barbara@zuri.health",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // Medical department
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-BT-2025",
+      licenseNumber: "KMD-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["General Medicine"],
+      qualification: ["MD"],
+      telephone1: formatPhoneNumber("0717700049"),
+      telephone2: formatPhoneNumber("0731700049"), // WhatsApp number
+      gender: "FEMALE",
+      dateOfBirth: generateRandomDOB(),
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: generateRandomID(),
+      nationality: "Kenyan",
+      designation: "Medical Doctor"
+    },
+    
+    // 17. Miriam Wambui Maina - Lab Technologist
+    {
+      surname: "Maina",
+      otherNames: "Miriam Wambui",
+      email: "miriamwambui094@gmail.com",
+      password: "Password123",
+      role: "LAB_TECHNICIAN", // Keep role as LAB_TECHNICIAN for database compatibility
+      departmentId: "1e4f468c-4e26-4350-8bce-cb62069ebd55", // Laboratory
+      primaryDepartmentId: "1e4f468c-4e26-4350-8bce-cb62069ebd55",
+      employeeId: "ZH-MWM-2025",
+      licenseNumber: "KLT-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["Medical Laboratory"],
+      qualification: ["BSc. Medical Laboratory Sciences"],
+      telephone1: formatPhoneNumber(("0" + (700000000 + Math.floor(Math.random() * 99999999)).toString()).substring(0, 10)),
+      gender: "FEMALE",
+      dateOfBirth: generateRandomDOB(),
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: generateRandomID(),
+      nationality: "Kenyan",
+      designation: "Laboratory Technologist"
+    },
+    
+    // 18. Dana Kemuma Nyangaresi - Nurse
+    {
+      surname: "Nyangaresi",
+      otherNames: "Dana Kemuma",
+      email: "danakemuma@gmail.com",
+      password: "Password123",
+      role: "NURSE",
+      departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
+      primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
+      employeeId: "ZH-DKN-2025",
+      telephone1: formatPhoneNumber("0745277329"),
+      gender: "FEMALE",
+      dateOfBirth: generateRandomDOB(),
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: generateRandomID(),
+      nationality: "Kenyan",
+      designation: "Nurse"
+    },
+    
+    // 19. Esther Ogembo - Doctor
+    {
+      surname: "Ogembo",
+      otherNames: "Esther",
+      email: "esther@zuri.health",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // Medical department
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-EO-2025",
+      licenseNumber: "KMD-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["General Medicine"],
+      qualification: ["MD"],
+      telephone1: formatPhoneNumber("0701432231"),
+      gender: "FEMALE",
+      dateOfBirth: "1992-02-22", // Using actual date from data
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "28737344", // Using actual ID from data
+      nationality: "Kenyan",
+      designation: "General Medicine Doctor"
+    },
+    
+    // 20. David Wambiri - Nurse
+    {
+      surname: "Wambiri",
+      otherNames: "David",
+      email: "isaacw@identifyafrica.io",
+      password: "Password123",
+      role: "NURSE",
+      departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
+      primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
+      employeeId: "ZH-DW-2025",
+      telephone1: formatPhoneNumber("0765489992"),
+      gender: "MALE",
+      dateOfBirth: "1998-08-06", // Using approximate date from data
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: generateRandomID(),
+      nationality: "Kenyan",
+      designation: "Triage Nurse",
+      specialization: ["Triage Nursing", "Emergency Care"]
+    },
+    
+    // 21. Erick Onyango Ngolo - Doctor
+    {
+      surname: "Ngolo",
+      otherNames: "Erick Onyango",
+      email: "ngolo@zuri.health",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // General Medicine
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-EON-2025",
+      licenseNumber: "KMD-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["General Medicine"],
+      qualification: ["MD"],
+      telephone1: formatPhoneNumber("0708159270"),
+      gender: "MALE",
+      dateOfBirth: "1996-05-28", // Using date from data
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "33233245", // Using ID from data
+      nationality: "Kenyan",
+      designation: "General Medicine Doctor"
+    },
+    
+    // 22. Dr Ijeoma Utah - Nigerian Doctor
+    {
+      surname: "Utah",
+      otherNames: "Ijeoma",
+      email: "Ijeoma@zuri.health",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // General Medicine
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-IU-2025",
+      licenseNumber: "NMD-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["General Medicine"],
+      qualification: ["MD"],
+      telephone1: "+2348033746422", // Already has country code
+      gender: "FEMALE",
+      dateOfBirth: generateRandomDOB(),
+      town: "Lagos",
+      areaOfResidence: "Lagos",
+      idType: "NATIONAL_ID",
+      idNumber: generateRandomID("Nigeria"),
+      nationality: "Nigerian",
+      designation: "Medical Doctor"
+    },
+    
+    // 23. Irene Muthoni - Doctor
+    {
+      surname: "Muthoni",
+      otherNames: "Irene",
+      email: "irene@zuri.health",
+      password: "Password123",
+      role: "DOCTOR",
+      departmentId: "bd09f836-4145-44cf-b8ca-79029f639198", // General Medicine
+      primaryDepartmentId: "bd09f836-4145-44cf-b8ca-79029f639198",
+      employeeId: "ZH-IM-2025",
+      licenseNumber: "KMD-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["General Medicine"],
+      qualification: ["MD"],
+      telephone1: formatPhoneNumber("0723877226"),
+      gender: "FEMALE",
+      dateOfBirth: generateRandomDOB(),
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: generateRandomID(),
+      nationality: "Kenyan",
+      designation: "General Medicine Doctor"
+    },
+    
+    // 24. Sally Masika - Pharmacist
+    {
+      surname: "Masika",
+      otherNames: "Sally",
+      email: "sally.masika@zuri.health",
+      password: "Password123",
+      role: "PHARMACIST",
+      departmentId: "0bdcccf4-cc88-44e6-b066-4856b02157b3", // Pharmacy department
+      primaryDepartmentId: "0bdcccf4-cc88-44e6-b066-4856b02157b3",
+      employeeId: "ZH-SM-2025",
+      licenseNumber: "KPH-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["Pharmacy"],
+      qualification: ["BPharm"],
+      telephone1: formatPhoneNumber("0723239335"),
+      gender: "FEMALE",
+      dateOfBirth: "1991-05-16", // Using actual date from data
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "28194583", // Using actual ID from data
+      nationality: "Kenyan",
+      designation: "Pharmacist"
+    },
+    
+    // 25. Abigael Mwangi - Pharmacist
+    {
+      surname: "Mwangi",
+      otherNames: "Abigael",
+      email: "abigael@zuri.health",
+      password: "Password123",
+      role: "PHARMACIST",
+      departmentId: "0bdcccf4-cc88-44e6-b066-4856b02157b3", // Pharmacy department
+      primaryDepartmentId: "0bdcccf4-cc88-44e6-b066-4856b02157b3",
+      employeeId: "ZH-AM-2025",
+      licenseNumber: "KPH-" + Math.floor(10000 + Math.random() * 90000),
+      specialization: ["Pharmacy"],
+      qualification: ["BPharm"],
+      telephone1: formatPhoneNumber("0723833689"),
+      gender: "FEMALE",
+      dateOfBirth: "1991-11-24", // Using actual date from data
+      town: "Nairobi",
+      areaOfResidence: "Nairobi",
+      idType: "NATIONAL_ID",
+      idNumber: "29112793", // Using actual ID from data
+      nationality: "Kenyan",
+      designation: "Pharmacist"
+    }
+  ];
+  
+  console.log(`🚀 Starting registration of ${users.length} users...`);
+  console.log(`📡 API URL: ${API_BASE_URL}/api/v1/auth/register`);
+  console.log('\n');
+  
+  // Process users sequentially with a delay to prevent server overload
+  for (const [index, user] of users.entries()) {
+    try {
+      // First check if user exists and delete if necessary
+      await checkAndDeleteUser(user.email);
       
-      // Add delay between users to prevent rate limiting
-      if (index < usersData.length - 1) {
-        console.log('Waiting 2 seconds before next user...');
+      console.log(`Processing ${index + 1}/${users.length}: ${user.otherNames} ${user.surname} (${user.role})`);
+      
+      const response = await axios.post(
+        `${API_BASE_URL}/api/v1/auth/register`,
+        user,
+        { headers }
+      );
+      
+      logResponse(`${user.otherNames} ${user.surname}`, response);
+      
+      // Add delay between requests to prevent rate limiting
+      if (index < users.length - 1) {
+        console.log(`Waiting 2 seconds before next request...\n`);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
+    } catch (error) {
+      logResponse(`${user.otherNames} ${user.surname}`, null, error);
+      console.error(`Error details: ${error.message}`);
+      if (error.response) {
+        console.error(`Response status: ${error.response.status}`);
+        console.error('Response data:', error.response.data);
+      }
+      console.log('\n');
     }
-    
-    // Print summary
-    console.log('\n=== USER CREATION SUMMARY ===');
-    console.log(`Total users processed: ${usersData.length}`);
-    console.log(`✅ Successfully created: ${results.success}`);
-    console.log(`⚠️ Skipped: ${results.skipped}`);
-    console.log(`❌ Failed: ${results.failed}`);
-    
-    console.log('\nUser details:');
-    results.users.forEach(user => {
-      console.log(`- ${user.name} (${user.email}): ${user.result}`);
-    });
-    
-    return results;
-  } catch (error) {
-    console.error(`❌ Fatal error: ${error.message}`);
-    throw error;
-  } finally {
-    // Close database connection
-    const { sequelize } = require('./src/models');
-    await sequelize.close();
-    console.log('Database connection closed.');
   }
+  
+  // Close log file
+  fs.appendFileSync('user-registration.log', '\n]');
+  console.log('\n✅ User registration process completed!');
+  console.log('📋 Check user-registration.log for detailed results.');
 };
 
-// Run the script
-console.log('==== ZURI HEALTH USER CREATION SCRIPT ====');
-console.log(`Started at: ${new Date().toISOString()}`);
-console.log('=======================================\n');
-
-addAllUsers()
-  .then(() => {
-    console.log('\n=======================================');
-    console.log(`Completed at: ${new Date().toISOString()}`);
-    console.log('==== SCRIPT EXECUTION COMPLETED ====');
-    process.exit(0);
-  })
-  .catch(error => {
-    console.error('Script execution failed:', error);
-    process.exit(1);
-  });
+// Execute the script
+createUsers().catch(err => {
+  console.error('Script execution failed:', err);
+  process.exit(1);
+});
