@@ -354,27 +354,27 @@ const processUsers = async () => {
     },
     
     // 9. Joy John - Update Triage Nurse (Nigerian)
-    {
-      action: "update",
-      email: "joy@zuri.health",
-      userId: "86cc78b1-6ff6-48d0-9878-a5636c822db9",
-      userData: {
-        surname: "John",
-        otherNames: "Joy",
-        telephone1: formatPhoneNumber("0798520758"),
-        gender: "FEMALE",
-        dateOfBirth: "2000-02-02",
-        departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
-        primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
-        employeeId: "ZH-JJ-2025",
-        town: "Nairobi",
-        areaOfResidence: "Nairobi",
-        idType: "NATIONAL_ID",
-        idNumber: "40123456",
-        nationality: "Nigerian",
-        designation: "Triage Nurse"
-      }
-    },
+{
+  action: "update",
+  email: "joy@zuri.health",
+  userId: "86cc78b1-6ff6-48d0-9878-a5636c822db9",
+  userData: {
+    surname: "John",
+    otherNames: "Joy",
+    telephone1: "+2347014391050", // Updated Nigerian phone number
+    gender: "FEMALE",
+    dateOfBirth: "2000-02-02",
+    departmentId: "725380c2-0120-4e90-a9e6-72120c035cf0", // Triage department
+    primaryDepartmentId: "725380c2-0120-4e90-a9e6-72120c035cf0",
+    employeeId: "ZH-JJ-2025",
+    town: "Nairobi",
+    areaOfResidence: "Nairobi",
+    idType: "NATIONAL_ID",
+    idNumber: "40123456",
+    nationality: "Nigerian",
+    designation: "Triage Nurse"
+  }
+},
     
     // 10. Brian Kimondo - Update Doctor
     {
