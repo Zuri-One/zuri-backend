@@ -39,7 +39,7 @@ const sendPasswordResetLink = async (email) => {
 
 // Main function
 const resetDana = async () => {
-  const danaEmail = "danakemuma@gmail.com";
+  const danaEmail = "cynthia@zuri.health";
   
   console.log(`🔄 Starting password reset process for Dana Kemuma Nyangaresi...`);
   
