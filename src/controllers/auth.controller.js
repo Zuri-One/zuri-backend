@@ -894,19 +894,17 @@ exports.registerPatient = async (req, res, next) => {
       registrationNotes
     } = req.body;
 
-    // Basic validation for required fields
+    // Basic validation for required fields - removed occupation and nextOfKin
     const requiredFields = [
       'surname',
       'otherNames',
       'dateOfBirth',
       'sex',
       'telephone1',
-      'occupation',
       'idType',
       'nationality',
       'town',
       'residence',
-      'nextOfKin',
       'paymentScheme'
     ];
 
@@ -917,11 +915,14 @@ exports.registerPatient = async (req, res, next) => {
       });
     }
 
-    // Validate next of kin
-    if (!nextOfKin?.name || !nextOfKin?.relationship || !nextOfKin?.contact) {
-      return res.status(400).json({
-        message: 'Next of kin requires name, relationship and contact number'
-      });
+    // Validate next of kin only if it's provided with some data
+    if (nextOfKin && Object.keys(nextOfKin).length > 0) {
+      // If any next of kin data is provided, ensure all required fields are present
+      if (!nextOfKin.name || !nextOfKin.relationship || !nextOfKin.contact) {
+        return res.status(400).json({
+          message: 'If next of kin information is provided, name, relationship and contact number are all required'
+        });
+      }
     }
 
     // Check for existing telephone number
@@ -989,19 +990,19 @@ exports.registerPatient = async (req, res, next) => {
       telephone2,
       postalAddress,
       postalCode,
-      occupation,
+      occupation, // Now optional
       idType,
       idNumber,
       nationality,
       town,
       residence,
-      nextOfKin,
+      nextOfKin, // Now optional
       patientNumber,
       isEmergency: isEmergency || false,
       isRevisit: false,
       status: 'WAITING',
       registrationNotes,
-      paymentScheme,
+      paymentScheme, // Member number is now optional within this object
       emailVerificationCode: verificationCode,
       emailVerificationToken: verificationToken ? 
         crypto.createHash('sha256').update(verificationToken).digest('hex') 

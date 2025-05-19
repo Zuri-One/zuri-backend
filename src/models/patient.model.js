@@ -142,15 +142,21 @@ class Patient extends Model {
     // Emergency Contact
     nextOfKin: {
       type: DataTypes.JSONB,
-      allowNull: false,
+      allowNull: true,
+      defaultValue: {},
       validate: {
-        hasRequiredFields(value) {
-          if (!value.name || !value.relationship || !value.contact) {
-            throw new Error('Next of kin requires name, relationship and contact number');
+        validateIfExists(value) {
+          // Only validate if the object is not empty
+          if (value && Object.keys(value).length > 0) {
+            // If any of the fields exist, ensure the core fields are present
+            if ((value.name || value.relationship || value.contact) && 
+                (!value.name || !value.relationship || !value.contact)) {
+              throw new Error('If next of kin information is provided, name, relationship and contact number are all required');
+            }
           }
         }
       },
-      comment: 'Required - Must include name, relationship and contact number'
+      comment: 'Optional - Next of kin details'
     },
 
     // Medical Information
