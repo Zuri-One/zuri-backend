@@ -1,4 +1,3 @@
-// update-miriam-db.js
 const { Pool } = require('pg');
 
 // Get database URL from environment variable
@@ -9,8 +8,8 @@ const pool = new Pool({
   connectionString: databaseUrl,
 });
 
-// Function to update Miriam's phone number
-async function updateMiriamPhone() {
+// Function to update Rose Mutua's email
+async function updateRoseEmail() {
   const client = await pool.connect();
   
   try {
@@ -19,15 +18,15 @@ async function updateMiriamPhone() {
     // Begin transaction
     await client.query('BEGIN');
     
-    // Update Miriam's phone number
+    // Update Rose Mutua's email address
     const updateResult = await client.query(
-      'UPDATE "Users" SET "telephone1" = $1 WHERE "email" = $2 RETURNING "id", "surname", "otherNames", "email", "telephone1"',
-      ['+254702789852', 'miriamwambui094@gmail.com']
+      'UPDATE "Users" SET "email" = $1 WHERE "surname" = $2 AND "otherNames" = $3 RETURNING "id", "surname", "otherNames", "email", "telephone1"',
+      ['kaninir63@gmail.com', 'Mutua', 'Rose']
     );
     
     // Check if any row was updated
     if (updateResult.rowCount === 0) {
-      console.log('⚠️ No user found with email: miriamwambui094@gmail.com');
+      console.log('⚠️ No user found with name: Rose Mutua');
       await client.query('ROLLBACK');
       return;
     }
@@ -37,7 +36,7 @@ async function updateMiriamPhone() {
     
     // Display success message and updated user info
     const updatedUser = updateResult.rows[0];
-    console.log('✅ Phone number updated successfully!');
+    console.log('✅ Email address updated successfully!');
     console.log('📊 Updated user info:');
     console.log(`   ID: ${updatedUser.id}`);
     console.log(`   Name: ${updatedUser.otherNames} ${updatedUser.surname}`);
@@ -47,7 +46,7 @@ async function updateMiriamPhone() {
   } catch (error) {
     // Rollback transaction on error
     await client.query('ROLLBACK');
-    console.error('❌ Error updating phone number:', error.message);
+    console.error('❌ Error updating email address:', error.message);
   } finally {
     // Release client back to pool
     client.release();
@@ -57,7 +56,7 @@ async function updateMiriamPhone() {
 }
 
 // Run the function
-updateMiriamPhone().catch(err => {
+updateRoseEmail().catch(err => {
   console.error('Script execution failed:', err);
   process.exit(1);
 });
