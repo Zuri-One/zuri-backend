@@ -41,8 +41,8 @@ class Patient extends Model {
     },
     occupation: {
       type: DataTypes.STRING,
-      allowNull: false,
-      comment: 'Required'
+      allowNull: true,
+      comment: 'Optional'
     },
 
     // Contact Information
@@ -220,12 +220,13 @@ class Patient extends Model {
           if (!value.type) {
             throw new Error('Payment scheme type is required');
           }
-          if (value.type !== 'CASH' && (!value.provider || !value.memberNumber)) {
-            throw new Error('Insurance provider and member number are required for insurance payments');
+          // Member number validation removed to make it optional
+          if (value.type !== 'CASH' && (!value.provider)) {
+            throw new Error('Insurance provider is required for insurance payments');
           }
         }
       },
-      comment: 'Required - Payment scheme details'
+      comment: 'Required - Payment scheme details (type and provider for insurance, member number optional)'
     },
 
     // Account Status and Security
@@ -364,11 +365,10 @@ class Patient extends Model {
       });
     }
   
-    // Add this association
     if (models.DepartmentQueue) {
       this.hasMany(models.DepartmentQueue, {
         foreignKey: 'patientId',
-        as: 'DepartmentQueues'  // This alias is important for your queries
+        as: 'DepartmentQueues'
       });
     }
   }
