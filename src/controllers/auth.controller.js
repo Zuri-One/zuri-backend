@@ -980,6 +980,20 @@ exports.registerPatient = async (req, res, next) => {
     }
     const patientNumber = `ZH${nextNumber.toString().padStart(6, '0')}`;
 
+    // Determine the CCP enrollment date with smart logic:
+    // 1. If a specific date is provided, use it
+    // 2. If isCCPEnrolled is true but no date is provided, use current date
+    // 3. Otherwise null
+    let finalCCPEnrollmentDate = null;
+    
+    if (ccpEnrollmentDate) {
+      // If a date was explicitly provided, use it (for historical data)
+      finalCCPEnrollmentDate = new Date(ccpEnrollmentDate);
+    } else if (isCCPEnrolled) {
+      // If no date provided but patient is enrolled, use current date
+      finalCCPEnrollmentDate = new Date();
+    }
+
     // Create patient with updated model fields
     const patient = await Patient.create({
       surname,
@@ -1006,7 +1020,7 @@ exports.registerPatient = async (req, res, next) => {
       registrationNotes,
       paymentScheme, // Member number is now optional within this object
       isCCPEnrolled: isCCPEnrolled || false,
-      ccpEnrollmentDate: ccpEnrollmentDate || null,
+      ccpEnrollmentDate: finalCCPEnrollmentDate,
       emailVerificationCode: verificationCode,
       emailVerificationToken: verificationToken ? 
         crypto.createHash('sha256').update(verificationToken).digest('hex') 
