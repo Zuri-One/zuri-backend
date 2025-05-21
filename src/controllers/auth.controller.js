@@ -891,7 +891,9 @@ exports.registerPatient = async (req, res, next) => {
       nextOfKin,
       paymentScheme,
       isEmergency,
-      registrationNotes
+      registrationNotes,
+      isCCPEnrolled,
+      ccpEnrollmentDate
     } = req.body;
 
     // Basic validation for required fields - removed occupation and nextOfKin
@@ -1003,6 +1005,8 @@ exports.registerPatient = async (req, res, next) => {
       status: 'WAITING',
       registrationNotes,
       paymentScheme, // Member number is now optional within this object
+      isCCPEnrolled: isCCPEnrolled || false,
+      ccpEnrollmentDate: ccpEnrollmentDate || null,
       emailVerificationCode: verificationCode,
       emailVerificationToken: verificationToken ? 
         crypto.createHash('sha256').update(verificationToken).digest('hex') 
