@@ -436,6 +436,8 @@ exports.getCurrentBill = async (req, res, next) => {
 
     // Get insurance coverage info if applicable
     let insuranceCoverage = null;
+    let insuranceDetails = null;
+
     if (patient.paymentScheme.type !== 'CASH') {
       // For now, using hardcoded coverage limit
       const totalBilled = activeBill ? parseFloat(activeBill.totalAmount) : 0;
@@ -445,13 +447,21 @@ exports.getCurrentBill = async (req, res, next) => {
         remaining: INSURANCE_COVERAGE_LIMIT - totalBilled
       };
       
-      log('Insurance coverage calculated', insuranceCoverage);
+      // Extract insurance details from patient's payment scheme
+      insuranceDetails = {
+        provider: patient.paymentScheme.provider || null,
+        policyNumber: patient.paymentScheme.policyNumber || null,
+        memberNumber: patient.paymentScheme.memberNumber || null
+      };
+      
+      log('Insurance coverage calculated', { insuranceCoverage, insuranceDetails });
     }
 
     log('Returning current bill', {
       totalAmount: activeBill?.totalAmount || 0,
       itemCount: activeBill?.items?.length || 0,
-      paymentType: patient.paymentScheme.type
+      paymentType: patient.paymentScheme.type,
+      hasInsuranceDetails: !!insuranceDetails
     });
 
     res.json({
@@ -459,6 +469,7 @@ exports.getCurrentBill = async (req, res, next) => {
       data: {
         currentBill: activeBill || { totalAmount: 0, items: [] },
         insuranceCoverage,
+        insuranceDetails,
         paymentType: patient.paymentScheme.type
       }
     });
