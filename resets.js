@@ -40,12 +40,8 @@ const sendPasswordResetLink = async (email) => {
 const resetUsers = async () => {
   // List of all emails to process
   const emails = [
-    "cynthia@zuri.health",
-    "danakemuma@gmail.com",
-    "barbara@zuri.health",
-    "antony@zuri.health",
-    "kaninir63@gmail.com",
-    "daphinekamau2018@gmail.com"
+    "kathomiwinner8@gmail.com",
+
   ];
   
   console.log(`🔄 Starting password reset process for multiple users...`);
