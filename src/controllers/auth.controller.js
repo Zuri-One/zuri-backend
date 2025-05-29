@@ -500,6 +500,10 @@ exports.passwordResetSuccess = (req, res) => {
 exports.staffLogin = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    
+    console.log('=== STAFF LOGIN ATTEMPT ===');
+    console.log('Email:', email);
+    console.log('Timestamp:', new Date().toISOString());
 
     // Find user and include department information
     const user = await User.findOne({ 
@@ -526,39 +530,74 @@ exports.staffLogin = async (req, res, next) => {
     });
 
     if (!user) {
+      console.log('❌ User not found or invalid role/status for email:', email);
       return res.status(401).json({
         message: 'Invalid credentials'
       });
     }
 
-    // Check account lock
-    if (user.isAccountLocked()) {
+    console.log('✅ User found:');
+    console.log('- User ID:', user.id);
+    console.log('- Name:', `${user.surname} ${user.otherNames}`);
+    console.log('- Role:', user.role);
+    console.log('- Phone 1:', user.telephone1 || 'Not set');
+    console.log('- Phone 2:', user.telephone2 || 'Not set');
+    console.log('- Email:', user.email);
+    console.log('- Has Password:', user.password ? 'Yes' : 'No');
+    console.log('- Is Active:', user.isActive);
+    console.log('- Status:', user.status);
+
+    // Check if password is set
+    if (!user.password) {
+      console.log('❌ Password is null - account setup incomplete');
+      return res.status(401).json({
+        message: 'Account setup incomplete. Please check your email for setup instructions or contact administrator.'
+      });
+    }
+
+    // Check account lock (if you still have this method)
+    if (typeof user.isAccountLocked === 'function' && user.isAccountLocked()) {
+      console.log('❌ Account is locked');
       return res.status(401).json({
         message: 'Account is locked. Please try again later.'
       });
     }
 
     // Verify password
+    console.log('🔒 Verifying password...');
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      // Increment login attempts
-      await user.incrementLoginAttempts();
+      console.log('❌ Password verification failed');
+      
+      // Increment login attempts (if you still have this method)
+      if (typeof user.incrementLoginAttempts === 'function') {
+        await user.incrementLoginAttempts();
+        console.log('📈 Login attempts incremented');
+      }
       
       return res.status(401).json({
         message: 'Invalid credentials'
       });
     }
 
-    // Reset login attempts on successful login
-    await user.resetLoginAttempts();
+    console.log('✅ Password verified successfully');
+
+    // Reset login attempts on successful login (if you still have this method)
+    if (typeof user.resetLoginAttempts === 'function') {
+      await user.resetLoginAttempts();
+      console.log('🔄 Login attempts reset');
+    }
 
     // Generate verification code for 2FA
     const verificationCode = generateVerificationCode();
+    console.log('🔢 Generated verification code:', verificationCode);
     
     // Store verification code and set expiry (5 minutes)
     user.emailVerificationCode = verificationCode;
     user.emailVerificationExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
     await user.save();
+    console.log('💾 Verification code saved to database');
+    console.log('⏰ Code expires at:', user.emailVerificationExpires.toISOString());
     
     // Create a temporary token containing user info
     const tempToken = jwt.sign(
@@ -571,26 +610,45 @@ exports.staffLogin = async (req, res, next) => {
       }, 
       process.env.JWT_SECRET
     );
+    console.log('🎫 Temporary token generated');
     
-    // Try to send verification code via WhatsApp first if phone exists
+    // Initialize verification tracking
     let verificationSent = false;
     let verificationMethod = null;
+    let verificationErrors = [];
     
+    console.log('\n=== OTP SENDING PROCESS ===');
+    
+    // Try to send verification code via WhatsApp first if phone exists
     if (user.telephone1) {
+      console.log('📱 Attempting WhatsApp verification...');
+      console.log('- Phone number:', user.telephone1);
+      console.log('- Verification code:', verificationCode);
+      
       try {
         await whatsappService.sendVerificationCode(user.telephone1, verificationCode);
         verificationSent = true;
         verificationMethod = 'whatsapp';
+        console.log('✅ WhatsApp verification sent successfully');
       } catch (error) {
-        console.error('WhatsApp verification failed:', error);
+        console.error('❌ WhatsApp verification failed:');
+        console.error('- Error message:', error.message);
+        console.error('- Error stack:', error.stack);
+        verificationErrors.push(`WhatsApp: ${error.message}`);
         // Fall back to email
       }
+    } else {
+      console.log('📱 No phone number available, skipping WhatsApp');
     }
     
     // Fall back to email if WhatsApp failed or no phone exists
     if (!verificationSent) {
+      console.log('📧 Attempting email verification...');
+      console.log('- Email address:', user.email);
+      console.log('- Verification code:', verificationCode);
+      
       try {
-        await sendEmail({
+        const emailResult = await sendEmail({
           to: user.email,
           subject: 'Your verification code - Zuri Health',
           html: `
@@ -607,29 +665,56 @@ exports.staffLogin = async (req, res, next) => {
             </div>
           `
         });
+        
         verificationSent = true;
         verificationMethod = 'email';
+        console.log('✅ Email verification sent successfully');
+        console.log('- Email result:', emailResult);
       } catch (error) {
-        console.error('Email verification failed:', error);
+        console.error('❌ Email verification failed:');
+        console.error('- Error message:', error.message);
+        console.error('- Error stack:', error.stack);
+        verificationErrors.push(`Email: ${error.message}`);
       }
     }
     
+    console.log('\n=== VERIFICATION SUMMARY ===');
+    console.log('Verification sent:', verificationSent);
+    console.log('Verification method:', verificationMethod);
+    console.log('Errors encountered:', verificationErrors);
+    
     if (!verificationSent) {
+      console.log('❌ All verification methods failed');
       return res.status(500).json({
-        message: 'Failed to send verification code. Please try again later.'
+        message: 'Failed to send verification code. Please try again later.',
+        debug: process.env.NODE_ENV === 'development' ? {
+          errors: verificationErrors,
+          userPhone: user.telephone1,
+          userEmail: user.email
+        } : undefined
       });
     }
+    
+    console.log('✅ Staff login process completed successfully');
+    console.log('=== END STAFF LOGIN ===\n');
     
     // Send response with temporary token and verification method
     return res.status(200).json({
       message: `Verification code sent via ${verificationMethod}. Please enter the code to complete login.`,
       tempToken: tempToken,
       verificationMethod: verificationMethod,
-      requiresVerification: true
+      requiresVerification: true,
+      debug: process.env.NODE_ENV === 'development' ? {
+        verificationCode: verificationCode, // Only in development
+        userPhone: user.telephone1,
+        codeExpires: user.emailVerificationExpires
+      } : undefined
     });
     
   } catch (error) {
-    console.error('Staff login error:', error);
+    console.error('💥 Staff login error:', error);
+    console.error('- Error message:', error.message);
+    console.error('- Error stack:', error.stack);
     next(error);
   }
 };
