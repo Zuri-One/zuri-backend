@@ -2,7 +2,6 @@
 const { MedicalRecord, Patient, User, DepartmentQueue } = require('../models');
 const { Op } = require('sequelize');
 
-
 exports.getPatientMedicalHistory = async (req, res, next) => {
   try {
     const { patientId } = req.params;
@@ -40,7 +39,6 @@ exports.getPatientMedicalHistory = async (req, res, next) => {
   }
 };
 
-
 exports.createMedicalRecord = async (req, res, next) => {
   try {
     const {
@@ -51,6 +49,9 @@ exports.createMedicalRecord = async (req, res, next) => {
       medicalHistory,
       familySocialHistory,
       allergies,
+      examinationNotes,
+      reviewOtherSystems,
+      specialHistory,
       impressions,
       diagnosis,
       notes
@@ -87,6 +88,9 @@ exports.createMedicalRecord = async (req, res, next) => {
       medicalHistory,
       familySocialHistory,
       allergies,
+      examinationNotes,
+      reviewOtherSystems,
+      specialHistory,
       impressions,
       diagnosis,
       notes
@@ -128,33 +132,6 @@ exports.createMedicalRecord = async (req, res, next) => {
 
   } catch (error) {
     console.error('Error creating medical record:', error);
-    next(error);
-  }
-};
-
-exports.getPatientMedicalHistory = async (req, res, next) => {
-  try {
-    const { patientId } = req.params;
-
-    const medicalRecords = await MedicalRecord.findAll({
-      where: { patientId },
-      include: [
-        {
-          model: User,
-          as: 'doctor',
-          attributes: ['id', 'surname', 'otherNames']
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-
-    res.json({
-      success: true,
-      data: medicalRecords
-    });
-
-  } catch (error) {
-    console.error('Error fetching medical history:', error);
     next(error);
   }
 };
