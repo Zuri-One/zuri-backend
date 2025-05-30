@@ -44,6 +44,10 @@ exports.getPatientMedicalHistory = async (req, res, next) => {
  }
 };
 
+
+
+
+
 exports.createMedicalRecord = async (req, res, next) => {
  try {
    console.log('Creating medical record with data:', req.body);
