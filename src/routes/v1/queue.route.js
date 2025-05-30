@@ -4,6 +4,26 @@ const router = express.Router();
 const queueController = require('../../controllers/queue.controller');
 const { authenticate, authorize } = require('../../middleware/auth.middleware');
 
+
+// Add this logging middleware function at the top of the file
+const logRequest = (req, res, next) => {
+  console.log(`=== ${req.method} ${req.path} ===`);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  console.log('Params:', req.params);
+  console.log('Query:', req.query);
+  next();
+};
+
+// Update the consultation route
+router.post('/consultation/:queueId', 
+  authenticate, 
+  authorize(['DOCTOR']),
+  logRequest,  // Add this logging middleware
+  queueController.submitConsultation
+);
+
+
 /**
  * @swagger
  * /api/v1/queue/add:

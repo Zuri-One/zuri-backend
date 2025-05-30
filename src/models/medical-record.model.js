@@ -53,6 +53,18 @@ class MedicalRecord extends Model {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    examinationNotes: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    reviewOtherSystems: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    specialHistory: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     impressions: {
       type: DataTypes.TEXT,
       allowNull: true

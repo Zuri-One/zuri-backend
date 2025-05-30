@@ -533,6 +533,11 @@ exports.getLabDepartmentQueue = async (req, res, next) => {
 
 exports.submitConsultation = async (req, res, next) => {
   try {
+    console.log('=== SUBMIT CONSULTATION STARTED ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('User:', req.user);
+    console.log('Queue ID:', req.params.queueId);
+
     const doctorId = req.user.id;
     const { queueId } = req.params;
     const {
@@ -548,8 +553,23 @@ exports.submitConsultation = async (req, res, next) => {
       diagnosis,
       notes
     } = req.body;
- 
+
+    console.log('Extracted fields from req.body:', {
+      complaints: !!complaints,
+      hpi: !!hpi,
+      medicalHistory: !!medicalHistory,
+      familySocialHistory: !!familySocialHistory,
+      allergies: !!allergies,
+      examinationNotes: !!examinationNotes,
+      reviewOtherSystems: !!reviewOtherSystems,
+      specialHistory: !!specialHistory,
+      impressions: !!impressions,
+      diagnosis: !!diagnosis,
+      notes: !!notes
+    });
+
     // Validate queue entry exists and belongs to doctor's department
+    console.log('Looking for queue entry with ID:', queueId);
     const queueEntry = await DepartmentQueue.findOne({
       where: {
         id: queueId,
@@ -559,20 +579,28 @@ exports.submitConsultation = async (req, res, next) => {
         model: Patient
       }]
     });
- 
+
     if (!queueEntry) {
+      console.log('Queue entry not found or not IN_PROGRESS');
       return res.status(404).json({
         success: false,
         message: 'Invalid queue entry or consultation not in progress'
       });
     }
- 
+
+    console.log('Queue entry found:', {
+      id: queueEntry.id,
+      patientId: queueEntry.patientId,
+      status: queueEntry.status
+    });
+
     // Start transaction
+    console.log('Starting database transaction...');
     const transaction = await DepartmentQueue.sequelize.transaction();
- 
+
     try {
       // Create medical record
-      const medicalRecord = await MedicalRecord.create({
+      const medicalRecordData = {
         patientId: queueEntry.patientId,
         doctorId,
         queueEntryId: queueId,
@@ -588,17 +616,33 @@ exports.submitConsultation = async (req, res, next) => {
         diagnosis,
         notes,
         status: 'ACTIVE'
-      }, { transaction });
- 
+      };
+
+      console.log('Creating medical record with data:', JSON.stringify(medicalRecordData, null, 2));
+
+      const medicalRecord = await MedicalRecord.create(medicalRecordData, { transaction });
+
+      console.log('Medical record created successfully:', {
+        id: medicalRecord.id,
+        patientId: medicalRecord.patientId,
+        doctorId: medicalRecord.doctorId,
+        hasExaminationNotes: !!medicalRecord.examinationNotes,
+        hasReviewOtherSystems: !!medicalRecord.reviewOtherSystems,
+        hasSpecialHistory: !!medicalRecord.specialHistory,
+        allFields: Object.keys(medicalRecord.dataValues)
+      });
+
       // Keep the queue entry in IN_PROGRESS status for department transfer
       // Don't update the queue entry status to COMPLETED yet
       
       // The patient status stays as IN_CONSULTATION
       // Don't update patient status yet - will be updated during department transfer
- 
+
+      console.log('Committing transaction...');
       await transaction.commit();
- 
+
       // Fetch complete record with associations
+      console.log('Fetching complete record with associations...');
       const completeRecord = await MedicalRecord.findByPk(medicalRecord.id, {
         include: [
           {
@@ -612,24 +656,39 @@ exports.submitConsultation = async (req, res, next) => {
           }
         ]
       });
- 
+
+      console.log('Complete record fetched:', {
+        id: completeRecord.id,
+        hasExaminationNotes: !!completeRecord.examinationNotes,
+        hasReviewOtherSystems: !!completeRecord.reviewOtherSystems,
+        hasSpecialHistory: !!completeRecord.specialHistory,
+        examinationNotesValue: completeRecord.examinationNotes,
+        reviewOtherSystemsValue: completeRecord.reviewOtherSystems,
+        specialHistoryValue: completeRecord.specialHistory,
+        allFields: Object.keys(completeRecord.dataValues)
+      });
+
+      console.log('=== SUBMIT CONSULTATION COMPLETED SUCCESSFULLY ===');
       res.status(201).json({
         success: true,
         message: 'Medical record saved successfully. Please assign the patient to the next department.',
         data: completeRecord
       });
- 
+
     } catch (error) {
+      console.log('Transaction error, rolling back...');
       await transaction.rollback();
       console.error('Transaction error:', error);
       throw error;
     }
- 
+
   } catch (error) {
+    console.error('=== SUBMIT CONSULTATION ERROR ===');
     console.error('Error in submitConsultation:', error);
+    console.error('Error stack:', error.stack);
     next(error);
   }
- };
+};
 
 exports.updateQueueStatus = async (req, res, next) => {
   try {
