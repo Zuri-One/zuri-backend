@@ -541,11 +541,14 @@ exports.submitConsultation = async (req, res, next) => {
       medicalHistory,
       familySocialHistory,
       allergies,
+      examinationNotes,
+      reviewOtherSystems,
+      specialHistory,
       impressions,
       diagnosis,
       notes
     } = req.body;
-
+ 
     // Validate queue entry exists and belongs to doctor's department
     const queueEntry = await DepartmentQueue.findOne({
       where: {
@@ -556,17 +559,17 @@ exports.submitConsultation = async (req, res, next) => {
         model: Patient
       }]
     });
-
+ 
     if (!queueEntry) {
       return res.status(404).json({
         success: false,
         message: 'Invalid queue entry or consultation not in progress'
       });
     }
-
+ 
     // Start transaction
     const transaction = await DepartmentQueue.sequelize.transaction();
-
+ 
     try {
       // Create medical record
       const medicalRecord = await MedicalRecord.create({
@@ -578,20 +581,23 @@ exports.submitConsultation = async (req, res, next) => {
         medicalHistory,
         familySocialHistory,
         allergies,
+        examinationNotes,
+        reviewOtherSystems,
+        specialHistory,
         impressions,
         diagnosis,
         notes,
         status: 'ACTIVE'
       }, { transaction });
-
+ 
       // Keep the queue entry in IN_PROGRESS status for department transfer
       // Don't update the queue entry status to COMPLETED yet
       
       // The patient status stays as IN_CONSULTATION
       // Don't update patient status yet - will be updated during department transfer
-
+ 
       await transaction.commit();
-
+ 
       // Fetch complete record with associations
       const completeRecord = await MedicalRecord.findByPk(medicalRecord.id, {
         include: [
@@ -606,24 +612,24 @@ exports.submitConsultation = async (req, res, next) => {
           }
         ]
       });
-
+ 
       res.status(201).json({
         success: true,
         message: 'Medical record saved successfully. Please assign the patient to the next department.',
         data: completeRecord
       });
-
+ 
     } catch (error) {
       await transaction.rollback();
       console.error('Transaction error:', error);
       throw error;
     }
-
+ 
   } catch (error) {
     console.error('Error in submitConsultation:', error);
     next(error);
   }
-};
+ };
 
 exports.updateQueueStatus = async (req, res, next) => {
   try {
