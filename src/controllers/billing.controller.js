@@ -255,7 +255,7 @@ exports.addBillingItems = async (req, res, next) => {
             total: packageTotal,
             type: 'PACKAGE',
             items: packageDetails.items,
-            discount: !isInsurance ? 0.15 : 0
+            discount: !isInsurance ? 0 : 0
           });
           totalAmount += packageTotal;
         } else {
@@ -288,7 +288,7 @@ exports.addBillingItems = async (req, res, next) => {
             total: itemTotal,
             type: type === 'PHARMACY' ? 'MEDICATION' : 'INDIVIDUAL',
             category: itemDetails.category,
-            discount: !isInsurance ? 0.15 : 0,
+            discount: !isInsurance ? 0 : 0,
             // Include additional medication details if available
             strength: itemDetails.strength,
             medicationType: itemDetails.type,
@@ -331,7 +331,7 @@ exports.addBillingItems = async (req, res, next) => {
         createdBy: req.user.id,
         notes,
         metadata: {
-          discountApplied: isInsurance ? 0 : 0.15,
+          discountApplied: isInsurance ? 0 : 0,
           serviceType: type
         }
       });

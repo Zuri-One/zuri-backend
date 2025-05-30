@@ -195,7 +195,7 @@ const log = (message, data = null) => {
  */
 function calculateDiscountedPrice(basePrice, isInsurance = true) {
   if (!isInsurance) {
-    return basePrice * 0.85; // 15% discount for cash patients
+    return basePrice * 1; 
   }
   return basePrice;
 }
