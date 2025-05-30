@@ -3,115 +3,180 @@ const { Op, sequelize } = require('sequelize');
 const { generateLabReport } = require('../utils/pdf.util');
 const sendEmail = require('../utils/email.util');
 const WhatsAppService = require('../services/whatsapp.service');
+const labTestCatalogService = require('../services/lab-test-catalog.service');
 
 const labTestController = {
  
 
-  /**
+/**
    * Create new lab test
    * @route POST /api/v1/lab-test
    */
-  createLabTest: async (req, res, next) => {
-    console.log('========= LAB TEST CREATION START =========');
-    console.log('Received lab test request:', req.body);
-    console.log('User making request:', {
-      userId: req.user.id,
-      role: req.user.role
-    });
-  
+createLabTest: async (req, res, next) => {
+  console.log('========= LAB TEST CREATION START =========');
+  console.log('Received lab test request:', req.body);
+  console.log('User making request:', {
+    userId: req.user.id,
+    role: req.user.role
+  });
+
+  try {
+    const {
+      patientId,
+      queueEntryId,
+      testType,
+      priority,
+      notes
+    } = req.body;
+
+    // Validate test type exists in catalog
+    let testDefinition = null;
     try {
-      const {
-        patientId,
-        queueEntryId,
-        testType,
-        priority,
-        notes
-      } = req.body;
-  
-      console.log('Processing lab test creation with data:', {
-        patientId,
-        queueEntryId,
-        testType,
-        priority,
-        notes,
-        requestedById: req.user.id
-      });
-  
-      // Fetch patient information
-      const patient = await Patient.findByPk(patientId);
-      if (!patient) {
-        return res.status(404).json({
-          success: false,
-          message: 'Patient not found'
-        });
+      // First try to find by exact ID match
+      testDefinition = await labTestCatalogService.getTestById(testType);
+      
+      // If not found by ID, try to find by display name
+      if (!testDefinition) {
+        const searchResults = await labTestCatalogService.searchTests(testType);
+        testDefinition = searchResults.find(test => test.displayName === testType) || searchResults[0];
       }
-  
-      const labTest = await LabTest.create({
-        patientId,
-        queueEntryId,
-        requestedById: req.user.id,
-        testType,
-        priority: priority || 'NORMAL',
-        notes,
-        status: 'PENDING'
-      });
-  
-      console.log('Lab test created successfully:', {
-        testId: labTest.id,
-        patientId: labTest.patientId,
-        status: labTest.status
-      });
-  
-      // Send notifications to lab staff about new test request
-      try {
-        // Find lab department
-        const labDepartment = await Department.findOne({
-          where: { code: 'LAB' }
-        });
-  
-        if (labDepartment) {
-          // Find all active lab technicians
-          const labStaff = await User.findAll({
-            where: {
-              departmentId: labDepartment.id,
-              isActive: true,
-              role: 'LAB_TECHNICIAN'
-            },
-            attributes: ['id', 'telephone1']
-          });
-  
-          // Send WhatsApp notifications to all lab staff
-          for (const staff of labStaff) {
-            if (staff.telephone1) {
-              await WhatsAppService.sendQueueNotification(
-                staff.telephone1,
-                testType, // Using test type as queue identifier
-                patient.patientNumber
-              );
-            }
-          }
-          
-          console.log(`Notifications sent to ${labStaff.length} lab staff members`);
-        }
-      } catch (notificationError) {
-        console.error('Failed to send lab test notifications:', notificationError);
-        // Don't fail the request if notifications fail
-      }
-  
-      res.status(201).json({
-        success: true,
-        message: 'Lab test ordered successfully',
-        labTest
-      });
-  
-      console.log('========= LAB TEST CREATION COMPLETE =========');
-    } catch (error) {
-      console.error('Lab test creation error:', error);
-      console.error('Stack trace:', error.stack);
-      console.log('========= LAB TEST CREATION FAILED =========');
-      next(error);
+    } catch (catalogError) {
+      console.warn('Catalog service error, proceeding with legacy test type:', catalogError.message);
+      // If catalog service fails, continue with legacy behavior
     }
-  },
+
+    // If test definition found, validate it's active
+    if (testDefinition && !testDefinition.active) {
+      return res.status(400).json({
+        success: false,
+        message: `Test type ${testType} is currently inactive.`
+      });
+    }
+
+    console.log('Processing lab test creation with data:', {
+      patientId,
+      queueEntryId,
+      testType,
+      priority,
+      notes,
+      requestedById: req.user.id,
+      testDefinitionFound: !!testDefinition
+    });
+
+    // Fetch patient information
+    const patient = await Patient.findByPk(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    }
+
+    // Prepare lab test data
+    const labTestData = {
+      patientId,
+      queueEntryId,
+      requestedById: req.user.id,
+      testType,
+      priority: priority || 'NORMAL',
+      notes,
+      status: 'PENDING'
+    };
+
+    // Add metadata if test definition exists
+    if (testDefinition) {
+      labTestData.metadata = {
+        testDefinitionId: testDefinition.id,
+        estimatedPrice: testDefinition.price,
+        fastingRequired: testDefinition.fastingRequired,
+        sampleType: testDefinition.sampleType,
+        turnaroundTime: testDefinition.turnaroundTime,
+        sampleVolume: testDefinition.sampleVolume,
+        container: testDefinition.container
+      };
+    }
+
+    const labTest = await LabTest.create(labTestData);
+
+    console.log('Lab test created successfully:', {
+      testId: labTest.id,
+      patientId: labTest.patientId,
+      status: labTest.status
+    });
+
+    // Send notifications to lab staff about new test request
+    try {
+      // Find lab department
+      const labDepartment = await Department.findOne({
+        where: { code: 'LAB' }
+      });
+
+      if (labDepartment) {
+        // Find all active lab technicians
+        const labStaff = await User.findAll({
+          where: {
+            departmentId: labDepartment.id,
+            isActive: true,
+            role: 'LAB_TECHNICIAN'
+          },
+          attributes: ['id', 'telephone1']
+        });
+
+        // Send WhatsApp notifications to all lab staff
+        for (const staff of labStaff) {
+          if (staff.telephone1) {
+            await WhatsAppService.sendQueueNotification(
+              staff.telephone1,
+              testType, // Using test type as queue identifier
+              patient.patientNumber
+            );
+          }
+        }
+        
+        console.log(`Notifications sent to ${labStaff.length} lab staff members`);
+      }
+    } catch (notificationError) {
+      console.error('Failed to send lab test notifications:', notificationError);
+      // Don't fail the request if notifications fail
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Lab test ordered successfully',
+      labTest,
+      testDefinition: testDefinition || null
+    });
+
+    console.log('========= LAB TEST CREATION COMPLETE =========');
+  } catch (error) {
+    console.error('Lab test creation error:', error);
+    console.error('Stack trace:', error.stack);
+    console.log('========= LAB TEST CREATION FAILED =========');
+    next(error);
+  }
+},
+
+
+    /**
+   * Get available test types from catalog
+   * @route GET /api/v1/lab-test/available-types
+   */
+    getAvailableTestTypes: async (req, res, next) => {
+      try {
+        const tests = await labTestCatalogService.getActiveTests();
+        
+        // Format for the existing frontend dropdown
+        const testTypes = tests.map(test => test.displayName);
+        
+        res.json({
+          success: true,
+          testTypes,
+          tests // Also include full test objects for enhanced functionality
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
 
   /**
    * Get all lab tests with enhanced filtering

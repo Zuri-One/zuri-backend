@@ -1,0 +1,728 @@
+const fs = require('fs').promises;
+const path = require('path');
+
+class LabTestCatalogService {
+  constructor() {
+    this.catalogPath = path.join(__dirname, '../data/lab-test-catalog.json');
+    this.catalog = null;
+    this.lastModified = null;
+  }
+
+  // Load catalog from file with caching
+  async loadCatalog() {
+    try {
+      const stats = await fs.stat(this.catalogPath);
+      
+      // Check if we need to reload (file changed or first load)
+      if (!this.catalog || stats.mtime > this.lastModified) {
+        const data = await fs.readFile(this.catalogPath, 'utf8');
+        this.catalog = JSON.parse(data);
+        this.lastModified = stats.mtime;
+      }
+      
+      return this.catalog;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // File doesn't exist, create default catalog
+        await this.createDefaultCatalog();
+        return this.catalog;
+      }
+      throw error;
+    }
+  }
+
+  // Save catalog to file
+  async saveCatalog() {
+    try {
+      // Ensure directory exists
+      const dir = path.dirname(this.catalogPath);
+      await fs.mkdir(dir, { recursive: true });
+      
+      await fs.writeFile(this.catalogPath, JSON.stringify(this.catalog, null, 2));
+      this.lastModified = new Date();
+    } catch (error) {
+      throw new Error(`Failed to save catalog: ${error.message}`);
+    }
+  }
+
+  // Create default catalog with initial tests
+  async createDefaultCatalog() {
+    this.catalog = {
+      version: "1.0.0",
+      lastUpdated: new Date().toISOString(),
+      categories: {
+        "HEMATOLOGY": {
+          name: "Hematology",
+          description: "Blood cell analysis and coagulation studies"
+        },
+        "CLINICAL_CHEMISTRY": {
+          name: "Clinical Chemistry", 
+          description: "Blood chemistry and metabolic panels"
+        },
+        "MICROBIOLOGY": {
+          name: "Microbiology",
+          description: "Bacterial, viral, and fungal testing"
+        },
+        "IMMUNOLOGY": {
+          name: "Immunology",
+          description: "Immune system and antibody testing"
+        },
+        "URINALYSIS": {
+          name: "Urinalysis",
+          description: "Urine analysis and microscopy"
+        },
+        "ENDOCRINOLOGY": {
+          name: "Endocrinology",
+          description: "Hormone and endocrine function tests"
+        }
+      },
+      tests: {
+        "CBC": {
+          id: "CBC",
+          name: "Complete Blood Count",
+          displayName: "Complete Blood Count (CBC)",
+          category: "HEMATOLOGY",
+          description: "Complete analysis of blood cells including RBC, WBC, and platelets",
+          sampleType: "Blood",
+          sampleVolume: "3-5 mL",
+          container: "EDTA tube (Purple top)",
+          collectionMethods: ["Venipuncture", "Finger Prick"],
+          fastingRequired: false,
+          turnaroundTime: "2-4 hours",
+          price: 1500,
+          active: true,
+          parameters: [
+            {
+              code: "WBC",
+              name: "White Blood Cells",
+              unit: "×10³/μL",
+              referenceRanges: {
+                adult: { min: 4.5, max: 11.0 },
+                pediatric: { min: 5.0, max: 15.0 }
+              },
+              criticalValues: { low: 2.0, high: 30.0 },
+              dataType: "numeric",
+              precision: 1
+            },
+            {
+              code: "RBC",
+              name: "Red Blood Cells",
+              unit: "×10⁶/μL",
+              referenceRanges: {
+                "adult_male": { min: 4.7, max: 6.1 },
+                "adult_female": { min: 4.2, max: 5.4 },
+                pediatric: { min: 4.0, max: 5.5 }
+              },
+              criticalValues: { low: 2.0, high: 8.0 },
+              dataType: "numeric",
+              precision: 2
+            },
+            {
+              code: "HGB",
+              name: "Hemoglobin",
+              unit: "g/dL",
+              referenceRanges: {
+                "adult_male": { min: 14.0, max: 18.0 },
+                "adult_female": { min: 12.0, max: 16.0 },
+                pediatric: { min: 11.0, max: 16.0 }
+              },
+              criticalValues: { low: 7.0, high: 20.0 },
+              dataType: "numeric",
+              precision: 1
+            },
+            {
+              code: "HCT",
+              name: "Hematocrit",
+              unit: "%",
+              referenceRanges: {
+                "adult_male": { min: 42, max: 52 },
+                "adult_female": { min: 37, max: 47 },
+                pediatric: { min: 32, max: 44 }
+              },
+              criticalValues: { low: 20, high: 60 },
+              dataType: "numeric",
+              precision: 1
+            },
+            {
+              code: "PLT",
+              name: "Platelets",
+              unit: "×10³/μL",
+              referenceRanges: {
+                adult: { min: 150, max: 450 },
+                pediatric: { min: 150, max: 450 }
+              },
+              criticalValues: { low: 50, high: 1000 },
+              dataType: "numeric",
+              precision: 0
+            }
+          ]
+        },
+        "BMP": {
+          id: "BMP",
+          name: "Basic Metabolic Panel",
+          displayName: "Basic Metabolic Panel (BMP)",
+          category: "CLINICAL_CHEMISTRY",
+          description: "Basic blood chemistry panel including glucose, electrolytes, and kidney function",
+          sampleType: "Blood",
+          sampleVolume: "5 mL",
+          container: "SST tube (Gold top)",
+          collectionMethods: ["Venipuncture"],
+          fastingRequired: true,
+          fastingHours: 8,
+          turnaroundTime: "2-4 hours",
+          price: 2000,
+          active: true,
+          parameters: [
+            {
+              code: "GLU",
+              name: "Glucose",
+              unit: "mg/dL",
+              referenceRanges: {
+                fasting: { min: 70, max: 100 },
+                random: { min: 70, max: 140 }
+              },
+              criticalValues: { low: 40, high: 400 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "BUN",
+              name: "Blood Urea Nitrogen",
+              unit: "mg/dL",
+              referenceRanges: {
+                adult: { min: 7, max: 20 },
+                pediatric: { min: 5, max: 18 }
+              },
+              criticalValues: { low: null, high: 100 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "CREAT",
+              name: "Creatinine",
+              unit: "mg/dL",
+              referenceRanges: {
+                "adult_male": { min: 0.7, max: 1.3 },
+                "adult_female": { min: 0.6, max: 1.1 },
+                pediatric: { min: 0.3, max: 0.7 }
+              },
+              criticalValues: { low: null, high: 10.0 },
+              dataType: "numeric",
+              precision: 2
+            },
+            {
+              code: "NA",
+              name: "Sodium",
+              unit: "mmol/L",
+              referenceRanges: {
+                adult: { min: 136, max: 145 },
+                pediatric: { min: 136, max: 145 }
+              },
+              criticalValues: { low: 120, high: 160 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "K",
+              name: "Potassium",
+              unit: "mmol/L",
+              referenceRanges: {
+                adult: { min: 3.5, max: 5.1 },
+                pediatric: { min: 3.4, max: 4.7 }
+              },
+              criticalValues: { low: 2.5, high: 6.5 },
+              dataType: "numeric",
+              precision: 1
+            },
+            {
+              code: "CL",
+              name: "Chloride",
+              unit: "mmol/L",
+              referenceRanges: {
+                adult: { min: 98, max: 107 },
+                pediatric: { min: 98, max: 107 }
+              },
+              criticalValues: { low: 80, high: 120 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "CO2",
+              name: "Carbon Dioxide",
+              unit: "mmol/L",
+              referenceRanges: {
+                adult: { min: 22, max: 29 },
+                pediatric: { min: 20, max: 28 }
+              },
+              criticalValues: { low: 10, high: 40 },
+              dataType: "numeric",
+              precision: 0
+            }
+          ]
+        },
+        "LIPID": {
+          id: "LIPID",
+          name: "Lipid Panel",
+          displayName: "Lipid Panel",
+          category: "CLINICAL_CHEMISTRY",
+          description: "Cholesterol and lipid analysis for cardiovascular risk assessment",
+          sampleType: "Blood",
+          sampleVolume: "5 mL",
+          container: "SST tube (Gold top)",
+          collectionMethods: ["Venipuncture"],
+          fastingRequired: true,
+          fastingHours: 12,
+          turnaroundTime: "4-6 hours",
+          price: 2500,
+          active: true,
+          parameters: [
+            {
+              code: "CHOL",
+              name: "Total Cholesterol",
+              unit: "mg/dL",
+              referenceRanges: {
+                adult: { min: 125, max: 200 }
+              },
+              criticalValues: { low: null, high: 400 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "HDL",
+              name: "HDL Cholesterol",
+              unit: "mg/dL",
+              referenceRanges: {
+                "adult_male": { min: 40, max: 60 },
+                "adult_female": { min: 50, max: 60 }
+              },
+              criticalValues: { low: 20, high: null },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "LDL",
+              name: "LDL Cholesterol",
+              unit: "mg/dL",
+              referenceRanges: {
+                adult: { min: 0, max: 100 }
+              },
+              criticalValues: { low: null, high: 300 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "TRIG",
+              name: "Triglycerides",
+              unit: "mg/dL",
+              referenceRanges: {
+                adult: { min: 0, max: 150 }
+              },
+              criticalValues: { low: null, high: 1000 },
+              dataType: "numeric",
+              precision: 0
+            }
+          ]
+        },
+        "URINALYSIS": {
+          id: "URINALYSIS",
+          name: "Urinalysis",
+          displayName: "Urinalysis",
+          category: "URINALYSIS",
+          description: "Complete urine analysis including physical, chemical, and microscopic examination",
+          sampleType: "Urine",
+          sampleVolume: "50 mL",
+          container: "Sterile urine container",
+          collectionMethods: ["Clean Catch", "Catheterization", "Suprapubic"],
+          fastingRequired: false,
+          turnaroundTime: "1-2 hours",
+          price: 800,
+          active: true,
+          parameters: [
+            {
+              code: "COLOR",
+              name: "Color",
+              unit: "",
+              referenceRanges: {
+                adult: { normal: "Yellow" }
+              },
+              dataType: "text",
+              options: ["Pale Yellow", "Yellow", "Dark Yellow", "Amber", "Red", "Brown", "Clear"]
+            },
+            {
+              code: "CLARITY",
+              name: "Clarity",
+              unit: "",
+              referenceRanges: {
+                adult: { normal: "Clear" }
+              },
+              dataType: "text",
+              options: ["Clear", "Slightly Turbid", "Turbid", "Cloudy"]
+            },
+            {
+              code: "PH",
+              name: "pH",
+              unit: "",
+              referenceRanges: {
+                adult: { min: 4.5, max: 8.0 }
+              },
+              criticalValues: { low: 4.0, high: 9.0 },
+              dataType: "numeric",
+              precision: 1
+            },
+            {
+              code: "PROTEIN",
+              name: "Protein",
+              unit: "mg/dL",
+              referenceRanges: {
+                adult: { min: 0, max: 20 }
+              },
+              criticalValues: { low: null, high: 300 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "GLUCOSE_U",
+              name: "Glucose",
+              unit: "mg/dL",
+              referenceRanges: {
+                adult: { min: 0, max: 15 }
+              },
+              criticalValues: { low: null, high: 1000 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "WBC_U",
+              name: "WBC",
+              unit: "/HPF",
+              referenceRanges: {
+                adult: { min: 0, max: 5 }
+              },
+              criticalValues: { low: null, high: 50 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "RBC_U",
+              name: "RBC",
+              unit: "/HPF",
+              referenceRanges: {
+                adult: { min: 0, max: 2 }
+              },
+              criticalValues: { low: null, high: 25 },
+              dataType: "numeric",
+              precision: 0
+            }
+          ]
+        },
+        "LFT": {
+          id: "LFT",
+          name: "Liver Function Tests",
+          displayName: "Liver Function Tests (LFT)",
+          category: "CLINICAL_CHEMISTRY",
+          description: "Comprehensive liver function assessment",
+          sampleType: "Blood",
+          sampleVolume: "5 mL",
+          container: "SST tube (Gold top)",
+          collectionMethods: ["Venipuncture"],
+          fastingRequired: false,
+          turnaroundTime: "4-6 hours",
+          price: 3000,
+          active: true,
+          parameters: [
+            {
+              code: "ALT",
+              name: "Alanine Aminotransferase",
+              unit: "U/L",
+              referenceRanges: {
+                "adult_male": { min: 10, max: 40 },
+                "adult_female": { min: 7, max: 35 }
+              },
+              criticalValues: { low: null, high: 1000 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "AST",
+              name: "Aspartate Aminotransferase",
+              unit: "U/L",
+              referenceRanges: {
+                "adult_male": { min: 10, max: 40 },
+                "adult_female": { min: 9, max: 32 }
+              },
+              criticalValues: { low: null, high: 1000 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "ALP",
+              name: "Alkaline Phosphatase",
+              unit: "U/L",
+              referenceRanges: {
+                adult: { min: 44, max: 147 },
+                pediatric: { min: 100, max: 400 }
+              },
+              criticalValues: { low: null, high: 1000 },
+              dataType: "numeric",
+              precision: 0
+            },
+            {
+              code: "TBIL",
+              name: "Total Bilirubin",
+              unit: "mg/dL",
+              referenceRanges: {
+                adult: { min: 0.1, max: 1.2 },
+                newborn: { min: 1.0, max: 12.0 }
+              },
+              criticalValues: { low: null, high: 15.0 },
+              dataType: "numeric",
+              precision: 1
+            },
+            {
+              code: "DBIL",
+              name: "Direct Bilirubin",
+              unit: "mg/dL",
+              referenceRanges: {
+                adult: { min: 0.0, max: 0.3 }
+              },
+              criticalValues: { low: null, high: 10.0 },
+              dataType: "numeric",
+              precision: 1
+            }
+          ]
+        },
+        "HBA1C": {
+          id: "HBA1C",
+          name: "Hemoglobin A1c",
+          displayName: "Hemoglobin A1c",
+          category: "ENDOCRINOLOGY",
+          description: "Long-term blood glucose control assessment",
+          sampleType: "Blood",
+          sampleVolume: "3 mL",
+          container: "EDTA tube (Purple top)",
+          collectionMethods: ["Venipuncture"],
+          fastingRequired: false,
+          turnaroundTime: "4-6 hours",
+          price: 2200,
+          active: true,
+          parameters: [
+            {
+              code: "HBA1C",
+              name: "Hemoglobin A1c",
+              unit: "%",
+              referenceRanges: {
+                nondiabetic: { min: 4.0, max: 5.6 },
+                prediabetic: { min: 5.7, max: 6.4 },
+                diabetic: { min: 6.5, max: 15.0 }
+              },
+              criticalValues: { low: null, high: 15.0 },
+              dataType: "numeric",
+              precision: 1
+            }
+          ]
+        }
+      }
+    };
+    
+    await this.saveCatalog();
+  }
+
+  // Get all tests
+  async getAllTests() {
+    const catalog = await this.loadCatalog();
+    return Object.values(catalog.tests);
+  }
+
+  // Get tests by category
+  async getTestsByCategory(categoryId) {
+    const catalog = await this.loadCatalog();
+    return Object.values(catalog.tests).filter(test => test.category === categoryId);
+  }
+
+  // Get active tests only
+  async getActiveTests() {
+    const catalog = await this.loadCatalog();
+    return Object.values(catalog.tests).filter(test => test.active);
+  }
+
+  // Get test by ID
+  async getTestById(testId) {
+    const catalog = await this.loadCatalog();
+    return catalog.tests[testId] || null;
+  }
+
+  // Search tests
+  async searchTests(query) {
+    const catalog = await this.loadCatalog();
+    const searchTerm = query.toLowerCase();
+    
+    return Object.values(catalog.tests).filter(test => 
+      test.name.toLowerCase().includes(searchTerm) ||
+      test.displayName.toLowerCase().includes(searchTerm) ||
+      test.description.toLowerCase().includes(searchTerm)
+    );
+  }
+
+  // Get categories
+  async getCategories() {
+    const catalog = await this.loadCatalog();
+    return catalog.categories;
+  }
+
+  // Add new test
+  async addTest(testData) {
+    const catalog = await this.loadCatalog();
+    
+    if (catalog.tests[testData.id]) {
+      throw new Error(`Test with ID ${testData.id} already exists`);
+    }
+
+    // Validate required fields
+    const required = ['id', 'name', 'displayName', 'category', 'sampleType', 'parameters'];
+    for (const field of required) {
+      if (!testData[field]) {
+        throw new Error(`${field} is required`);
+      }
+    }
+
+    // Set defaults
+    const newTest = {
+      ...testData,
+      active: testData.active !== undefined ? testData.active : true,
+      price: testData.price || 0,
+      fastingRequired: testData.fastingRequired || false,
+      turnaroundTime: testData.turnaroundTime || "2-4 hours"
+    };
+
+    catalog.tests[testData.id] = newTest;
+    catalog.lastUpdated = new Date().toISOString();
+    
+    await this.saveCatalog();
+    return newTest;
+  }
+
+  // Update test
+  async updateTest(testId, updateData) {
+    const catalog = await this.loadCatalog();
+    
+    if (!catalog.tests[testId]) {
+      throw new Error(`Test with ID ${testId} not found`);
+    }
+
+    // Don't allow changing the ID
+    if (updateData.id && updateData.id !== testId) {
+      throw new Error('Cannot change test ID');
+    }
+
+    catalog.tests[testId] = {
+      ...catalog.tests[testId],
+      ...updateData,
+      id: testId // Ensure ID doesn't change
+    };
+    
+    catalog.lastUpdated = new Date().toISOString();
+    
+    await this.saveCatalog();
+    return catalog.tests[testId];
+  }
+
+  // Delete test (soft delete by setting active to false)
+  async deleteTest(testId) {
+    const catalog = await this.loadCatalog();
+    
+    if (!catalog.tests[testId]) {
+      throw new Error(`Test with ID ${testId} not found`);
+    }
+
+    catalog.tests[testId].active = false;
+    catalog.lastUpdated = new Date().toISOString();
+    
+    await this.saveCatalog();
+    return true;
+  }
+
+  // Permanently remove test
+  async removeTest(testId) {
+    const catalog = await this.loadCatalog();
+    
+    if (!catalog.tests[testId]) {
+      throw new Error(`Test with ID ${testId} not found`);
+    }
+
+    delete catalog.tests[testId];
+    catalog.lastUpdated = new Date().toISOString();
+    
+    await this.saveCatalog();
+    return true;
+  }
+
+  // Add category
+  async addCategory(categoryId, categoryData) {
+    const catalog = await this.loadCatalog();
+    
+    if (catalog.categories[categoryId]) {
+      throw new Error(`Category with ID ${categoryId} already exists`);
+    }
+
+    catalog.categories[categoryId] = categoryData;
+    catalog.lastUpdated = new Date().toISOString();
+    
+    await this.saveCatalog();
+    return categoryData;
+  }
+
+  // Get test statistics
+  async getTestStatistics() {
+    const catalog = await this.loadCatalog();
+    const tests = Object.values(catalog.tests);
+    const categories = Object.keys(catalog.categories);
+
+    const stats = {
+      totalTests: tests.length,
+      activeTests: tests.filter(t => t.active).length,
+      inactiveTests: tests.filter(t => !t.active).length,
+      totalCategories: categories.length,
+      testsByCategory: {},
+      averagePrice: 0,
+      priceRange: { min: 0, max: 0 }
+    };
+
+    // Calculate tests by category
+    categories.forEach(cat => {
+      stats.testsByCategory[cat] = tests.filter(t => t.category === cat).length;
+    });
+
+    // Calculate price statistics
+    const prices = tests.filter(t => t.price > 0).map(t => t.price);
+    if (prices.length > 0) {
+      stats.averagePrice = prices.reduce((sum, price) => sum + price, 0) / prices.length;
+      stats.priceRange.min = Math.min(...prices);
+      stats.priceRange.max = Math.max(...prices);
+    }
+
+    return stats;
+  }
+
+  // Export catalog
+  async exportCatalog() {
+    return await this.loadCatalog();
+  }
+
+  // Import catalog
+  async importCatalog(catalogData) {
+    // Validate catalog structure
+    if (!catalogData.tests || !catalogData.categories) {
+      throw new Error('Invalid catalog format');
+    }
+
+    this.catalog = {
+      ...catalogData,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    await this.saveCatalog();
+    return this.catalog;
+  }
+}
+
+module.exports = new LabTestCatalogService();

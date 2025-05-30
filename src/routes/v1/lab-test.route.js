@@ -42,6 +42,21 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
  */
 router.post('/', authenticate, labTestController.createLabTest);
 
+
+/**
+ * @swagger
+ * /api/v1/lab-test/available-types:
+ *   get:
+ *     summary: Get available test types from catalog
+ *     tags: [Lab Tests]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Available test types retrieved successfully
+ */
+router.get('/available-types', authenticate, labTestController.getAvailableTestTypes);
+
 /**
  * @swagger
  * /api/v1/lab-test:
