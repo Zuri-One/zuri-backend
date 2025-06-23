@@ -133,22 +133,22 @@ exports.addToQueue = async (req, res, next) => {
 
       // Update patient status based on department type
       let patientStatus;
-      switch (department.code) {
-        case 'EMERG':
-          patientStatus = 'WAITING_EMERGENCY';
-          break;
-        case 'LAB':
-          patientStatus = 'WAITING_LABORATORY';
-          break;
-        case 'RAD':
-          patientStatus = 'WAITING_RADIOLOGY';
-          break;
-        case 'PHAR':
-          patientStatus = 'IN_PHARMACY';
-          break;
-        default:
-          patientStatus = source === 'TRIAGE' ? 'IN_TRIAGE' : 'WAITING';
-      }
+switch (department.code) {
+  case 'EMERG':
+    patientStatus = 'IN_TRIAGE'; // or 'WAITING' 
+    break;
+  case 'LAB':
+    patientStatus = 'IN_LABORATORY'; // Changed from 'WAITING_LABORATORY'
+    break;
+  case 'RAD':
+    patientStatus = 'IN_RADIOLOGY'; // Changed from 'WAITING_RADIOLOGY'
+    break;
+  case 'PHAR':
+    patientStatus = 'IN_PHARMACY';
+    break;
+  default:
+    patientStatus = source === 'TRIAGE' ? 'IN_TRIAGE' : 'WAITING';
+}
 
       // Update patient record
       await patient.update({
