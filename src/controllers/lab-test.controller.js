@@ -477,107 +477,177 @@ createLabTest: async (req, res, next) => {
   },
 
   /**
-   * Get detailed lab test by ID
-   * @route GET /api/v1/lab-test/:id
-   */
-  getLabTestById: async (req, res, next) => {
-    try {
-      const { id } = req.params;
+ * Get detailed lab test by ID (WITH DEBUG LOGS)
+ * @route GET /api/v1/lab-test/:id
+ */
+getLabTestById: async (req, res, next) => {
+  console.log('========= GET LAB TEST BY ID START =========');
+  console.log('Request params:', req.params);
+  console.log('User making request:', {
+    id: req.user?.id,
+    role: req.user?.role
+  });
 
-      // Find lab test with all related data
-      const labTest = await LabTest.findOne({
-        where: { id },
-        include: [
-          {
-            model: Patient,
-            as: 'patient',
-            attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'dateOfBirth', 'sex']
-          },
-          {
-            model: User,
-            as: 'requestedBy',
-            attributes: ['id', 'surname', 'otherNames', 'role']
-          },
-          {
-            model: User,
-            as: 'sampleCollector',
-            attributes: ['id', 'surname', 'otherNames', 'role']
-          }
-        ]
-      });
+  try {
+    const { id } = req.params;
+    console.log('🔍 Searching for lab test with ID:', id);
 
-      if (!labTest) {
-        return res.status(404).json({
-          success: false,
-          message: 'Lab test not found'
-        });
-      }
-
-      // Format response with comprehensive test information
-      const formattedResponse = {
-        success: true,
-        labTest: {
-          id: labTest.id,
-          sampleId: labTest.sampleId,
-          testType: labTest.testType,
-          patientId: labTest.patientId,
-          status: labTest.status,
-          priority: labTest.priority,
-          paymentStatus: labTest.paymentStatus,
-          createdAt: labTest.createdAt,
-          updatedAt: labTest.updatedAt,
-          
-          // Patient information
-          patient: labTest.patient ? {
-            id: labTest.patient.id,
-            patientNumber: labTest.patient.patientNumber,
-            name: `${labTest.patient.surname} ${labTest.patient.otherNames}`,
-            sex: labTest.patient.sex,
-            dateOfBirth: labTest.patient.dateOfBirth
-          } : null,
-          
-          // Requester information
-          requestedBy: labTest.requestedBy ? {
-            id: labTest.requestedBy.id,
-            name: `${labTest.requestedBy.surname} ${labTest.requestedBy.otherNames}`,
-            role: labTest.requestedBy.role
-          } : null,
-          
-          // Sample information
-          sampleCollection: labTest.sampleId ? {
-            sampleId: labTest.sampleId,
-            collectedAt: labTest.sampleCollectionDate,
-            collectedBy: labTest.sampleCollector ? 
-              `${labTest.sampleCollector.surname} ${labTest.sampleCollector.otherNames}` : 
-              'Unknown',
-            method: labTest.metadata?.collection?.method || null,
-            preparation: labTest.metadata?.collection?.preparation || null,
-            notes: labTest.notes
-          } : null,
-          
-          // Results information
-          results: labTest.results ? {
-            data: labTest.results,
-            referenceRange: labTest.referenceRange,
-            isAbnormal: labTest.isAbnormal,
-            isCritical: labTest.isCritical,
-            resultDate: labTest.resultDate,
-            requiresFollowUp: labTest.metadata?.requiresFollowUp || false,
-            notes: labTest.notes
-          } : null,
-          
-          // Additional metadata for UI display
-          notes: labTest.notes,
-          metadata: labTest.metadata || {}
+    // Find lab test with all related data
+    const labTest = await LabTest.findOne({
+      where: { id },
+      include: [
+        {
+          model: Patient,
+          as: 'patient',
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'dateOfBirth', 'sex']
+        },
+        {
+          model: User,
+          as: 'requestedBy',
+          attributes: ['id', 'surname', 'otherNames', 'role']
+        },
+        {
+          model: User,
+          as: 'sampleCollector',
+          attributes: ['id', 'surname', 'otherNames', 'role']
         }
-      };
+      ]
+    });
 
-      res.json(formattedResponse);
-    } catch (error) {
-      console.error('Error in getLabTestById:', error);
-      next(error);
+    if (!labTest) {
+      console.log('❌ Lab test not found');
+      return res.status(404).json({
+        success: false,
+        message: 'Lab test not found'
+      });
     }
-  },
+
+    console.log('✅ Lab test found');
+    console.log('Raw lab test data from database:', {
+      id: labTest.id,
+      sampleId: labTest.sampleId,
+      testType: labTest.testType,
+      status: labTest.status,
+      sampleCollectionDate: labTest.sampleCollectionDate,
+      sampleCollectedById: labTest.sampleCollectedById,
+      notes: labTest.notes,
+      rawMetadata: labTest.metadata
+    });
+
+    console.log('🔍 Analyzing metadata structure:');
+    console.log('Metadata exists:', !!labTest.metadata);
+    console.log('Metadata type:', typeof labTest.metadata);
+    console.log('Metadata keys:', labTest.metadata ? Object.keys(labTest.metadata) : 'N/A');
+    console.log('Full metadata content:', JSON.stringify(labTest.metadata, null, 2));
+
+    // Check collection metadata specifically
+    console.log('🔍 Analyzing collection metadata:');
+    console.log('metadata.collection exists:', !!(labTest.metadata?.collection));
+    if (labTest.metadata?.collection) {
+      console.log('Collection metadata keys:', Object.keys(labTest.metadata.collection));
+      console.log('Collection method:', labTest.metadata.collection.method);
+      console.log('Collection preparation:', labTest.metadata.collection.preparation);
+      console.log('Collection timestamp:', labTest.metadata.collection.timestamp);
+      console.log('Full collection metadata:', JSON.stringify(labTest.metadata.collection, null, 2));
+    }
+
+    // Extract sample collection method from multiple possible locations
+    console.log('🔍 Extracting sample collection method:');
+    let sampleCollectionMethod = null;
+    let sampleCollectionPreparation = null;
+    let extractionSource = 'not found';
+
+    if (labTest.metadata?.collection?.method) {
+      sampleCollectionMethod = labTest.metadata.collection.method;
+      extractionSource = 'metadata.collection.method';
+    } else if (labTest.metadata?.sampleCollectionMethod) {
+      sampleCollectionMethod = labTest.metadata.sampleCollectionMethod;
+      extractionSource = 'metadata.sampleCollectionMethod';
+    }
+
+    if (labTest.metadata?.collection?.preparation) {
+      sampleCollectionPreparation = labTest.metadata.collection.preparation;
+    } else if (labTest.metadata?.sampleCollectionPreparation) {
+      sampleCollectionPreparation = labTest.metadata.sampleCollectionPreparation;
+    }
+
+    console.log('Sample collection method:', sampleCollectionMethod);
+    console.log('Extraction source:', extractionSource);
+    console.log('Sample collection preparation:', sampleCollectionPreparation);
+
+    // Format response with comprehensive test information
+    const formattedResponse = {
+      success: true,
+      labTest: {
+        id: labTest.id,
+        sampleId: labTest.sampleId,
+        testType: labTest.testType,
+        patientId: labTest.patientId,
+        status: labTest.status,
+        priority: labTest.priority,
+        paymentStatus: labTest.paymentStatus,
+        createdAt: labTest.createdAt,
+        updatedAt: labTest.updatedAt,
+        
+        // Patient information
+        patient: labTest.patient ? {
+          id: labTest.patient.id,
+          patientNumber: labTest.patient.patientNumber,
+          name: `${labTest.patient.surname} ${labTest.patient.otherNames}`,
+          sex: labTest.patient.sex,
+          dateOfBirth: labTest.patient.dateOfBirth
+        } : null,
+        
+        // Requester information
+        requestedBy: labTest.requestedBy ? {
+          id: labTest.requestedBy.id,
+          name: `${labTest.requestedBy.surname} ${labTest.requestedBy.otherNames}`,
+          role: labTest.requestedBy.role
+        } : null,
+        
+        // Sample information
+        sampleCollection: labTest.sampleId ? {
+          sampleId: labTest.sampleId,
+          collectedAt: labTest.sampleCollectionDate,
+          collectedBy: labTest.sampleCollector ? 
+            `${labTest.sampleCollector.surname} ${labTest.sampleCollector.otherNames}` : 
+            'Unknown',
+          method: sampleCollectionMethod,
+          preparation: sampleCollectionPreparation,
+          notes: labTest.notes
+        } : null,
+        
+        // Results information
+        results: labTest.results ? {
+          data: labTest.results,
+          referenceRange: labTest.referenceRange,
+          isAbnormal: labTest.isAbnormal,
+          isCritical: labTest.isCritical,
+          resultDate: labTest.resultDate,
+          requiresFollowUp: labTest.metadata?.requiresFollowUp || false,
+          notes: labTest.notes
+        } : null,
+        
+        // Additional metadata for UI display
+        notes: labTest.notes,
+        metadata: labTest.metadata || {}
+      }
+    };
+
+    console.log('📤 Formatted response sample collection section:');
+    console.log(JSON.stringify(formattedResponse.labTest.sampleCollection, null, 2));
+
+    console.log('✅ Response formatted successfully');
+    res.json(formattedResponse);
+    
+    console.log('========= GET LAB TEST BY ID END =========');
+  } catch (error) {
+    console.error('❌ Error in getLabTestById:', error);
+    console.error('Error stack:', error.stack);
+    console.log('========= GET LAB TEST BY ID FAILED =========');
+    next(error);
+  }
+},
 
   /**
    * Update test status
@@ -637,94 +707,166 @@ createLabTest: async (req, res, next) => {
     }
   },
 
-  /**
-   * Collect sample for lab test
-   * @route POST /api/v1/lab-test/:id/collect-sample
-   */
-  collectSample: async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const { 
-        sampleCollectionMethod,
-        patientPreparation,
-        sampleCollectionNotes 
-      } = req.body;
-  
-      // Validate required fields
-      if (!sampleCollectionMethod) {
-        return res.status(400).json({
-          success: false,
-          message: 'Sample collection method is required'
-        });
-      }
-  
-      // Find the lab test
-      const labTest = await LabTest.findByPk(id);
-      if (!labTest) {
-        return res.status(404).json({
-          success: false,
-          message: 'Lab test not found'
-        });
-      }
-  
-      // Check if sample already collected
-      if (labTest.status !== 'PENDING') {
-        return res.status(400).json({
-          success: false,
-          message: `Cannot collect sample. Test is already in ${labTest.status} status`
-        });
-      }
-  
-      // Generate sample ID with improved uniqueness
-      const date = new Date();
-      const year = date.getFullYear().toString().slice(-2);
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const day = date.getDate().toString().padStart(2, '0');
-      
-      // Combine date parts with timestamp and random number for uniqueness
-      const timestamp = Date.now().toString().slice(-5);
-      const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-      
-      // Format: LAB + YY + MM + DD + timestamp + random
-      const sampleId = `LAB${year}${month}${day}${timestamp}${random}`;
-  
-      // Create a metadata object for collection details
-      const collectionMetadata = {
-        method: sampleCollectionMethod,
-        preparation: patientPreparation || null,
-        collectedBy: {
-          id: req.user.id,
-          name: `${req.user.surname} ${req.user.otherNames}`,
-          role: req.user.role
-        },
-        timestamp: new Date().toISOString()
-      };
-  
-      // Update lab test with sample information
-      await labTest.update({
-        sampleId,
-        sampleCollectionDate: new Date(),
-        sampleCollectedById: req.user.id,
-        status: 'SAMPLE_COLLECTED',
-        notes: sampleCollectionNotes || labTest.notes,
-        metadata: {
-          ...labTest.metadata || {},
-          collection: collectionMetadata
-        }
+ /**
+ * Collect sample for lab test (WITH DEBUG LOGS)
+ * @route POST /api/v1/lab-test/:id/collect-sample
+ */
+collectSample: async (req, res, next) => {
+  console.log('========= COLLECT SAMPLE START =========');
+  console.log('Request params:', req.params);
+  console.log('Request body:', req.body);
+  console.log('User making request:', {
+    id: req.user.id,
+    name: `${req.user.surname} ${req.user.otherNames}`,
+    role: req.user.role
+  });
+
+  try {
+    const { id } = req.params;
+    const { 
+      sampleCollectionMethod,
+      patientPreparation,
+      sampleCollectionNotes 
+    } = req.body;
+
+    console.log('Extracted data:', {
+      testId: id,
+      sampleCollectionMethod,
+      patientPreparation,
+      sampleCollectionNotes
+    });
+
+    // Validate required fields
+    if (!sampleCollectionMethod) {
+      console.log('❌ Validation failed: Sample collection method is required');
+      return res.status(400).json({
+        success: false,
+        message: 'Sample collection method is required'
       });
-  
-      // Return success response
-      res.status(200).json({
-        success: true,
-        message: 'Sample collected successfully',
-        labTest
-      });
-  
-    } catch (error) {
-      console.error('Sample collection error:', error);
-      next(error);
     }
-  },
+
+    console.log('✅ Validation passed');
+
+    // Find the lab test
+    console.log('🔍 Finding lab test with ID:', id);
+    const labTest = await LabTest.findByPk(id);
+    
+    if (!labTest) {
+      console.log('❌ Lab test not found');
+      return res.status(404).json({
+        success: false,
+        message: 'Lab test not found'
+      });
+    }
+
+    console.log('✅ Lab test found:', {
+      id: labTest.id,
+      currentStatus: labTest.status,
+      currentMetadata: labTest.metadata
+    });
+
+    // Check if sample already collected
+    if (labTest.status !== 'PENDING') {
+      console.log('❌ Invalid status for sample collection:', labTest.status);
+      return res.status(400).json({
+        success: false,
+        message: `Cannot collect sample. Test is already in ${labTest.status} status`
+      });
+    }
+
+    console.log('✅ Status check passed - test is PENDING');
+
+    // Generate sample ID with improved uniqueness
+    const date = new Date();
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    
+    // Combine date parts with timestamp and random number for uniqueness
+    const timestamp = Date.now().toString().slice(-5);
+    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    
+    // Format: LAB + YY + MM + DD + timestamp + random
+    const sampleId = `LAB${year}${month}${day}${timestamp}${random}`;
+
+    console.log('📋 Generated sample ID:', sampleId);
+
+    // Create a metadata object for collection details
+    const collectionMetadata = {
+      method: sampleCollectionMethod,
+      preparation: patientPreparation || null,
+      collectedBy: {
+        id: req.user.id,
+        name: `${req.user.surname} ${req.user.otherNames}`,
+        role: req.user.role
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('📝 Created collection metadata:', JSON.stringify(collectionMetadata, null, 2));
+
+    // Prepare the complete metadata object
+    const completeMetadata = {
+      ...labTest.metadata || {},
+      collection: collectionMetadata
+    };
+
+    console.log('📝 Complete metadata to save:', JSON.stringify(completeMetadata, null, 2));
+
+    // Prepare update data
+    const updateData = {
+      sampleId,
+      sampleCollectionDate: new Date(),
+      sampleCollectedById: req.user.id,
+      status: 'SAMPLE_COLLECTED',
+      notes: sampleCollectionNotes || labTest.notes,
+      metadata: completeMetadata
+    };
+
+    console.log('🔄 Update data prepared:', JSON.stringify(updateData, null, 2));
+
+    // Update lab test with sample information
+    console.log('💾 Attempting to update lab test...');
+    const updateResult = await labTest.update(updateData);
+
+    console.log('✅ Lab test update completed');
+    console.log('Updated lab test result:', {
+      id: updateResult.id,
+      sampleId: updateResult.sampleId,
+      status: updateResult.status,
+      sampleCollectionDate: updateResult.sampleCollectionDate,
+      sampleCollectedById: updateResult.sampleCollectedById,
+      notes: updateResult.notes,
+      metadata: updateResult.metadata
+    });
+
+    // Verify the update by fetching fresh data
+    console.log('🔍 Verifying update by fetching fresh data...');
+    const freshLabTest = await LabTest.findByPk(id);
+    console.log('Fresh lab test data after update:', {
+      id: freshLabTest.id,
+      sampleId: freshLabTest.sampleId,
+      status: freshLabTest.status,
+      metadata: freshLabTest.metadata
+    });
+
+    // Return success response
+    console.log('✅ Sample collection completed successfully');
+    res.status(200).json({
+      success: true,
+      message: 'Sample collected successfully',
+      labTest: freshLabTest // Return the fresh data
+    });
+
+    console.log('========= COLLECT SAMPLE END =========');
+
+  } catch (error) {
+    console.error('❌ Sample collection error:', error);
+    console.error('Error stack:', error.stack);
+    console.log('========= COLLECT SAMPLE FAILED =========');
+    next(error);
+  }
+},
 
   /**
    * Approve sample for testing

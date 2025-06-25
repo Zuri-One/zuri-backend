@@ -116,6 +116,10 @@ class LabTest extends Model {
     expectedCompletionDate: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    metadata: {
+      type: DataTypes.JSONB,
+      allowNull: true
     }
   };
 
