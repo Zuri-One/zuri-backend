@@ -23,6 +23,8 @@ const queueRoutes = require('./queue.route');
 const examinationRoutes = require('./examination.route');
 const icdRoutes = require('./icd.route'); 
 const labTestCatalogRoutes = require('./lab-test-catalog.route');
+const ccpRoutes = require('./ccp.route');
+
 
 // New route imports
 // const progressNoteRoutes = require('./progress-note.route');
@@ -53,6 +55,7 @@ router.use('/queue', queueRoutes);
 router.use('/examinations', examinationRoutes);
 router.use('/icd', icdRoutes); // Mount ICD routes
 router.use('/lab-test-catalog', labTestCatalogRoutes);
+router.use('/ccp', ccpRoutes);
 
 // Mount new routes
 // router.use('/progress-notes', progressNoteRoutes);
