@@ -8,6 +8,7 @@ const models = {
   Department: require(path.join(__dirname, 'department.model')),
   User: require(path.join(__dirname, 'user.model')),
   Patient: require(path.join(__dirname, 'patient.model')),
+  CCP: require(path.join(__dirname, 'ccp.model')), // Added CCP model
   Appointment: require(path.join(__dirname, 'appointment.model')),
   DoctorAvailability: require(path.join(__dirname, 'doctor-availability.model')),
   DoctorProfile: require(path.join(__dirname, 'doctor-profile.model')),
@@ -89,6 +90,7 @@ const modelInitializationOrder = [
   'Triage',
   'User',
   'Patient',
+  'CCP', // Added CCP after Patient since it depends on Patient
   'DoctorProfile',
   'Appointment',
   'ProgressNote',

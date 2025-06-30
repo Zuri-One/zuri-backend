@@ -377,6 +377,16 @@ class Patient extends Model {
         as: 'DepartmentQueues'
       });
     }
+  
+    // Add CCP association
+    if (models.CCP) {
+      this.hasMany(models.CCP, {
+        foreignKey: 'patientId',
+        as: 'ccpFollowups',
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE'
+      });
+    }
   }
 
   static initModel(sequelize) {

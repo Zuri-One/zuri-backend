@@ -9,6 +9,7 @@ const {
     Billing, 
     Triage, 
     User, 
+    CCP, 
     Department,
     Medication,
     TestResult,
@@ -440,7 +441,666 @@ const {
         next(error);
       }
     }
-  
+    
+    // Create CCP followup record
+async createCCPFollowup(req, res, next) {
+  try {
+    const { patientId } = req.params;
+    const {
+      nextFollowupDate,
+      dueFollowupDate,
+      followupFrequency,
+      followupType = 'ROUTINE',
+      followupMode = 'IN_PERSON',
+      priority = 'NORMAL',
+      followupFeedback,
+      consultationFeedback,
+      vitalSigns,
+      symptomsAssessment,
+      medicationCompliance,
+      actionItems,
+      referralsNeeded,
+      labTestsOrdered,
+      privateNotes,
+      patientNotes
+    } = req.body;
+
+    log('Creating CCP followup record', { patientId, followupFrequency });
+
+    // Verify patient is CCP enrolled
+    const patient = await Patient.findOne({
+      where: { id: patientId, isCCPEnrolled: true }
+    });
+
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'CCP patient not found'
+      });
+    }
+
+    // Determine followup month and year
+    const followupDate = nextFollowupDate ? new Date(nextFollowupDate) : new Date();
+    const followupMonth = followupDate.getMonth() + 1;
+    const followupYear = followupDate.getFullYear();
+
+    // Check if followup record already exists for this month/year
+    const existingFollowup = await CCP.findOne({
+      where: {
+        patientId,
+        followupMonth,
+        followupYear
+      }
+    });
+
+    if (existingFollowup) {
+      return res.status(400).json({
+        success: false,
+        message: 'CCP followup record already exists for this month and year'
+      });
+    }
+
+    // Create new followup record
+    const ccpFollowup = await CCP.create({
+      patientId,
+      nextFollowupDate,
+      dueFollowupDate,
+      followupFrequency,
+      followupMonth,
+      followupYear,
+      followupType,
+      followupMode,
+      priority,
+      followupFeedback,
+      consultationFeedback,
+      vitalSigns: vitalSigns || {},
+      symptomsAssessment: symptomsAssessment || {},
+      medicationCompliance,
+      actionItems: actionItems || [],
+      referralsNeeded: referralsNeeded || [],
+      labTestsOrdered: labTestsOrdered || [],
+      privateNotes,
+      patientNotes,
+      scheduledBy: req.user.id,
+      status: 'SCHEDULED'
+    });
+
+    log('CCP followup record created successfully', { 
+      ccpFollowupId: ccpFollowup.id, 
+      patientId 
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'CCP followup record created successfully',
+      followup: ccpFollowup
+    });
+
+  } catch (error) {
+    log('Error creating CCP followup record', { 
+      patientId: req.params.patientId, 
+      error: error.message 
+    });
+    next(error);
+  }
+}
+
+// Get CCP followup records for a patient
+async getCCPFollowups(req, res, next) {
+  try {
+    const { patientId } = req.params;
+    const { 
+      year, 
+      month, 
+      status, 
+      isCompleted, 
+      limit = 20, 
+      page = 1 
+    } = req.query;
+
+    log('Fetching CCP followups', { patientId, year, month, status });
+
+    const whereClause = { patientId };
+
+    if (year) whereClause.followupYear = parseInt(year);
+    if (month) whereClause.followupMonth = parseInt(month);
+    if (status) whereClause.status = status;
+    if (isCompleted !== undefined) {
+      whereClause.isFollowupCompleted = isCompleted === 'true';
+    }
+
+    const { count, rows: followups } = await CCP.findAndCountAll({
+      where: whereClause,
+      include: [
+        {
+          model: Patient,
+          as: 'patient',
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames']
+        },
+        {
+          model: User,
+          as: 'scheduler',
+          attributes: ['id', 'surname', 'otherNames', 'role']
+        },
+        {
+          model: User,
+          as: 'completedByUser',
+          attributes: ['id', 'surname', 'otherNames', 'role']
+        }
+      ],
+      limit: parseInt(limit),
+      offset: (parseInt(page) - 1) * parseInt(limit),
+      order: [['nextFollowupDate', 'DESC']]
+    });
+
+    const formattedFollowups = followups.map(followup => ({
+      id: followup.id,
+      patient: {
+        id: followup.patient.id,
+        patientNumber: followup.patient.patientNumber,
+        fullName: `${followup.patient.surname} ${followup.patient.otherNames}`
+      },
+      followupDetails: {
+        nextFollowupDate: followup.nextFollowupDate ? 
+          moment(followup.nextFollowupDate).format('MMMM Do YYYY') : null,
+        dueFollowupDate: followup.dueFollowupDate ? 
+          moment(followup.dueFollowupDate).format('MMMM Do YYYY') : null,
+        actualFollowupDate: followup.actualFollowupDate ? 
+          moment(followup.actualFollowupDate).format('MMMM Do YYYY') : null,
+        frequency: followup.followupFrequency,
+        type: followup.followupType,
+        mode: followup.followupMode,
+        priority: followup.priority,
+        status: followup.status,
+        isCompleted: followup.isFollowupCompleted,
+        month: followup.followupMonth,
+        year: followup.followupYear,
+        daysUntilFollowup: followup.getDaysUntilFollowup(),
+        isOverdue: followup.isOverdue()
+      },
+      feedback: {
+        followupFeedback: followup.followupFeedback,
+        consultationFeedback: followup.consultationFeedback,
+        privateNotes: followup.privateNotes,
+        patientNotes: followup.patientNotes
+      },
+      clinicalData: {
+        vitalSigns: followup.vitalSigns,
+        symptomsAssessment: followup.symptomsAssessment,
+        medicationCompliance: followup.medicationCompliance,
+        actionItems: followup.actionItems,
+        referralsNeeded: followup.referralsNeeded,
+        labTestsOrdered: followup.labTestsOrdered
+      },
+      staff: {
+        scheduledBy: followup.scheduler ? 
+          `${followup.scheduler.surname} ${followup.scheduler.otherNames}` : null,
+        completedBy: followup.completedByUser ? 
+          `${followup.completedByUser.surname} ${followup.completedByUser.otherNames}` : null
+      },
+      timing: {
+        duration: followup.duration,
+        createdAt: moment(followup.createdAt).format('MMMM Do YYYY, h:mm a'),
+        updatedAt: moment(followup.updatedAt).format('MMMM Do YYYY, h:mm a')
+      }
+    }));
+
+    res.json({
+      success: true,
+      count: formattedFollowups.length,
+      total: count,
+      pages: Math.ceil(count / limit),
+      currentPage: parseInt(page),
+      followups: formattedFollowups
+    });
+
+  } catch (error) {
+    log('Error fetching CCP followups', { 
+      patientId: req.params.patientId, 
+      error: error.message 
+    });
+    next(error);
+  }
+}
+
+// Update CCP followup record
+async updateCCPFollowup(req, res, next) {
+  try {
+    const { followupId } = req.params;
+    const updateData = req.body;
+
+    log('Updating CCP followup record', { followupId });
+
+    const followup = await CCP.findByPk(followupId);
+
+    if (!followup) {
+      return res.status(404).json({
+        success: false,
+        message: 'CCP followup record not found'
+      });
+    }
+
+    // If marking as completed, set completion details
+    if (updateData.isFollowupCompleted && !followup.isFollowupCompleted) {
+      updateData.actualFollowupDate = new Date();
+      updateData.completedBy = req.user.id;
+      updateData.status = 'COMPLETED';
+    }
+
+    // Update the followup record
+    await followup.update(updateData);
+
+    // Fetch updated record with associations
+    const updatedFollowup = await CCP.findByPk(followupId, {
+      include: [
+        {
+          model: Patient,
+          as: 'patient',
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames']
+        },
+        {
+          model: User,
+          as: 'scheduler',
+          attributes: ['id', 'surname', 'otherNames', 'role']
+        },
+        {
+          model: User,
+          as: 'completedByUser',
+          attributes: ['id', 'surname', 'otherNames', 'role']
+        }
+      ]
+    });
+
+    log('CCP followup record updated successfully', { followupId });
+
+    res.json({
+      success: true,
+      message: 'CCP followup record updated successfully',
+      followup: updatedFollowup
+    });
+
+  } catch (error) {
+    log('Error updating CCP followup record', { 
+      followupId: req.params.followupId, 
+      error: error.message 
+    });
+    next(error);
+  }
+}
+
+// Complete CCP followup
+async completeCCPFollowup(req, res, next) {
+  try {
+    const { followupId } = req.params;
+    const {
+      followupFeedback,
+      consultationFeedback,
+      vitalSigns,
+      symptomsAssessment,
+      medicationCompliance,
+      actionItems,
+      referralsNeeded,
+      labTestsOrdered,
+      duration,
+      privateNotes,
+      patientNotes
+    } = req.body;
+
+    log('Completing CCP followup', { followupId });
+
+    const followup = await CCP.findByPk(followupId, {
+      include: [{
+        model: Patient,
+        as: 'patient',
+        attributes: ['id', 'patientNumber', 'surname', 'otherNames']
+      }]
+    });
+
+    if (!followup) {
+      return res.status(404).json({
+        success: false,
+        message: 'CCP followup record not found'
+      });
+    }
+
+    if (followup.isFollowupCompleted) {
+      return res.status(400).json({
+        success: false,
+        message: 'CCP followup is already completed'
+      });
+    }
+
+    // Update followup with completion data
+    await followup.update({
+      isFollowupCompleted: true,
+      actualFollowupDate: new Date(),
+      completedBy: req.user.id,
+      status: 'COMPLETED',
+      followupFeedback,
+      consultationFeedback,
+      vitalSigns: vitalSigns || followup.vitalSigns,
+      symptomsAssessment: symptomsAssessment || followup.symptomsAssessment,
+      medicationCompliance,
+      actionItems: actionItems || followup.actionItems,
+      referralsNeeded: referralsNeeded || followup.referralsNeeded,
+      labTestsOrdered: labTestsOrdered || followup.labTestsOrdered,
+      duration,
+      privateNotes,
+      patientNotes
+    });
+
+    // Calculate and create next followup if needed
+    const nextDate = followup.calculateNextFollowupDate();
+    if (nextDate) {
+      const nextMonth = nextDate.getMonth() + 1;
+      const nextYear = nextDate.getFullYear();
+
+      // Check if next followup already exists
+      const existingNext = await CCP.findOne({
+        where: {
+          patientId: followup.patientId,
+          followupMonth: nextMonth,
+          followupYear: nextYear
+        }
+      });
+
+      if (!existingNext) {
+        await CCP.create({
+          patientId: followup.patientId,
+          nextFollowupDate: nextDate,
+          followupFrequency: followup.followupFrequency,
+          followupMonth: nextMonth,
+          followupYear: nextYear,
+          followupType: followup.followupType,
+          followupMode: followup.followupMode,
+          priority: followup.priority,
+          scheduledBy: req.user.id,
+          status: 'SCHEDULED'
+        });
+      }
+    }
+
+    log('CCP followup completed successfully', { 
+      followupId, 
+      patientId: followup.patientId 
+    });
+
+    res.json({
+      success: true,
+      message: 'CCP followup completed successfully',
+      followup: await CCP.findByPk(followupId, {
+        include: [
+          {
+            model: Patient,
+            as: 'patient',
+            attributes: ['id', 'patientNumber', 'surname', 'otherNames']
+          },
+          {
+            model: User,
+            as: 'completedByUser',
+            attributes: ['id', 'surname', 'otherNames', 'role']
+          }
+        ]
+      })
+    });
+
+  } catch (error) {
+    log('Error completing CCP followup', { 
+      followupId: req.params.followupId, 
+      error: error.message 
+    });
+    next(error);
+  }
+}
+
+// Get CCP followup dashboard
+async getCCPFollowupDashboard(req, res, next) {
+  try {
+    const { month, year } = req.query;
+    const currentDate = new Date();
+    const targetMonth = month ? parseInt(month) : currentDate.getMonth() + 1;
+    const targetYear = year ? parseInt(year) : currentDate.getFullYear();
+
+    log('Fetching CCP followup dashboard', { month: targetMonth, year: targetYear });
+
+    // Parallel queries for dashboard metrics
+    const [
+      totalFollowups,
+      completedFollowups,
+      overdueFollowups,
+      upcomingFollowups,
+      followupsByStatus,
+      followupsByPriority,
+      recentCompletions
+    ] = await Promise.all([
+      // Total followups for the month
+      CCP.count({
+        where: {
+          followupMonth: targetMonth,
+          followupYear: targetYear
+        }
+      }),
+
+      // Completed followups
+      CCP.count({
+        where: {
+          followupMonth: targetMonth,
+          followupYear: targetYear,
+          isFollowupCompleted: true
+        }
+      }),
+
+      // Overdue followups
+      CCP.findAll({
+        where: {
+          followupMonth: targetMonth,
+          followupYear: targetYear,
+          isFollowupCompleted: false,
+          nextFollowupDate: {
+            [Op.lt]: currentDate
+          }
+        },
+        include: [{
+          model: Patient,
+          as: 'patient',
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'telephone1']
+        }]
+      }),
+
+      // Upcoming followups (next 7 days)
+      CCP.findAll({
+        where: {
+          nextFollowupDate: {
+            [Op.between]: [
+              currentDate,
+              new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000)
+            ]
+          },
+          isFollowupCompleted: false
+        },
+        include: [{
+          model: Patient,
+          as: 'patient',
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'telephone1']
+        }],
+        order: [['nextFollowupDate', 'ASC']]
+      }),
+
+      // Followups by status
+      sequelize.query(`
+        SELECT status, COUNT(*) as count
+        FROM "CCPs"
+        WHERE "followupMonth" = :month AND "followupYear" = :year
+        GROUP BY status
+      `, {
+        replacements: { month: targetMonth, year: targetYear },
+        type: sequelize.QueryTypes.SELECT
+      }),
+
+      // Followups by priority
+      sequelize.query(`
+        SELECT priority, COUNT(*) as count
+        FROM "CCPs"
+        WHERE "followupMonth" = :month AND "followupYear" = :year
+        GROUP BY priority
+      `, {
+        replacements: { month: targetMonth, year: targetYear },
+        type: sequelize.QueryTypes.SELECT
+      }),
+
+      // Recent completions
+      CCP.findAll({
+        where: {
+          isFollowupCompleted: true,
+          actualFollowupDate: {
+            [Op.gte]: new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000)
+          }
+        },
+        include: [{
+          model: Patient,
+          as: 'patient',
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames']
+        }],
+        order: [['actualFollowupDate', 'DESC']],
+        limit: 10
+      })
+    ]);
+
+    const dashboard = {
+      summary: {
+        totalFollowups,
+        completedFollowups,
+        pendingFollowups: totalFollowups - completedFollowups,
+        completionRate: totalFollowups > 0 ? 
+          Math.round((completedFollowups / totalFollowups) * 100) : 0,
+        overdueCount: overdueFollowups.length,
+        upcomingCount: upcomingFollowups.length
+      },
+
+      overdueFollowups: overdueFollowups.map(f => ({
+        id: f.id,
+        patient: {
+          id: f.patient.id,
+          patientNumber: f.patient.patientNumber,
+          fullName: `${f.patient.surname} ${f.patient.otherNames}`,
+          contact: f.patient.telephone1
+        },
+        nextFollowupDate: moment(f.nextFollowupDate).format('MMMM Do YYYY'),
+        daysOverdue: Math.abs(f.getDaysUntilFollowup()),
+        priority: f.priority,
+        followupType: f.followupType
+      })),
+
+      upcomingFollowups: upcomingFollowups.map(f => ({
+        id: f.id,
+        patient: {
+          id: f.patient.id,
+          patientNumber: f.patient.patientNumber,
+          fullName: `${f.patient.surname} ${f.patient.otherNames}`,
+          contact: f.patient.telephone1
+        },
+        nextFollowupDate: moment(f.nextFollowupDate).format('MMMM Do YYYY'),
+        daysUntilFollowup: f.getDaysUntilFollowup(),
+        priority: f.priority,
+        followupType: f.followupType
+      })),
+
+      statusDistribution: followupsByStatus.reduce((acc, item) => {
+        acc[item.status] = parseInt(item.count);
+        return acc;
+      }, {}),
+
+      priorityDistribution: followupsByPriority.reduce((acc, item) => {
+        acc[item.priority] = parseInt(item.count);
+        return acc;
+      }, {}),
+
+      recentCompletions: recentCompletions.map(f => ({
+        id: f.id,
+        patient: {
+          id: f.patient.id,
+          patientNumber: f.patient.patientNumber,
+          fullName: `${f.patient.surname} ${f.patient.otherNames}`
+        },
+        completedDate: moment(f.actualFollowupDate).format('MMMM Do YYYY'),
+        followupType: f.followupType,
+        duration: f.duration
+      }))
+    };
+
+    res.json({
+      success: true,
+      dashboard
+    });
+
+  } catch (error) {
+    log('Error fetching CCP followup dashboard', { error: error.message });
+    next(error);
+  }
+}
+
+// Get overdue followups
+async getOverdueCCPFollowups(req, res, next) {
+  try {
+    const { limit = 50, page = 1 } = req.query;
+    const currentDate = new Date();
+
+    log('Fetching overdue CCP followups');
+
+    const { count, rows: overdueFollowups } = await CCP.findAndCountAll({
+      where: {
+        isFollowupCompleted: false,
+        nextFollowupDate: {
+          [Op.lt]: currentDate
+        }
+      },
+      include: [{
+        model: Patient,
+        as: 'patient',
+        attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'telephone1', 'dateOfBirth']
+      }],
+      limit: parseInt(limit),
+      offset: (parseInt(page) - 1) * parseInt(limit),
+      order: [['nextFollowupDate', 'ASC']]
+    });
+
+    const formattedOverdue = overdueFollowups.map(f => ({
+      id: f.id,
+      patient: {
+        id: f.patient.id,
+        patientNumber: f.patient.patientNumber,
+        fullName: `${f.patient.surname} ${f.patient.otherNames}`,
+        contact: f.patient.telephone1,
+        age: moment().diff(moment(f.patient.dateOfBirth), 'years')
+      },
+      followupDetails: {
+        nextFollowupDate: moment(f.nextFollowupDate).format('MMMM Do YYYY'),
+        dueFollowupDate: f.dueFollowupDate ? 
+          moment(f.dueFollowupDate).format('MMMM Do YYYY') : null,
+        daysOverdue: Math.abs(f.getDaysUntilFollowup()),
+        frequency: f.followupFrequency,
+        type: f.followupType,
+        mode: f.followupMode,
+        priority: f.priority,
+        status: f.status
+      }
+    }));
+
+    res.json({
+      success: true,
+      count: formattedOverdue.length,
+      total: count,
+      pages: Math.ceil(count / limit),
+      currentPage: parseInt(page),
+      overdueFollowups: formattedOverdue
+    });
+
+  } catch (error) {
+    log('Error fetching overdue CCP followups', { error: error.message });
+    next(error);
+  }
+}
+
     // Get medical history for CCP patient
     async getCCPMedicalHistory(req, res, next) {
       try {
