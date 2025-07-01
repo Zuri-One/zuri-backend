@@ -315,6 +315,9 @@ const {
             age: moment().diff(moment(patient.dateOfBirth), 'years'),
             nationality: patient.nationality,
             occupation: patient.occupation,
+            nextOfKin:patient.nextOfKin,
+            paymentScheme: patient.paymentScheme,
+            
             contact: {
               telephone1: patient.telephone1,
               telephone2: patient.telephone2,
