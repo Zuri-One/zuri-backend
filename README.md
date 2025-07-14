@@ -4,9 +4,22 @@ A comprehensive backend system for managing hospital operations including patien
 
 - [API Documentation Link](https://zuri-8f5l.onrender.com/api-docs/)
 
-## 📚 API Documentation
+## 📚 Documentation
 
-API documentation is available at `/api-docs` when running the server. The documentation is generated using Swagger/OpenAPI specification.
+### Complete Documentation Site
+Comprehensive documentation is available at `/docs` when running the server, including:
+- **API Reference**: Complete endpoint documentation
+- **Integration Guides**: Step-by-step implementation guides
+- **Deployment Guides**: Production deployment instructions
+- **Best Practices**: Security and performance recommendations
+
+### API Documentation
+Interactive API documentation is available at `/api-docs` (Swagger UI) when running the server.
+
+### Quick Access
+- **Documentation**: `http://your-server.com/docs`
+- **API Reference**: `http://your-server.com/api-docs`
+- **Health Check**: `http://your-server.com/health`
 
 Some key endpoints:
 
@@ -74,41 +87,97 @@ Some key endpoints:
 - PostgreSQL 13.x or higher
 - npm or yarn package manager
 
-## ⚙️ Local Development Setup
+## ⚙️ Quick Setup
 
-1. Clone the repository:
-
+### Automated Setup (Recommended)
 ```bash
 git clone https://github.com/yourusername/hms-backend.git
 cd hms-backend
+./scripts/setup-docs.sh
 ```
 
-2. Install dependencies:
+This script will:
+- Install all dependencies (API + Documentation)
+- Build the documentation
+- Set up required directories
+- Provide next steps guidance
 
+### Manual Setup
+
+1. **Clone and install:**
 ```bash
+git clone https://github.com/yourusername/hms-backend.git
+cd hms-backend
 npm install
 ```
 
-3. Set up environment variables:
+2. **Setup documentation:**
+```bash
+npm run docs:install
+npm run docs:build
+```
 
+3. **Configure environment:**
 ```bash
 cp .env.example .env
 # Edit .env with your configuration
 ```
 
-4. Run database migrations:
-
+4. **Setup database:**
 ```bash
 npm run migrate
 ```
 
-5. Start the development server:
-
+5. **Start development:**
 ```bash
+# API only
 npm run dev
+
+# API + Documentation (recommended)
+npm run dev:with-docs
 ```
 
-## 🚀 Render Deployment
+## 📖 Available Scripts
+
+### Main Application
+```bash
+npm start              # Start production server
+npm run dev            # Start development server
+npm run migrate        # Run database migrations
+```
+
+### Documentation
+```bash
+npm run docs:install   # Install documentation dependencies
+npm run docs:dev       # Start documentation development server
+npm run docs:build     # Build documentation for production
+npm run dev:with-docs  # Start both API and docs in development
+./scripts/build-docs.sh # Complete documentation build script
+```
+
+## 🚀 Production Deployment
+
+### EC2 Deployment (Recommended)
+
+For production deployment on EC2 with integrated documentation:
+
+1. **Quick deployment:**
+```bash
+# On your EC2 instance
+git clone <your-repo>
+cd zuri-backend
+./scripts/setup-docs.sh
+./scripts/build-docs.sh
+```
+
+2. **Access your application:**
+- API: `https://your-domain.com/api/v1`
+- Documentation: `https://your-domain.com/docs`
+- API Docs: `https://your-domain.com/api-docs`
+
+See [EC2 Deployment Guide](./docs/docs/deployment/ec2-deployment.md) for detailed instructions.
+
+### Render Deployment
 
 ### Prerequisites
 

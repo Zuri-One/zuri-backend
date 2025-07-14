@@ -11,6 +11,7 @@ const swaggerSpec = require('./config/swagger');
 const routes = require('./routes/index.routes');
 const errorHandler = require('./middleware/error.middleware');
 const billingController = require('./controllers/billing.controller');
+const { serveDocumentation, addDocsLinks, docsHealthCheck } = require('./middleware/docs.middleware');
 
 const app = express();
 
@@ -46,6 +47,15 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // Set up billing controller static routes
 billingController.setupStaticRoutes(app);
 
+// Documentation middleware - add links to API responses
+app.use(addDocsLinks);
+
+// Serve Docusaurus documentation at /docs
+app.use(serveDocumentation());
+
+// Documentation health check
+app.get('/docs-health', docsHealthCheck);
+
 // Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: '.swagger-ui .topbar { display: none }',
@@ -58,15 +68,35 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Health check endpoint
-app.get('/health', (req, res) => {
- res.status(200).json({
-   status: 'healthy',
-   timestamp: new Date(),
-   uptime: process.uptime(),
-   dbConnection: sequelize.authenticate()
-     .then(() => 'connected')
-     .catch(() => 'disconnected')
- });
+app.get('/health', async (req, res) => {
+ try {
+   await sequelize.authenticate();
+   res.status(200).json({
+     status: 'healthy',
+     timestamp: new Date(),
+     uptime: process.uptime(),
+     services: {
+       database: 'connected',
+       documentation: 'available'
+     },
+     links: {
+       documentation: `${req.protocol}://${req.get('host')}/docs`,
+       apiDocs: `${req.protocol}://${req.get('host')}/api-docs`,
+       docsHealth: `${req.protocol}://${req.get('host')}/docs-health`
+     }
+   });
+ } catch (error) {
+   res.status(503).json({
+     status: 'unhealthy',
+     timestamp: new Date(),
+     uptime: process.uptime(),
+     services: {
+       database: 'disconnected',
+       documentation: 'available'
+     },
+     error: error.message
+   });
+ }
 });
 
 // Routes

@@ -5,7 +5,14 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "fix-doctor": "node src/scripts/verify-doctor-credentials.js"
+    "fix-doctor": "node src/scripts/verify-doctor-credentials.js",
+    "docs:install": "cd docs && npm install",
+    "docs:dev": "cd docs && npm start",
+    "docs:build": "cd docs && npm run build",
+    "docs:serve": "cd docs && npm run serve",
+    "build:all": "npm run docs:build",
+    "dev:with-docs": "concurrently \"npm run dev\" \"npm run docs:dev\"",
+    "postinstall": "npm run docs:install"
   },
   "keywords": [],
   "author": "",
@@ -59,6 +66,8 @@
     "uuid": "^11.0.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.7"
+    "nodemon": "^3.1.7",
+    "concurrently": "^8.2.2",
+    "http-proxy-middleware": "^2.0.6"
   }
 }
