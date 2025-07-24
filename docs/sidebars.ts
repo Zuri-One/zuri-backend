@@ -20,6 +20,8 @@ const sidebars: SidebarsConfig = {
       items: [
         'api/auth/overview',
         'api/auth/registration',
+        'api/auth/login',
+        'api/auth/password-reset',
       ],
     },
     {
@@ -27,6 +29,42 @@ const sidebars: SidebarsConfig = {
       label: 'Patient Management',
       items: [
         'api/patients/overview',
+        'api/patients/registration',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Appointments',
+      items: [
+        'api/appointments/create',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Prescriptions',
+      items: [
+        'api/prescriptions/overview',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Queue Management',
+      items: [
+        'api/queue/overview',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Departments',
+      items: [
+        'api/departments/overview',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Medications',
+      items: [
+        'api/medications/overview',
       ],
     },
   ],

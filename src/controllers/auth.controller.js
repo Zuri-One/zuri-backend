@@ -1730,6 +1730,110 @@ exports.forgotPassword = async (req, res, next) => {
   }
 };
 
+exports.requestPasswordOTP = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    
+    const user = await User.findOne({ 
+      where: { email: email.toLowerCase() }
+    });
+    
+    if (!user) {
+      return res.status(200).json({
+        message: 'If this email exists, you will receive a password reset code'
+      });
+    }
+    
+    if (!user.telephone1) {
+      return res.status(400).json({
+        message: 'No phone number associated with this account. Please use email reset option.'
+      });
+    }
+    
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Store OTP with 10 minute expiry
+    user.resetPasswordToken = otp;
+    user.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save();
+    
+    // Send OTP via WhatsApp
+    try {
+      await whatsappService.sendPasswordResetOTP(user.telephone1, otp);
+      
+      res.json({
+        message: 'Password reset code sent to your phone',
+        phone: user.telephone1.replace(/.(?=.{4})/g, '*')
+      });
+    } catch (error) {
+      console.error('WhatsApp OTP failed:', error);
+      res.status(500).json({
+        message: 'Failed to send reset code. Please try email reset option.'
+      });
+    }
+    
+  } catch (error) {
+    console.error('Password OTP request error:', error);
+    next(error);
+  }
+};
+
+exports.verifyPasswordOTP = async (req, res, next) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        message: 'Email, OTP, and new password are required'
+      });
+    }
+    
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        message: 'Password must be at least 8 characters long'
+      });
+    }
+    
+    const user = await User.findOne({
+      where: {
+        email: email.toLowerCase(),
+        resetPasswordToken: otp,
+        resetPasswordExpires: {
+          [Op.gt]: new Date()
+        }
+      }
+    });
+    
+    if (!user) {
+      return res.status(400).json({
+        message: 'Invalid or expired reset code'
+      });
+    }
+    
+    // Update password
+    user.password = newPassword;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await user.save();
+    
+    // Send confirmation via WhatsApp
+    try {
+      await whatsappService.sendPasswordChangeConfirmation(user.telephone1, `${user.surname} ${user.otherNames}`);
+    } catch (error) {
+      console.error('WhatsApp confirmation failed:', error);
+    }
+    
+    res.json({
+      message: 'Password reset successful'
+    });
+    
+  } catch (error) {
+    console.error('Password OTP verification error:', error);
+    next(error);
+  }
+};
+
 exports.resetPassword = async (req, res, next) => {
   try {
     const { code, password } = req.body;

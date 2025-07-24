@@ -7,6 +7,8 @@ const {
   resendVerification,
   forgotPassword,
   resetPassword,
+  requestPasswordOTP,
+  verifyPasswordOTP,
   enable2FA,
   verify2FA,
   verifyEmailWithCode,
@@ -590,9 +592,66 @@ router.post('/forgot-password', forgotPassword);
 
 /**
  * @swagger
+ * /api/v1/auth/request-password-otp:
+ *   post:
+ *     summary: Request password reset OTP via phone
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: OTP sent to phone if email exists
+ */
+router.post('/request-password-otp', require('../../controllers/auth.controller').requestPasswordOTP);
+
+/**
+ * @swagger
+ * /api/v1/auth/verify-password-otp:
+ *   post:
+ *     summary: Verify OTP and reset password
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - otp
+ *               - newPassword
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               otp:
+ *                 type: string
+ *                 pattern: '^\d{6}$'
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *                 minLength: 8
+ *     responses:
+ *       200:
+ *         description: Password reset successful
+ */
+router.post('/verify-password-otp', require('../../controllers/auth.controller').verifyPasswordOTP);
+
+/**
+ * @swagger
  * /api/v1/auth/reset-password:
  *   post:
- *     summary: Reset password with code
+ *     summary: Reset password with token (email method)
  *     tags: [Authentication]
  *     requestBody:
  *       required: true

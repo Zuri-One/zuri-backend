@@ -194,6 +194,41 @@ sendQueueNotification = async (phoneNumber, queueNumber, patientNumber) => {
   }
 
   /**
+   * Send password reset OTP via WhatsApp
+   * @param {string} phoneNumber - Recipient's phone number
+   * @param {string} otp - Password reset OTP
+   * @returns {Promise<object>} - Response from Infobip API
+   */
+  sendPasswordResetOTP = async (phoneNumber, otp) => {
+    return this.sendWhatsAppTemplate(
+      phoneNumber,
+      "britam_age_auth_code",
+      [otp],
+      [{
+        "type": "URL",
+        "parameter": otp
+      }],
+      "en_GB"
+    );
+  }
+
+  /**
+   * Send password change confirmation via WhatsApp
+   * @param {string} phoneNumber - Recipient's phone number
+   * @param {string} userName - User's name
+   * @returns {Promise<object>} - Response from Infobip API
+   */
+  sendPasswordChangeConfirmation = async (phoneNumber, userName) => {
+    return this.sendWhatsAppTemplate(
+      phoneNumber,
+      "hms_documents_sender",
+      [`Hello ${userName}, your Zuri Health password has been successfully changed. If you did not make this change, please contact support immediately.`],
+      null,
+      "en"
+    );
+  }
+
+  /**
    * Helper method to extract common code for sending WhatsApp templates
    * @param {string} phoneNumber - Recipient's phone number
    * @param {string} templateName - Name of the template to use
