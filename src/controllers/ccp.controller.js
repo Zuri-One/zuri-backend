@@ -172,14 +172,17 @@ const {
     async getCCPPatientProfile(req, res, next) {
       try {
         const { patientId } = req.params;
+        const startTime = Date.now();
         
         log('Fetching comprehensive CCP patient profile', { patientId });
         
         // Get patient basic info
+        const patientStart = Date.now();
         const patient = await Patient.findOne({
           where: { id: patientId, isCCPEnrolled: true },
           attributes: { exclude: ['password', 'resetPasswordToken', 'emailVerificationToken'] }
         });
+        log('Patient fetch completed', { duration: Date.now() - patientStart });
         
         if (!patient) {
           return res.status(404).json({
@@ -189,6 +192,8 @@ const {
         }
         
         // Parallel data fetching for performance
+        const parallelStart = Date.now();
+        log('Starting parallel data fetch');
         const [
           medicalRecords,
           examinations,
@@ -298,12 +303,16 @@ const {
             type: sequelize.QueryTypes.SELECT
           })
         ]);
+        log('Parallel data fetch completed', { duration: Date.now() - parallelStart });
         
         // Calculate health metrics and trends
+        const calculationsStart = Date.now();
+        log('Starting calculations');
         const vitalTrends = this.calculateVitalTrends(examinations);
         const medicationCompliance = this.calculateMedicationCompliance(prescriptions, medicationDispenses);
         const careCoordination = this.analyzeCareCoordination(medicalRecords, examinations, labTests);
         const costAnalysis = this.calculateCostAnalysis(billingRecords);
+        log('Calculations completed', { duration: Date.now() - calculationsStart });
         
         const profile = {
           personalInfo: {
@@ -434,7 +443,19 @@ const {
           }
         };
         
-        log('CCP patient profile retrieved successfully', { patientId });
+        log('CCP patient profile retrieved successfully', { 
+          patientId, 
+          totalDuration: Date.now() - startTime,
+          recordCounts: {
+            medicalRecords: medicalRecords.length,
+            examinations: examinations.length,
+            labTests: labTests.length,
+            prescriptions: prescriptions.length,
+            billingRecords: billingRecords.length,
+            triageAssessments: triageAssessments.length,
+            medicationDispenses: medicationDispenses.length
+          }
+        });
         
         res.json({
           success: true,
