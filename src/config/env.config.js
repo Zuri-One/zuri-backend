@@ -47,7 +47,7 @@ const config = {
 
   infobip: {
     hostname: process.env.INFOBIP_HOSTNAME || '4m4w56.api.infobip.com',
-    apiKey: process.env.INFOBIP_API_KEY || 'e32006987a35f5458f2cf1f0ae282634-6123dc17-a5fc-4959-91b6-a9c338723c7c',
+    apiKey: process.env.INFOBIP_API_KEY || '47c875593c881feb1b6930a5f317d67e-db7e06a7-8c6d-43c9-a657-a62f610b234a',
     whatsappNumber: process.env.INFOBIP_WHATSAPP_NUMBER || '2349130005888',
     webhookUrl: process.env.INFOBIP_WEBHOOK_URL || 'https://66ea-197-232-74-40.ngrok-free.app/webhook/infobip'
   },
