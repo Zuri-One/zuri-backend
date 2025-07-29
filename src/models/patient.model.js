@@ -288,6 +288,19 @@ class Patient extends Model {
       type: DataTypes.STRING,
       unique: true,
       allowNull: true
+    },
+
+    // CCP tracking fields
+    lastVisit: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Date of last medical visit/consultation'
+    },
+    
+    lastFollowup: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Date of last CCP followup completion'
     }
   };
 

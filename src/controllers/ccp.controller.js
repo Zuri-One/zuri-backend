@@ -317,6 +317,8 @@ const {
             occupation: patient.occupation,
             nextOfKin:patient.nextOfKin,
             paymentScheme: patient.paymentScheme,
+            lastVisit: patient.lastVisit ? moment(patient.lastVisit).format('MMMM Do YYYY') : null,
+            lastFollowup: patient.lastFollowup ? moment(patient.lastFollowup).format('MMMM Do YYYY') : null,
             
             contact: {
               telephone1: patient.telephone1,
@@ -773,10 +775,12 @@ async completeCCPFollowup(req, res, next) {
       });
     }
 
+    const completionDate = new Date();
+    
     // Update followup with completion data
     await followup.update({
       isFollowupCompleted: true,
-      actualFollowupDate: new Date(),
+      actualFollowupDate: completionDate,
       completedBy: req.user.id,
       status: 'COMPLETED',
       followupFeedback,
@@ -790,6 +794,11 @@ async completeCCPFollowup(req, res, next) {
       duration,
       privateNotes,
       patientNotes
+    });
+
+    // Update patient's lastFollowup date
+    await followup.patient.update({
+      lastFollowup: completionDate
     });
 
     // Calculate and create next followup if needed

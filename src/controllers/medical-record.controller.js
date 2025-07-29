@@ -145,7 +145,8 @@ exports.createMedicalRecord = async (req, res, next) => {
 
    // Update patient record
    await queueEntry.Patient.update({
-     status: 'CONSULTATION_COMPLETE'
+     status: 'CONSULTATION_COMPLETE',
+     lastVisit: new Date()
    });
 
    console.log('Patient status updated to CONSULTATION_COMPLETE');
