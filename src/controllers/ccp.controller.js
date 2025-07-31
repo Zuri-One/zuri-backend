@@ -357,9 +357,11 @@ const {
             occupation: patient.occupation,
             nextOfKin:patient.nextOfKin,
             paymentScheme: patient.paymentScheme,
-            lastVisit: medicalRecords.length > 0 ? 
-              moment(medicalRecords[0].createdAt).format('MMMM Do YYYY') : 
-              (billingRecords.length > 0 ? moment(billingRecords[0].createdAt).format('MMMM Do YYYY') : null),
+            lastVisit: latestFollowup ? 
+              moment(latestFollowup.actualFollowupDate).format('MMMM Do YYYY') : 
+              (medicalRecords.length > 0 ? 
+                moment(medicalRecords[0].createdAt).format('MMMM Do YYYY') : 
+                (billingRecords.length > 0 ? moment(billingRecords[0].createdAt).format('MMMM Do YYYY') : null)),
             lastFollowup: latestFollowup ? moment(latestFollowup.actualFollowupDate).format('MMMM Do YYYY') : null,
             
             contact: {
@@ -471,9 +473,11 @@ const {
             totalPrescriptions: prescriptions.length,
             totalLabTests: labTests.length,
             totalBillingAmount: billingRecords.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0),
-            lastVisit: medicalRecords.length > 0 ? 
-              moment(medicalRecords[0].createdAt).format('MMMM Do YYYY') : 
-              (billingRecords.length > 0 ? moment(billingRecords[0].createdAt).format('MMMM Do YYYY') : null),
+            lastVisit: latestFollowup ? 
+              moment(latestFollowup.actualFollowupDate).format('MMMM Do YYYY') : 
+              (medicalRecords.length > 0 ? 
+                moment(medicalRecords[0].createdAt).format('MMMM Do YYYY') : 
+                (billingRecords.length > 0 ? moment(billingRecords[0].createdAt).format('MMMM Do YYYY') : null)),
             nextFollowUp: nextFollowup ? moment(nextFollowup.nextFollowupDate).format('MMMM Do YYYY') : 
               this.calculateNextFollowUp(medicalRecords, prescriptions)
           }
