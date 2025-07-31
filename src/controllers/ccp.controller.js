@@ -317,12 +317,24 @@ const {
           CCP.findOne({
             where: { 
               patientId,
-              isFollowupCompleted: false,
               nextFollowupDate: { [Op.ne]: null }
             },
-            order: [['nextFollowupDate', 'ASC']]
+            order: [['createdAt', 'DESC']]
           })
         ]);
+        
+        log('CCP followup queries result', { 
+          latestFollowup: latestFollowup ? {
+            id: latestFollowup.id,
+            actualFollowupDate: latestFollowup.actualFollowupDate,
+            isCompleted: latestFollowup.isFollowupCompleted
+          } : null,
+          nextFollowup: nextFollowup ? {
+            id: nextFollowup.id,
+            nextFollowupDate: nextFollowup.nextFollowupDate,
+            isCompleted: nextFollowup.isFollowupCompleted
+          } : null
+        });
         
         // Calculate health metrics and trends
         const calculationsStart = Date.now();
