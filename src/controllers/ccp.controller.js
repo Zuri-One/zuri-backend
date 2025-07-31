@@ -335,7 +335,9 @@ const {
             occupation: patient.occupation,
             nextOfKin:patient.nextOfKin,
             paymentScheme: patient.paymentScheme,
-            lastVisit: medicalRecords.length > 0 ? moment(medicalRecords[0].createdAt).format('MMMM Do YYYY') : null,
+            lastVisit: medicalRecords.length > 0 ? 
+              moment(medicalRecords[0].createdAt).format('MMMM Do YYYY') : 
+              (billingRecords.length > 0 ? moment(billingRecords[0].createdAt).format('MMMM Do YYYY') : null),
             lastFollowup: latestFollowup ? moment(latestFollowup.actualFollowupDate).format('MMMM Do YYYY') : null,
             
             contact: {
@@ -447,7 +449,9 @@ const {
             totalPrescriptions: prescriptions.length,
             totalLabTests: labTests.length,
             totalBillingAmount: billingRecords.reduce((sum, b) => sum + parseFloat(b.totalAmount || 0), 0),
-            lastVisit: medicalRecords.length > 0 ? moment(medicalRecords[0].createdAt).format('MMMM Do YYYY') : null,
+            lastVisit: medicalRecords.length > 0 ? 
+              moment(medicalRecords[0].createdAt).format('MMMM Do YYYY') : 
+              (billingRecords.length > 0 ? moment(billingRecords[0].createdAt).format('MMMM Do YYYY') : null),
             nextFollowUp: this.calculateNextFollowUp(medicalRecords, prescriptions)
           }
         };
@@ -500,7 +504,7 @@ async createCCPFollowup(req, res, next) {
       patientNotes
     } = req.body;
 
-    log('Creating CCP followup record', { patientId, followupFrequency });
+    log('Creating CCP followup record', { patientId, requestData: req.body });
 
     // Verify patient is CCP enrolled
     const patient = await Patient.findOne({
@@ -704,7 +708,7 @@ async updateCCPFollowup(req, res, next) {
     const { followupId } = req.params;
     const updateData = req.body;
 
-    log('Updating CCP followup record', { followupId });
+    log('Updating CCP followup record', { followupId, updateData });
 
     const followup = await CCP.findByPk(followupId);
 
@@ -746,7 +750,7 @@ async updateCCPFollowup(req, res, next) {
       ]
     });
 
-    log('CCP followup record updated successfully', { followupId });
+    log('CCP followup record updated successfully', { followupId, updatedData: updatedFollowup.dataValues });
 
     res.json({
       success: true,
@@ -807,8 +811,7 @@ async completeCCPFollowup(req, res, next) {
 
     const completionDate = new Date();
     
-    // Update followup with completion data
-    await followup.update({
+    const completionData = {
       isFollowupCompleted: true,
       actualFollowupDate: completionDate,
       completedBy: req.user.id,
@@ -824,7 +827,12 @@ async completeCCPFollowup(req, res, next) {
       duration,
       privateNotes,
       patientNotes
-    });
+    };
+    
+    log('Completing CCP followup with data', { followupId, completionData });
+    
+    // Update followup with completion data
+    await followup.update(completionData);
 
     // Update patient's lastFollowup date
     await followup.patient.update({
