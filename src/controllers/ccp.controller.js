@@ -305,6 +305,15 @@ const {
         ]);
         log('Parallel data fetch completed', { duration: Date.now() - parallelStart });
         
+        // Get latest completed CCP followup
+        const latestFollowup = await CCP.findOne({
+          where: { 
+            patientId,
+            isFollowupCompleted: true
+          },
+          order: [['actualFollowupDate', 'DESC']]
+        });
+        
         // Calculate health metrics and trends
         const calculationsStart = Date.now();
         log('Starting calculations');
@@ -326,8 +335,8 @@ const {
             occupation: patient.occupation,
             nextOfKin:patient.nextOfKin,
             paymentScheme: patient.paymentScheme,
-            lastVisit: patient.lastVisit ? moment(patient.lastVisit).format('MMMM Do YYYY') : null,
-            lastFollowup: patient.lastFollowup ? moment(patient.lastFollowup).format('MMMM Do YYYY') : null,
+            lastVisit: medicalRecords.length > 0 ? moment(medicalRecords[0].createdAt).format('MMMM Do YYYY') : null,
+            lastFollowup: latestFollowup ? moment(latestFollowup.actualFollowupDate).format('MMMM Do YYYY') : null,
             
             contact: {
               telephone1: patient.telephone1,
