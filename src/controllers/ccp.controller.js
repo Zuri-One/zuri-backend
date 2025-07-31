@@ -305,14 +305,24 @@ const {
         ]);
         log('Parallel data fetch completed', { duration: Date.now() - parallelStart });
         
-        // Get latest completed CCP followup
-        const latestFollowup = await CCP.findOne({
-          where: { 
-            patientId,
-            isFollowupCompleted: true
-          },
-          order: [['actualFollowupDate', 'DESC']]
-        });
+        // Get latest completed CCP followup and next scheduled followup
+        const [latestFollowup, nextFollowup] = await Promise.all([
+          CCP.findOne({
+            where: { 
+              patientId,
+              isFollowupCompleted: true
+            },
+            order: [['actualFollowupDate', 'DESC']]
+          }),
+          CCP.findOne({
+            where: { 
+              patientId,
+              isFollowupCompleted: false,
+              nextFollowupDate: { [Op.ne]: null }
+            },
+            order: [['nextFollowupDate', 'ASC']]
+          })
+        ]);
         
         // Calculate health metrics and trends
         const calculationsStart = Date.now();
@@ -452,7 +462,8 @@ const {
             lastVisit: medicalRecords.length > 0 ? 
               moment(medicalRecords[0].createdAt).format('MMMM Do YYYY') : 
               (billingRecords.length > 0 ? moment(billingRecords[0].createdAt).format('MMMM Do YYYY') : null),
-            nextFollowUp: this.calculateNextFollowUp(medicalRecords, prescriptions)
+            nextFollowUp: nextFollowup ? moment(nextFollowup.nextFollowupDate).format('MMMM Do YYYY') : 
+              this.calculateNextFollowUp(medicalRecords, prescriptions)
           }
         };
         
@@ -501,7 +512,8 @@ async createCCPFollowup(req, res, next) {
       referralsNeeded,
       labTestsOrdered,
       privateNotes,
-      patientNotes
+      patientNotes,
+      actualFollowupDate
     } = req.body;
 
     log('Creating CCP followup record', { patientId, requestData: req.body });
@@ -539,6 +551,10 @@ async createCCPFollowup(req, res, next) {
       });
     }
 
+    // Handle followupDone field from request
+    const { followupDone } = req.body;
+    const isCompleted = followupDone === true;
+    
     // Create new followup record
     const ccpFollowup = await CCP.create({
       patientId,
@@ -561,8 +577,13 @@ async createCCPFollowup(req, res, next) {
       privateNotes,
       patientNotes,
       scheduledBy: req.user.id,
-      status: 'SCHEDULED'
+      isFollowupCompleted: isCompleted,
+      actualFollowupDate: isCompleted ? (actualFollowupDate ? new Date(actualFollowupDate) : new Date()) : null,
+      completedBy: isCompleted ? req.user.id : null,
+      status: isCompleted ? 'COMPLETED' : 'SCHEDULED'
     });
+    
+    log('CCP followup created with data', { ccpFollowupId: ccpFollowup.id, savedData: ccpFollowup.dataValues });
 
     log('CCP followup record created successfully', { 
       ccpFollowupId: ccpFollowup.id, 
@@ -2329,7 +2350,7 @@ calculateNextFollowUp(medicalRecords, prescriptions) {
   // If no prescription follow-up, suggest based on last visit
   if (!nextFollowUp && medicalRecords.length > 0) {
     const lastVisit = moment(medicalRecords[0].createdAt);
-    nextFollowUp = lastVisit.add(3, 'months'); // Suggest follow-up in 3 months
+    nextFollowUp = lastVisit.clone().add(3, 'months'); // Suggest follow-up in 3 months
    }
    
    return nextFollowUp ? nextFollowUp.format('MMMM Do YYYY') : null;
