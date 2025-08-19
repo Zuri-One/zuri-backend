@@ -67,6 +67,15 @@ const sidebars: SidebarsConfig = {
         'api/medications/overview',
       ],
     },
+    {
+      type: 'category',
+      label: 'CCP (Chronic Care Program)',
+      items: [
+        'api/ccp/overview',
+        'api/ccp/external-api',
+        'api/ccp/internal-api',
+      ],
+    },
   ],
 
   // Guides Sidebar

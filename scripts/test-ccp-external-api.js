@@ -82,9 +82,18 @@ addTest('GET /api/v1/ccp/api/patients', async () => {
     throw new Error('Response should contain pagination info');
   }
   
+  // Show sample patient data
+  const samplePatient = response.data.data.patients[0];
   log('✓ Patients retrieved successfully', {
     count: response.data.data.patients.length,
-    totalRecords: response.data.data.pagination.totalRecords
+    totalRecords: response.data.data.pagination.totalRecords,
+    samplePatient: {
+      id: samplePatient?.id,
+      patientNumber: samplePatient?.patientNumber,
+      name: `${samplePatient?.surname} ${samplePatient?.otherNames}`,
+      followupsCount: samplePatient?.ccpFollowups?.length || 0
+    },
+    pagination: response.data.data.pagination
   });
 });
 
@@ -124,7 +133,12 @@ addTest('GET /api/v1/ccp/api/patients/:id', async () => {
   
   log('✓ Individual patient retrieved', {
     patientId: response.data.data.id,
-    patientNumber: response.data.data.patientNumber
+    patientNumber: response.data.data.patientNumber,
+    name: `${response.data.data.surname} ${response.data.data.otherNames}`,
+    sex: response.data.data.sex,
+    telephone: response.data.data.telephone1,
+    followupsCount: response.data.data.ccpFollowups?.length || 0,
+    enrollmentDate: response.data.data.ccpEnrollmentDate
   });
 });
 
@@ -171,9 +185,21 @@ addTest('GET /api/v1/ccp/api/followups', async () => {
     throw new Error('Response success should be true');
   }
   
+  // Show sample followup data
+  const sampleFollowup = response.data.data.followups[0];
   log('✓ Follow-ups retrieved successfully', {
     count: response.data.data.followups.length,
-    totalRecords: response.data.data.pagination.totalRecords
+    totalRecords: response.data.data.pagination.totalRecords,
+    sampleFollowup: {
+      id: sampleFollowup?.id,
+      patientName: `${sampleFollowup?.patient?.surname} ${sampleFollowup?.patient?.otherNames}`,
+      patientNumber: sampleFollowup?.patient?.patientNumber,
+      followupMonth: sampleFollowup?.followupMonth,
+      followupYear: sampleFollowup?.followupYear,
+      status: sampleFollowup?.status,
+      isCompleted: sampleFollowup?.isFollowupCompleted,
+      scheduledBy: sampleFollowup?.scheduler ? `${sampleFollowup.scheduler.surname} ${sampleFollowup.scheduler.otherNames}` : 'Unknown'
+    }
   });
 });
 
@@ -231,7 +257,8 @@ addTest('GET /api/v1/ccp/api/summary/insurers', async () => {
   
   log('✓ Insurer summary retrieved', {
     totalPatients: response.data.data.totalPatients,
-    insurerCount: response.data.data.insurers.length
+    insurerCount: response.data.data.insurers.length,
+    insurerBreakdown: response.data.data.insurers
   });
 });
 
@@ -249,7 +276,13 @@ addTest('GET /api/v1/ccp/api/summary/doctors', async () => {
   
   log('✓ Doctor summary retrieved', {
     totalFollowups: response.data.data.totalFollowups,
-    doctorCount: response.data.data.doctors.length
+    doctorCount: response.data.data.doctors.length,
+    topDoctors: response.data.data.doctors.slice(0, 3).map(d => ({
+      name: d.name,
+      totalFollowups: d.totalFollowups,
+      completedFollowups: d.completedFollowups,
+      pendingFollowups: d.pendingFollowups
+    }))
   });
 });
 
@@ -266,13 +299,88 @@ addTest('GET /api/v1/ccp/api/summary/monthly', async () => {
     throw new Error('Response success should be true');
   }
   
+  const monthsWithData = response.data.data.months.filter(m => m.total > 0);
   log('✓ Monthly summary retrieved', {
     year: response.data.data.year,
-    monthsWithData: response.data.data.months.filter(m => m.total > 0).length
+    monthsWithData: monthsWithData.length,
+    totalFollowupsThisYear: monthsWithData.reduce((sum, m) => sum + m.total, 0),
+    sampleMonths: monthsWithData.slice(0, 3).map(m => ({
+      month: m.month,
+      total: m.total,
+      completed: m.completed,
+      pending: m.pending,
+      cancelled: m.cancelled
+    }))
   });
 });
 
-// Test 10: Invalid Token Test
+// Test 10: Update Follow-up
+addTest('PUT /api/v1/ccp/api/followups/:id', async () => {
+  // First get a followup ID
+  const followupsResponse = await api.get('/api/v1/ccp/api/followups?limit=1');
+  
+  if (followupsResponse.data.data.followups.length === 0) {
+    log('⚠️ No followups found, skipping followup update test');
+    return;
+  }
+  
+  const followupId = followupsResponse.data.data.followups[0].id;
+  const updateData = {
+    followupFeedback: `Test feedback updated at ${new Date().toISOString()}`,
+    status: 'IN_PROGRESS'
+  };
+  
+  const response = await api.put(`/api/v1/ccp/api/followups/${followupId}`, updateData);
+  
+  if (response.status !== 200) {
+    throw new Error(`Expected status 200, got ${response.status}`);
+  }
+  
+  if (!response.data.success) {
+    throw new Error('Update should be successful');
+  }
+  
+  log('✓ Follow-up updated successfully', {
+    followupId,
+    updatedFields: Object.keys(updateData),
+    newStatus: response.data.data.status,
+    newFeedback: response.data.data.followupFeedback?.substring(0, 50) + '...'
+  });
+});
+
+// Test 11: Get Patients with Filters
+addTest('GET /api/v1/ccp/api/patients with filters', async () => {
+  const response = await api.get('/api/v1/ccp/api/patients?limit=3&sortBy=patientNumber&sortOrder=ASC');
+  
+  if (response.status !== 200) {
+    throw new Error(`Expected status 200, got ${response.status}`);
+  }
+  
+  log('✓ Filtered patients retrieved', {
+    count: response.data.data.patients.length,
+    sortedBy: 'patientNumber ASC',
+    firstPatientNumber: response.data.data.patients[0]?.patientNumber,
+    lastPatientNumber: response.data.data.patients[response.data.data.patients.length - 1]?.patientNumber
+  });
+});
+
+// Test 12: Get Follow-ups with Filters
+addTest('GET /api/v1/ccp/api/followups with filters', async () => {
+  const currentYear = new Date().getFullYear();
+  const response = await api.get(`/api/v1/ccp/api/followups?year=${currentYear}&limit=3&status=COMPLETED`);
+  
+  if (response.status !== 200) {
+    throw new Error(`Expected status 200, got ${response.status}`);
+  }
+  
+  log('✓ Filtered follow-ups retrieved', {
+    count: response.data.data.followups.length,
+    filters: { year: currentYear, status: 'COMPLETED' },
+    completedFollowups: response.data.data.followups.filter(f => f.isFollowupCompleted).length
+  });
+});
+
+// Test 13: Invalid Token Test
 addTest('Invalid CCP Token Test', async () => {
   const invalidApi = axios.create({
     baseURL: BASE_URL,
@@ -289,6 +397,28 @@ addTest('Invalid CCP Token Test', async () => {
   } catch (error) {
     if (error.response?.status === 401) {
       log('✓ Invalid token properly rejected');
+    } else {
+      throw new Error(`Expected 401, got ${error.response?.status}`);
+    }
+  }
+});
+
+// Test 14: Missing Token Test
+addTest('Missing CCP Token Test', async () => {
+  const noTokenApi = axios.create({
+    baseURL: BASE_URL,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    timeout: 10000
+  });
+  
+  try {
+    await noTokenApi.get('/api/v1/ccp/api/patients');
+    throw new Error('Should have failed with missing token');
+  } catch (error) {
+    if (error.response?.status === 401) {
+      log('✓ Missing token properly rejected');
     } else {
       throw new Error(`Expected 401, got ${error.response?.status}`);
     }

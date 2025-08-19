@@ -123,11 +123,26 @@ addTest('GET /api/v1/ccp/patient/:id/profile', async () => {
     throw new Error('Response success should be true');
   }
   
+  const profile = response.data.profile;
   log('✓ Patient profile retrieved', {
     patientId: testPatientId,
-    hasPersonalInfo: !!response.data.profile?.personalInfo,
-    hasCCPProgram: !!response.data.profile?.ccpProgram,
-    hasMedicalHistory: !!response.data.profile?.medicalHistory
+    personalInfo: {
+      fullName: profile.personalInfo?.fullName,
+      age: profile.personalInfo?.age,
+      patientNumber: profile.personalInfo?.patientNumber,
+      contact: profile.personalInfo?.contact?.telephone1
+    },
+    ccpProgram: {
+      enrollmentDate: profile.ccpProgram?.enrollmentDate,
+      enrollmentDuration: profile.ccpProgram?.enrollmentDuration,
+      status: profile.ccpProgram?.status
+    },
+    recordCounts: {
+      medicalRecords: profile.medicalHistory?.totalRecords || 0,
+      examinations: profile.examinations?.totalExaminations || 0,
+      labTests: profile.laboratory?.totalTests || 0,
+      prescriptions: profile.medications?.prescriptions?.length || 0
+    }
   });
 });
 
@@ -148,9 +163,16 @@ addTest('GET /api/v1/ccp/patient/:id/medical-history', async () => {
     throw new Error('Response success should be true');
   }
   
+  const sampleRecord = response.data.data.records[0];
   log('✓ Medical history retrieved', {
     recordsCount: response.data.data.records.length,
-    totalRecords: response.data.data.pagination.totalRecords
+    totalRecords: response.data.data.pagination.totalRecords,
+    sampleRecord: sampleRecord ? {
+      date: sampleRecord.date,
+      doctor: sampleRecord.doctor,
+      diagnosis: sampleRecord.diagnosis,
+      complaints: sampleRecord.complaints?.substring(0, 50) + '...'
+    } : null
   });
 });
 
@@ -368,8 +390,8 @@ addTest('GET /api/v1/ccp/analytics', async () => {
   }
   
   log('✓ CCP analytics retrieved', {
-    totalPatients: response.data.analytics.overview.totalPatients,
-    completionRate: response.data.analytics.overview.completionRate
+    overview: response.data.analytics.overview,
+    period: response.data.analytics.period
   });
 });
 
@@ -397,11 +419,88 @@ addTest('POST /api/v1/ccp/patient/:id/followups', async () => {
     
     log('✓ Follow-up created successfully', {
       followupId: response.data.followup.id,
-      patientId: testPatientId
+      patientId: testPatientId,
+      followupData: {
+        frequency: response.data.followup.followupFrequency,
+        type: response.data.followup.followupType,
+        mode: response.data.followup.followupMode,
+        status: response.data.followup.status,
+        month: response.data.followup.followupMonth,
+        year: response.data.followup.followupYear
+      }
     });
   } catch (error) {
     if (error.response?.status === 400 && error.response?.data?.message?.includes('already exists')) {
       log('⚠️ Follow-up already exists for this month/year, which is expected');
+    } else {
+      throw error;
+    }
+  }
+});
+
+// Test 15: Update Follow-up
+addTest('PUT /api/v1/ccp/followups/:id', async () => {
+  // Get a followup to update
+  const followupsResponse = await api.get('/api/v1/ccp/followups/overdue?limit=1');
+  
+  if (followupsResponse.data.overdueFollowups.length === 0) {
+    log('⚠️ No overdue followups found, skipping followup update test');
+    return;
+  }
+  
+  const followupId = followupsResponse.data.overdueFollowups[0].id;
+  const updateData = {
+    followupFeedback: `Updated by test at ${new Date().toISOString()}`,
+    status: 'IN_PROGRESS'
+  };
+  
+  const response = await api.put(`/api/v1/ccp/followups/${followupId}`, updateData);
+  
+  if (response.status !== 200) {
+    throw new Error(`Expected status 200, got ${response.status}`);
+  }
+  
+  log('✓ Follow-up updated successfully', {
+    followupId,
+    updatedStatus: response.data.followup.status,
+    updatedFeedback: response.data.followup.followupFeedback?.substring(0, 50) + '...'
+  });
+});
+
+// Test 16: Complete Follow-up
+addTest('POST /api/v1/ccp/followups/:id/complete', async () => {
+  // Get an incomplete followup
+  const followupsResponse = await api.get('/api/v1/ccp/followups/overdue?limit=1');
+  
+  if (followupsResponse.data.overdueFollowups.length === 0) {
+    log('⚠️ No incomplete followups found, skipping completion test');
+    return;
+  }
+  
+  const followupId = followupsResponse.data.overdueFollowups[0].id;
+  const completionData = {
+    followupFeedback: 'Completed by automated test',
+    consultationFeedback: 'Patient doing well',
+    medicationCompliance: 'GOOD',
+    duration: 15
+  };
+  
+  try {
+    const response = await api.post(`/api/v1/ccp/followups/${followupId}/complete`, completionData);
+    
+    if (response.status !== 200) {
+      throw new Error(`Expected status 200, got ${response.status}`);
+    }
+    
+    log('✓ Follow-up completed successfully', {
+      followupId,
+      isCompleted: response.data.followup.isFollowupCompleted,
+      completedDate: response.data.followup.actualFollowupDate,
+      duration: response.data.followup.duration
+    });
+  } catch (error) {
+    if (error.response?.status === 400 && error.response?.data?.message?.includes('already completed')) {
+      log('⚠️ Follow-up already completed, which is expected');
     } else {
       throw error;
     }
