@@ -23,7 +23,7 @@ const queueRoutes = require('./queue.route');
 const examinationRoutes = require('./examination.route');
 const icdRoutes = require('./icd.route'); 
 const labTestCatalogRoutes = require('./lab-test-catalog.route');
-const ccpRoutes = require('./ccp.route');
+const ccpRoutes = require('./ccp.routes');
 
 
 // New route imports

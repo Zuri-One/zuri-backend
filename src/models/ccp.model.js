@@ -233,6 +233,45 @@ class CCP extends Model {
       type: DataTypes.TEXT,
       allowNull: true,
       comment: 'Notes that can be shared with patient'
+    },
+
+    // Additional fields from Excel import
+    previousFollowupFeedback: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Previous month followup feedback'
+    },
+
+    labTestsPerformed: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: [],
+      comment: 'Lab tests performed during followup'
+    },
+
+    medicationsPrescribed: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: [],
+      comment: 'Medications prescribed during followup'
+    },
+
+    medicationDispenseStatus: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Status of medication dispensing'
+    },
+
+    refillFrequency: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Medication refill frequency'
+    },
+
+    nextRefillDate: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Next medication refill date'
     }
   };
 

@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; connect-src 'self';">
+    <title>CCP Data Import - Zuri Health</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 12px; margin-bottom: 30px; text-align: center; }
+        .upload-section { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 30px; }
+        .file-upload { border: 2px dashed #ddd; padding: 40px; text-align: center; border-radius: 8px; transition: all 0.3s; }
+        .file-upload:hover { border-color: #667eea; background: #f8f9ff; }
+        .file-upload.dragover { border-color: #667eea; background: #f0f4ff; }
+        .upload-btn { background: #667eea; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
+        .upload-btn:hover { background: #5a6fd8; }
+        .doctor-select { margin: 20px 0; }
+        .doctor-select select { padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; width: 300px; }
+        .preview-section { background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 30px; display: none; }
+        .preview-header { background: #f8f9fa; padding: 20px; border-bottom: 1px solid #eee; border-radius: 12px 12px 0 0; }
+        .sheet-tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .sheet-tab { padding: 8px 16px; background: #e9ecef; border: none; border-radius: 6px; cursor: pointer; transition: all 0.3s; }
+        .sheet-tab.active { background: #667eea; color: white; }
+        .sheet-content { padding: 20px; max-height: 600px; overflow: auto; }
+        .patient-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }
+        .patient-card { border: 1px solid #e9ecef; border-radius: 8px; padding: 20px; background: #fafbfc; }
+        .patient-header { display: flex; justify-content: between; align-items: center; margin-bottom: 15px; }
+        .patient-id { font-weight: bold; color: #667eea; font-size: 18px; }
+        .patient-status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-active { background: #d4edda; color: #155724; }
+        .status-inactive { background: #f8d7da; color: #721c24; }
+        .patient-details { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px; }
+        .detail-item { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; }
+        .detail-label { font-weight: 600; color: #666; }
+        .detail-value { color: #333; }
+        .medical-info { margin-top: 15px; padding-top: 15px; border-top: 2px solid #e9ecef; }
+        .medical-title { font-weight: bold; color: #495057; margin-bottom: 10px; }
+        .followup-info { background: #fff3cd; padding: 10px; border-radius: 6px; margin-top: 10px; }
+        .error-card { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .import-actions { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; display: none; }
+        .import-btn { background: #28a745; color: white; padding: 15px 30px; border: none; border-radius: 6px; font-size: 18px; cursor: pointer; margin: 0 10px; }
+        .import-btn:hover { background: #218838; }
+        .cancel-btn { background: #6c757d; }
+        .cancel-btn:hover { background: #5a6268; }
+        .progress-section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: none; }
+        .progress-bar { width: 100%; height: 20px; background: #e9ecef; border-radius: 10px; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #28a745, #20c997); transition: width 0.3s; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .stat-card { background: white; padding: 20px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .stat-number { font-size: 32px; font-weight: bold; color: #667eea; }
+        .stat-label { color: #666; margin-top: 5px; }
+        .alert { padding: 15px; border-radius: 6px; margin: 15px 0; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .table-container { overflow-x: auto; }
+        .patient-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .patient-table th, .patient-table td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
+        .patient-table th { background: #f8f9fa; font-weight: bold; position: sticky; top: 0; }
+        .patient-table tr:nth-child(even) { background: #f9f9f9; }
+        .patient-table tr.error-row { background: #f8d7da; }
+        .error-cell { color: #721c24; font-weight: bold; }
+        .long-text { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .long-text:hover { white-space: normal; overflow: visible; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>CCP Patient Data Import</h1>
+            <p>Upload Excel files containing CCP patient data for import into the system</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="file-upload" id="fileUpload">
+                <h3>Drop Excel file here or click to browse</h3>
+                <p>Supported formats: .xlsx, .xls</p>
+                <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+                <button class="upload-btn" id="chooseFileBtn">Choose File</button>
+            </div>
+            
+            <div class="doctor-select">
+                <label for="doctorSelect"><strong>Select Attending Doctor:</strong></label>
+                <select id="doctorSelect" required>
+                    <option value="">-- Select Doctor --</option>
+                    <option value="georgina">Dr. Georgina Nyaka</option>
+                    <option value="antony">Dr. Antony Mwangi</option>
+                    <option value="esther">Dr. Esther Wanjiku</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="preview-section" id="previewSection">
+            <div class="preview-header">
+                <h2>Data Preview</h2>
+                <div class="stats" id="statsContainer"></div>
+                <div class="sheet-tabs" id="sheetTabs"></div>
+            </div>
+            <div class="sheet-content" id="sheetContent"></div>
+        </div>
+
+        <div class="import-actions" id="importActions">
+            <button class="import-btn" id="importBtn">Import Data</button>
+            <button class="import-btn cancel-btn" id="cancelBtn">Cancel</button>
+        </div>
+
+        <div class="progress-section" id="progressSection">
+            <h3>Import Progress</h3>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+            <p id="progressText">Preparing import...</p>
+        </div>
+    </div>
+
+    <script>
+        let workbook = null;
+        let parsedData = {};
+        let selectedDoctor = '';
+
+        // File upload handling
+        const fileUpload = document.getElementById('fileUpload');
+        const fileInput = document.getElementById('fileInput');
+
+        fileUpload.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileUpload.classList.add('dragover');
+        });
+
+        fileUpload.addEventListener('dragleave', () => {
+            fileUpload.classList.remove('dragover');
+        });
+
+        fileUpload.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileUpload.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/)) {
+                alert('Please select a valid Excel file (.xlsx or .xls)');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    workbook = XLSX.read(e.target.result, { type: 'binary' });
+                    parseWorkbook();
+                } catch (error) {
+                    alert('Error reading file: ' + error.message);
+                }
+            };
+            reader.readAsBinaryString(file);
+        }
+
+        function parseWorkbook() {
+            parsedData = {};
+            let totalPatients = 0;
+            let totalSheets = 0;
+
+            workbook.SheetNames.forEach(sheetName => {
+                if (sheetName.includes('TASK') || sheetName.includes('DISCONTINUATION')) return;
+                
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                
+                const patients = parseSheetData(jsonData, sheetName);
+                if (patients.length > 0) {
+                    parsedData[sheetName] = patients;
+                    totalPatients += patients.length;
+                    totalSheets++;
+                }
+            });
+
+            displayPreview(totalPatients, totalSheets);
+        }
+
+        function detectColumns(jsonData) {
+            // Look for header row containing "Patient ID" and "Name"
+            for (let i = 0; i < Math.min(10, jsonData.length); i++) {
+                const row = jsonData[i];
+                if (!row) continue;
+                
+                let patientIdCol = -1;
+                let nameCol = -1;
+                
+                for (let j = 0; j < row.length; j++) {
+                    const cell = row[j]?.toString().toLowerCase() || '';
+                    if (cell.includes('patient') && cell.includes('id')) patientIdCol = j;
+                    if (cell.includes('name') && !cell.includes('next')) nameCol = j;
+                }
+                
+                if (patientIdCol >= 0 && nameCol >= 0) {
+                    return {
+                        headerRow: i,
+                        patientId: patientIdCol,
+                        name: nameCol,
+                        enrollmentStatus: findColumn(row, ['status', 'enrollment status']),
+                        dateEnrolled: findColumn(row, ['date enrolled', 'enrolled']),
+                        gender: findColumn(row, ['gender', 'sex']),
+                        age: findColumn(row, ['age']),
+                        contact: findColumn(row, ['contact']) - (findColumn(row, ['next of kin']) || 999),
+                        nextOfKinContact: findColumn(row, ['next of kin']),
+                        location: findColumn(row, ['location']),
+                        insurance: findColumn(row, ['insurance']),
+                        condition: findColumn(row, ['condition', 'underlying']),
+                        labTest: findColumn(row, ['lab test']),
+                        labDate: findColumn(row, ['lab date']),
+                        followupFrequency: findColumn(row, ['frequency']),
+                        previousFeedback: findColumn(row, ['previous']),
+                        dueFollowupDate: findColumn(row, ['due date', 'due follow']),
+                        followupStatus: findColumn(row, ['follow-up status', 'followup status']),
+                        followupFeedback: findColumn(row, ['follow-up feedback', 'followup feedback']),
+                        medicationPrescribed: findColumn(row, ['medication']),
+                        nextFollowup: findColumn(row, ['next follow']),
+                        dispenseStatus: findColumn(row, ['dispense']),
+                        refillFrequency: findColumn(row, ['refill frequency']),
+                        refillDate: findColumn(row, ['refill date'])
+                    };
+                }
+            }
+            return null;
+        }
+        
+        function findColumn(row, searchTerms) {
+            for (let i = 0; i < row.length; i++) {
+                const cell = row[i]?.toString().toLowerCase() || '';
+                for (const term of searchTerms) {
+                    if (cell.includes(term.toLowerCase())) return i;
+                }
+            }
+            return -1;
+        }
+        
+        function cleanValue(value) {
+            if (value === null || value === undefined) return null;
+            if (typeof value === 'string') {
+                return value.trim() === '' ? null : value.trim();
+            }
+            return value;
+        }
+
+        function parseSheetData(jsonData, sheetName) {
+            const patients = [];
+            
+            // Find header row and detect column positions
+            const columnMap = detectColumns(jsonData);
+            if (!columnMap) {
+                console.log(`⚠️ Could not detect columns in sheet: ${sheetName}`);
+                return [];
+            }
+            
+            // Legacy fallback mapping
+            const fallbackMap = {
+                patientId: 2,        // CCP - ENROLLMENT
+                enrollmentStatus: 3, // ENROLLMENT STATUS  
+                dateEnrolled: 4,     // DATE ENROLLED
+                name: 5,             // PATIENT'S NAME
+                gender: 6,           // GENDER
+                age: 7,              // AGE(YRS)
+                contact: 8,          // CONTACT
+                nextOfKinContact: 9, // NEXT OF KIN CONTACT
+                location: 10,        // LOCATION
+                insurance: 11,       // INSURANCE SCHEME
+                condition: 12,       // KNOWN UNDERLYING CONDITION
+                labTest: 13,         // LAB TEST DONE
+                labDate: 14,         // DATE LAB TEST DONE
+                followupFrequency: 17, // FOLLOW UP FREQUENCY
+                previousFeedback: 18,  // PREVIOUS FOLLOW-UP FEEDBACK
+                dueFollowupDate: 19,   // DUE FOLLOW UP DATE
+                followupStatus: 20,    // FOLLOW UP STATUS
+                followupFeedback: 21,  // FOLLOW-UP FEEDBACK (current month)
+                medicationPrescribed: 22, // MEDICATION PRESCRIBED
+                nextFollowup: 23,      // NEXT FOLLOW-UP DATE
+                dispenseStatus: 31,    // DISPACHMENT STATUS
+                refillFrequency: 34,   // REFILL FREQUENCY
+                refillDate: 35,        // REFILL DATE
+            };
+
+            // Parse data rows (start after header row)
+            for (let i = columnMap.headerRow + 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                if (!row || row.length === 0) continue;
+
+                const patientId = row[columnMap.patientId];
+                const name = row[columnMap.name];
+                
+                // Skip header rows and empty rows
+                if (!patientId || !name || 
+                    patientId.toString().toLowerCase().includes('patient') || 
+                    name.toString().toLowerCase().includes('name') ||
+                    patientId.toString().toLowerCase().includes('tag') ||
+                    patientId.toString().toLowerCase().includes('ccp') ||
+                    patientId.toString().toLowerCase().includes('enrollment') ||
+                    patientId.toString().toLowerCase() === 'active' ||
+                    patientId.toString().toLowerCase() === 'inactive') continue;
+
+                const patient = {
+                    patientId: patientId,
+                    name: name,
+                    enrollmentStatus: row[columnMap.enrollmentStatus] || 'ACTIVE',
+                    dateEnrolled: parseExcelDate(row[columnMap.dateEnrolled]),
+                    gender: row[columnMap.gender],
+                    age: row[columnMap.age],
+                    contact: row[columnMap.contact],
+                    nextOfKinContact: row[columnMap.nextOfKinContact],
+                    location: row[columnMap.location],
+                    insurance: row[columnMap.insurance],
+                    condition: row[columnMap.condition],
+                    labTest: row[columnMap.labTest],
+                    labDate: row[columnMap.labDate],
+                    followupFrequency: row[columnMap.followupFrequency],
+                    previousFeedback: row[columnMap.previousFeedback],
+                    dueFollowupDate: row[columnMap.dueFollowupDate],
+                    followupStatus: row[columnMap.followupStatus],
+                    followupFeedback: row[columnMap.followupFeedback],
+                    medicationPrescribed: row[columnMap.medicationPrescribed],
+                    nextFollowup: row[columnMap.nextFollowup],
+                    dispenseStatus: row[columnMap.dispenseStatus],
+                    refillFrequency: row[columnMap.refillFrequency],
+                    refillDate: row[columnMap.refillDate],
+                    sheet: sheetName,
+                    month: extractMonth(sheetName),
+                    year: extractYear(sheetName),
+                    insurer: extractInsurer(sheetName),
+                    errors: validatePatient({
+                        patientId, name, dateEnrolled: parseExcelDate(row[columnMap.dateEnrolled])
+                    })
+                };
+
+                patients.push(patient);
+            }
+
+            return patients;
+        }
+
+        function extractMonth(sheetName) {
+            const months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 
+                          'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+            for (let month of months) {
+                if (sheetName.toUpperCase().includes(month)) {
+                    return months.indexOf(month) + 1;
+                }
+            }
+            return new Date().getMonth() + 1;
+        }
+
+        function extractYear(sheetName) {
+            const yearMatch = sheetName.match(/20\d{2}/);
+            return yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear();
+        }
+        
+        function extractInsurer(sheetName) {
+            const insurers = ['CIC', 'BRITAM', 'MADISON', 'NHIF', 'AAR', 'JUBILEE', 'HERITAGE', 'RESOLUTION'];
+            const upperSheet = sheetName.toUpperCase();
+            
+            for (const insurer of insurers) {
+                if (upperSheet.includes(insurer)) {
+                    return insurer;
+                }
+            }
+            
+            const parts = sheetName.split(/[-_\s]+/);
+            for (const part of parts) {
+                const cleanPart = part.trim().toUpperCase();
+                if (cleanPart.length > 2 && !['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'].includes(cleanPart)) {
+                    return cleanPart;
+                }
+            }
+            
+            return 'UNKNOWN';
+        }
+
+        function validatePatient(patient) {
+            const errors = [];
+            if (!patient.patientId) errors.push('Missing Patient ID');
+            if (!patient.name) errors.push('Missing Patient Name');
+            if (!patient.dateEnrolled) errors.push('Missing Date Enrolled');
+            return errors;
+        }
+        
+        function parseExcelDate(dateValue) {
+            if (!dateValue) return null;
+            
+            // Handle Excel serial date numbers
+            if (typeof dateValue === 'number') {
+                const excelEpoch = new Date(1900, 0, 1);
+                const days = dateValue - 2; // Excel bug: treats 1900 as leap year
+                return new Date(excelEpoch.getTime() + days * 24 * 60 * 60 * 1000);
+            }
+            
+            // Handle string dates
+            const natural = new Date(dateValue);
+            if (!isNaN(natural.getTime())) {
+                return natural;
+            }
+            
+            return null;
+        }
+
+        function displayPreview(totalPatients, totalSheets) {
+            const statsContainer = document.getElementById('statsContainer');
+            const sheetTabs = document.getElementById('sheetTabs');
+            const previewSection = document.getElementById('previewSection');
+            const importActions = document.getElementById('importActions');
+
+            // Show stats
+            let validPatients = 0;
+            let errorPatients = 0;
+            Object.values(parsedData).forEach(patients => {
+                patients.forEach(p => {
+                    if (p.errors.length === 0) validPatients++;
+                    else errorPatients++;
+                });
+            });
+
+            statsContainer.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-number">${totalSheets}</div>
+                    <div class="stat-label">Sheets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${totalPatients}</div>
+                    <div class="stat-label">Total Patients</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${validPatients}</div>
+                    <div class="stat-label">Valid Records</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${errorPatients}</div>
+                    <div class="stat-label">Errors</div>
+                </div>
+            `;
+
+            // Show sheet tabs
+            sheetTabs.innerHTML = '';
+            Object.keys(parsedData).forEach((sheetName, index) => {
+                const tab = document.createElement('button');
+                tab.className = `sheet-tab ${index === 0 ? 'active' : ''}`;
+                tab.textContent = `${sheetName} (${parsedData[sheetName].length})`;
+                tab.addEventListener('click', () => showSheet(sheetName));
+                sheetTabs.appendChild(tab);
+            });
+
+            previewSection.style.display = 'block';
+            importActions.style.display = 'block';
+
+            // Show first sheet
+            if (Object.keys(parsedData).length > 0) {
+                showSheet(Object.keys(parsedData)[0]);
+            }
+        }
+
+        function showSheet(sheetName) {
+            // Update active tab
+            document.querySelectorAll('.sheet-tab').forEach(tab => {
+                tab.classList.remove('active');
+                if (tab.textContent.includes(sheetName)) {
+                    tab.classList.add('active');
+                }
+            });
+
+            // Show sheet content
+            const sheetContent = document.getElementById('sheetContent');
+            const patients = parsedData[sheetName];
+
+            const insurer = patients.length > 0 ? patients[0].insurer : 'UNKNOWN';
+            sheetContent.innerHTML = `
+                <h3>${sheetName} - ${patients.length} Patients (${insurer})</h3>
+                <div class="table-container">
+                    ${createPatientTable(patients)}
+                </div>
+            `;
+        }
+
+        function createPatientTable(patients) {
+            if (patients.length === 0) {
+                return '<p>No patients found in this sheet.</p>';
+            }
+
+            const headers = [
+                'Patient ID', 'Name', 'Status', 'Gender', 'Age', 'Contact', 'Next of Kin Contact',
+                'Location', 'Insurance', 'Date Enrolled', 'Condition', 'Lab Test', 'Lab Date',
+                'Follow-up Frequency', 'Follow-up Status', 'Follow-up Feedback', 'Previous Feedback',
+                'Due Date', 'Next Follow-up', 'Medication Prescribed', 'Dispense Status',
+                'Refill Frequency', 'Refill Date', 'Errors'
+            ];
+
+            let tableHTML = `
+                <table class="patient-table">
+                    <thead>
+                        <tr>
+                            ${headers.map(header => `<th>${header}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            patients.forEach(patient => {
+                const hasErrors = patient.errors && patient.errors.length > 0;
+                tableHTML += `
+                    <tr class="${hasErrors ? 'error-row' : ''}">
+                        <td>${patient.patientId || ''}</td>
+                        <td>${patient.name || ''}</td>
+                        <td>${patient.enrollmentStatus || ''}</td>
+                        <td>${patient.gender || ''}</td>
+                        <td class="long-text" title="${patient.age || ''}">${patient.age || ''}</td>
+                        <td>${patient.contact || ''}</td>
+                        <td>${patient.nextOfKinContact || ''}</td>
+                        <td>${patient.location || ''}</td>
+                        <td>${patient.insurance || ''}</td>
+                        <td>${patient.dateEnrolled || ''}</td>
+                        <td class="long-text" title="${patient.condition || ''}">${patient.condition || ''}</td>
+                        <td class="long-text" title="${patient.labTest || ''}">${patient.labTest || ''}</td>
+                        <td>${patient.labDate || ''}</td>
+                        <td>${patient.followupFrequency || ''}</td>
+                        <td>${patient.followupStatus || ''}</td>
+                        <td class="long-text" title="${patient.followupFeedback || ''}">${patient.followupFeedback || ''}</td>
+                        <td class="long-text" title="${patient.previousFeedback || ''}">${patient.previousFeedback || ''}</td>
+                        <td>${patient.dueFollowupDate || ''}</td>
+                        <td>${patient.nextFollowup || ''}</td>
+                        <td class="long-text" title="${patient.medicationPrescribed || ''}">${patient.medicationPrescribed || ''}</td>
+                        <td>${patient.dispenseStatus || ''}</td>
+                        <td>${patient.refillFrequency || ''}</td>
+                        <td>${patient.refillDate || ''}</td>
+                        <td class="${hasErrors ? 'error-cell' : ''}">${hasErrors ? patient.errors.join('; ') : 'None'}</td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+
+            return tableHTML;
+        }
+
+        async function importData() {
+            selectedDoctor = document.getElementById('doctorSelect').value;
+            if (!selectedDoctor) {
+                alert('Please select an attending doctor');
+                return;
+            }
+
+            const progressSection = document.getElementById('progressSection');
+            const importActions = document.getElementById('importActions');
+            
+            progressSection.style.display = 'block';
+            importActions.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/v1/ccp/import', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        data: parsedData,
+                        attendingDoctor: selectedDoctor
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateProgress(100, `Import completed successfully! ${result.imported} patients imported.`);
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                } else {
+                    throw new Error(result.message || 'Import failed');
+                }
+            } catch (error) {
+                updateProgress(0, `Import failed: ${error.message}`);
+                importActions.style.display = 'block';
+            }
+        }
+
+        function updateProgress(percent, text) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        function cancelImport() {
+            location.reload();
+        }
+
+        // Event listeners
+        document.getElementById('chooseFileBtn').addEventListener('click', () => {
+            document.getElementById('fileInput').click();
+        });
+
+        document.getElementById('importBtn').addEventListener('click', importData);
+        document.getElementById('cancelBtn').addEventListener('click', cancelImport);
+    </script>
+</body>
+</html>
