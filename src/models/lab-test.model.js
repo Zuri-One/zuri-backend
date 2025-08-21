@@ -200,19 +200,17 @@ class LabTest extends Model {
       tableName: 'LabTests',
       timestamps: true,
       hooks: {
-        beforeCreate: async (test) => {
+        beforeCreate: async (test, options) => {
           if (!test.sampleId) {
-            // Generate unique sample ID
+            // Generate unique sample ID using timestamp + random for uniqueness
             const date = new Date();
             const year = date.getFullYear().toString().slice(-2);
             const month = (date.getMonth() + 1).toString().padStart(2, '0');
-            const count = await this.count({
-              where: sequelize.where(
-                sequelize.fn('date_part', 'year', sequelize.col('createdAt')),
-                date.getFullYear()
-              )
-            });
-            test.sampleId = `LAB${year}${month}${(count + 1).toString().padStart(4, '0')}`;
+            const day = date.getDate().toString().padStart(2, '0');
+            const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+            const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+            
+            test.sampleId = `LAB${year}${month}${day}${timestamp}${random}`;
           }
         }
       },
