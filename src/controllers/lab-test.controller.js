@@ -4,6 +4,7 @@ const { generateLabReport } = require('../utils/pdf.util');
 const sendEmail = require('../utils/email.util');
 const WhatsAppService = require('../services/whatsapp.service');
 const labTestCatalogService = require('../services/lab-test-catalog.service');
+const batchLabTestService = require('../services/batch-lab-test.service');
 
 const labTestController = {
  
@@ -1317,6 +1318,151 @@ collectSample: async (req, res, next) => {
       });
     } catch (error) {
       console.error('Email sending error:', error);
+      next(error);
+    }
+  },
+
+  // ========== BATCH LAB TEST OPERATIONS ==========
+
+  /**
+   * Create batch lab tests
+   * @route POST /api/v1/lab-test/batch
+   */
+  createBatchLabTests: async (req, res, next) => {
+    console.log('========= BATCH LAB TEST CREATION START =========');
+    console.log('Received batch request:', req.body);
+    
+    try {
+      const batchResult = await batchLabTestService.createBatchTests(req.body, req.user.id);
+      
+      console.log('Batch tests created successfully:', {
+        batchId: batchResult.batchId,
+        totalTests: batchResult.totalTests
+      });
+
+      res.status(201).json({
+        success: true,
+        message: `Batch of ${batchResult.totalTests} lab tests created successfully`,
+        batch: batchResult
+      });
+    } catch (error) {
+      console.error('Batch lab test creation error:', error);
+      next(error);
+    }
+  },
+
+  /**
+   * Get batch lab tests
+   * @route GET /api/v1/lab-test/batch/:batchId
+   */
+  getBatchLabTests: async (req, res, next) => {
+    try {
+      const { batchId } = req.params;
+      const tests = await batchLabTestService.getBatchTests(batchId);
+      
+      if (tests.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Batch not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        batchId,
+        totalTests: tests.length,
+        tests
+      });
+    } catch (error) {
+      console.error('Get batch tests error:', error);
+      next(error);
+    }
+  },
+
+  /**
+   * Collect batch sample
+   * @route POST /api/v1/lab-test/batch/:batchId/collect-sample
+   */
+  collectBatchSample: async (req, res, next) => {
+    console.log('========= BATCH SAMPLE COLLECTION START =========');
+    
+    try {
+      const { batchId } = req.params;
+      const result = await batchLabTestService.collectBatchSample(batchId, req.body, req.user.id);
+      
+      console.log('Batch sample collected successfully:', result);
+
+      res.json({
+        success: true,
+        message: `Sample collected for batch of ${result.testsUpdated} tests`,
+        result
+      });
+    } catch (error) {
+      console.error('Batch sample collection error:', error);
+      next(error);
+    }
+  },
+
+  /**
+   * Add batch results
+   * @route POST /api/v1/lab-test/batch/:batchId/results
+   */
+  addBatchResults: async (req, res, next) => {
+    console.log('========= BATCH RESULTS ADDITION START =========');
+    
+    try {
+      const { batchId } = req.params;
+      const result = await batchLabTestService.addBatchResults(batchId, req.body, req.user.id);
+      
+      console.log('Batch results added successfully:', result);
+
+      res.json({
+        success: true,
+        message: `Results added for ${result.testsCompleted} tests in batch`,
+        result
+      });
+    } catch (error) {
+      console.error('Batch results addition error:', error);
+      next(error);
+    }
+  },
+
+  /**
+   * Get patient batch tests
+   * @route GET /api/v1/lab-test/patient/:patientId/batches
+   */
+  getPatientBatchTests: async (req, res, next) => {
+    try {
+      const { patientId } = req.params;
+      const batches = await batchLabTestService.getPatientBatchTests(patientId, req.query);
+      
+      res.json({
+        success: true,
+        patientId,
+        totalBatches: Object.keys(batches).length,
+        batches
+      });
+    } catch (error) {
+      console.error('Get patient batch tests error:', error);
+      next(error);
+    }
+  },
+
+  /**
+   * Get grouped lab queue (patient-centric view)
+   * @route GET /api/v1/lab-test/queue/grouped
+   */
+  getGroupedLabQueue: async (req, res, next) => {
+    try {
+      const groupedQueue = await batchLabTestService.getGroupedLabQueue(req.user.departmentId);
+      
+      res.json({
+        success: true,
+        totalPatients: groupedQueue.length,
+        queue: groupedQueue
+      });
+    } catch (error) {
+      console.error('Get grouped lab queue error:', error);
       next(error);
     }
   }

@@ -254,6 +254,23 @@ class User extends Model {
     lockUntil: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+
+    // Signature Information
+    signatureUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'GCP Storage URL for user signature'
+    },
+    signatureFileName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Original filename of signature'
+    },
+    signatureUploadedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'Timestamp when signature was uploaded'
     }
   };
 

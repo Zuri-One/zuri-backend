@@ -69,6 +69,20 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Laboratory',
+      items: [
+        'api/lab/batch-operations',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'User Management',
+      items: [
+        'api/users/signatures',
+      ],
+    },
+    {
+      type: 'category',
       label: 'CCP (Chronic Care Program)',
       items: [
         'api/ccp/overview',

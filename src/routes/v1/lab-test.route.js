@@ -523,4 +523,224 @@ router.post('/:id/email-results',
   labTestController.emailResults
 );
 
+// ========== BATCH LAB TEST ROUTES ==========
+
+/**
+ * @swagger
+ * /api/v1/lab-test/batch:
+ *   post:
+ *     summary: Create batch lab tests
+ *     tags: [Lab Tests]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - patientId
+ *               - tests
+ *             properties:
+ *               patientId:
+ *                 type: string
+ *                 format: uuid
+ *               queueEntryId:
+ *                 type: string
+ *                 format: uuid
+ *               tests:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     testType:
+ *                       type: string
+ *                     priority:
+ *                       type: string
+ *                       enum: [NORMAL, URGENT]
+ *                     notes:
+ *                       type: string
+ *               priority:
+ *                 type: string
+ *                 enum: [NORMAL, URGENT]
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Batch lab tests created successfully
+ */
+router.post('/batch', authenticate, labTestController.createBatchLabTests);
+
+/**
+ * @swagger
+ * /api/v1/lab-test/batch/{batchId}:
+ *   get:
+ *     summary: Get batch lab tests
+ *     tags: [Lab Tests]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: batchId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Batch lab tests retrieved successfully
+ */
+router.get('/batch/:batchId', authenticate, labTestController.getBatchLabTests);
+
+/**
+ * @swagger
+ * /api/v1/lab-test/batch/{batchId}/collect-sample:
+ *   post:
+ *     summary: Collect sample for batch lab tests
+ *     tags: [Lab Tests]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: batchId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sampleCollectionMethod
+ *             properties:
+ *               sampleCollectionMethod:
+ *                 type: string
+ *               patientPreparation:
+ *                 type: string
+ *               sampleCollectionNotes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Batch sample collected successfully
+ */
+router.post('/batch/:batchId/collect-sample',
+  authenticate,
+  authorize(['LAB_TECHNICIAN']),
+  labTestController.collectBatchSample
+);
+
+/**
+ * @swagger
+ * /api/v1/lab-test/batch/{batchId}/results:
+ *   post:
+ *     summary: Add results for batch lab tests
+ *     tags: [Lab Tests]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: batchId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - testResults
+ *             properties:
+ *               testResults:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     testId:
+ *                       type: string
+ *                       format: uuid
+ *                     results:
+ *                       type: object
+ *                     referenceRange:
+ *                       type: object
+ *                     isAbnormal:
+ *                       type: boolean
+ *                     isCritical:
+ *                       type: boolean
+ *                     notes:
+ *                       type: string
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Batch results added successfully
+ */
+router.post('/batch/:batchId/results',
+  authenticate,
+  authorize(['LAB_TECHNICIAN']),
+  labTestController.addBatchResults
+);
+
+/**
+ * @swagger
+ * /api/v1/lab-test/patient/{patientId}/batches:
+ *   get:
+ *     summary: Get patient batch tests
+ *     tags: [Lab Tests]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: patientId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Patient batch tests retrieved successfully
+ */
+router.get('/patient/:patientId/batches',
+  authenticate,
+  labTestController.getPatientBatchTests
+);
+
+/**
+ * @swagger
+ * /api/v1/lab-test/queue/grouped:
+ *   get:
+ *     summary: Get grouped lab queue (patient-centric view)
+ *     tags: [Lab Tests]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Grouped lab queue retrieved successfully
+ */
+router.get('/queue/grouped',
+  authenticate,
+  authorize(['LAB_TECHNICIAN']),
+  labTestController.getGroupedLabQueue
+);
+
 module.exports = router;

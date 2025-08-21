@@ -20,6 +20,7 @@
   "description": "",
   "dependencies": {
     "@effect/platform": "^0.80.4",
+    "@google-cloud/storage": "^7.17.0",
     "@prisma/client": "^5.22.0",
     "@sendgrid/mail": "^8.1.4",
     "@uploadthing/react": "^7.1.1",
@@ -59,6 +60,7 @@
     "sequelize": "^6.37.5",
     "sequelize-cli": "^6.6.2",
     "speakeasy": "^2.0.0",
+    "supertest": "^7.1.4",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "umzug": "^3.8.2",

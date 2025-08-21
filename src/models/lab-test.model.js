@@ -120,6 +120,38 @@ class LabTest extends Model {
     metadata: {
       type: DataTypes.JSONB,
       allowNull: true
+    },
+
+    // Batch Processing Fields
+    batchId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'Groups related tests together'
+    },
+    parentTestId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'LabTests',
+        key: 'id'
+      },
+      comment: 'Reference to parent test in batch'
+    },
+    isParentTest: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Indicates if this is the main test in a batch'
+    },
+    sharedSampleId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Shared sample ID for batch tests'
+    },
+    batchMetadata: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      comment: 'Additional batch-related metadata'
     }
   };
 
@@ -147,6 +179,17 @@ class LabTest extends Model {
     this.belongsTo(models.DepartmentQueue, {
       foreignKey: 'queueEntryId',
       as: 'queueEntry'
+    });
+
+    // Batch relationships
+    this.belongsTo(models.LabTest, {
+      foreignKey: 'parentTestId',
+      as: 'parentTest'
+    });
+
+    this.hasMany(models.LabTest, {
+      foreignKey: 'parentTestId',
+      as: 'childTests'
     });
   }
 
@@ -192,6 +235,15 @@ class LabTest extends Model {
         {
           fields: ['sampleId'],
           unique: true
+        },
+        {
+          fields: ['batchId']
+        },
+        {
+          fields: ['parentTestId']
+        },
+        {
+          fields: ['sharedSampleId']
         }
       ]
     });
