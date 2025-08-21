@@ -13,8 +13,15 @@ class SignatureService {
    */
   async uploadSignature(userId, fileBuffer, originalName) {
     try {
+      // Validate GCP configuration
+      if (!this.bucketName) {
+        throw new Error('GCP_BUCKET_NAME environment variable is not set');
+      }
+
       const fileExtension = path.extname(originalName);
       const fileName = `${this.signatureFolder}${userId}-${uuidv4()}${fileExtension}`;
+      
+      console.log('Uploading signature:', { fileName, bucketName: this.bucketName });
       
       const file = bucket.file(fileName);
       
@@ -29,10 +36,17 @@ class SignatureService {
         }
       });
 
-      // Make file publicly readable
-      await file.makePublic();
+      console.log('File saved, making public...');
+      
+      // Generate signed URL (works with uniform bucket-level access)
+      const [signedUrl] = await file.getSignedUrl({
+        action: 'read',
+        expires: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
+      });
 
-      const publicUrl = `https://storage.googleapis.com/${this.bucketName}/${fileName}`;
+      const publicUrl = signedUrl;
+      
+      console.log('Signature uploaded successfully:', publicUrl);
       
       return {
         url: publicUrl,
@@ -40,8 +54,13 @@ class SignatureService {
         originalName: originalName
       };
     } catch (error) {
-      console.error('Error uploading signature:', error);
-      throw new Error('Failed to upload signature');
+      console.error('Detailed signature upload error:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        stack: error.stack
+      });
+      throw new Error(`Failed to upload signature: ${error.message}`);
     }
   }
 
