@@ -101,6 +101,11 @@ class LabTest extends Model {
       defaultValue: false,
       allowNull: false
     },
+    isAbnormal: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
