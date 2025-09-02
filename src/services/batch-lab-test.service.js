@@ -132,14 +132,34 @@ class BatchLabTestService {
     });
 
     // Format results to match individual test format (including units)
-    return tests.map(test => {
+    const labTestCatalogService = require('./lab-test-catalog.service');
+    
+    return Promise.all(tests.map(async (test) => {
       const formattedTest = test.toJSON();
       
       // Format results section to include units (same as individual tests)
       if (formattedTest.results && formattedTest.status === 'COMPLETED') {
+        const originalResults = formattedTest.results;
+        let enhancedReferenceRange = formattedTest.referenceRange;
+        
+        // Add units from template if missing
+        try {
+          const testDefinition = await labTestCatalogService.getTestById(formattedTest.testType);
+          if (testDefinition && testDefinition.parameters && enhancedReferenceRange) {
+            enhancedReferenceRange = { ...enhancedReferenceRange };
+            testDefinition.parameters.forEach(param => {
+              if (enhancedReferenceRange[param.code] && param.unit && !enhancedReferenceRange[param.code].unit) {
+                enhancedReferenceRange[param.code].unit = param.unit;
+              }
+            });
+          }
+        } catch (catalogError) {
+          console.warn('Could not fetch test template for units:', catalogError.message);
+        }
+        
         formattedTest.results = {
-          data: formattedTest.results,
-          referenceRange: formattedTest.referenceRange,
+          data: originalResults,
+          referenceRange: enhancedReferenceRange,
           isAbnormal: formattedTest.isAbnormal,
           isCritical: formattedTest.isCritical,
           resultDate: formattedTest.resultDate,
@@ -149,7 +169,7 @@ class BatchLabTestService {
       }
       
       return formattedTest;
-    });
+    }));
   }
 
   /**
@@ -197,9 +217,12 @@ class BatchLabTestService {
       
       // Format results section to include units (same as individual tests)
       if (formattedTest.results && formattedTest.status === 'COMPLETED') {
+        const originalResults = formattedTest.results;
+        const originalReferenceRange = formattedTest.referenceRange;
+        
         formattedTest.results = {
-          data: formattedTest.results,
-          referenceRange: formattedTest.referenceRange,
+          data: originalResults,
+          referenceRange: originalReferenceRange, // Keep original structure with units
           isAbnormal: formattedTest.isAbnormal,
           isCritical: formattedTest.isCritical,
           resultDate: formattedTest.resultDate,
@@ -290,6 +313,7 @@ class BatchLabTestService {
     
     try {
       const { testResults, notes } = resultsData;
+      const labTestCatalogService = require('./lab-test-catalog.service');
       
       // Get all tests in batch
       const batchTests = await LabTest.findAll({
@@ -310,6 +334,23 @@ class BatchLabTestService {
         const testResult = testResults.find(r => r.testId === test.id);
         if (!testResult) continue;
 
+        // Get test template to merge units into reference range
+        let enhancedReferenceRange = testResult.referenceRange;
+        try {
+          const testDefinition = await labTestCatalogService.getTestById(test.testType);
+          if (testDefinition && testDefinition.parameters) {
+            // Merge units from template parameters into reference range
+            enhancedReferenceRange = { ...testResult.referenceRange };
+            testDefinition.parameters.forEach(param => {
+              if (enhancedReferenceRange[param.code] && param.unit) {
+                enhancedReferenceRange[param.code].unit = param.unit;
+              }
+            });
+          }
+        } catch (catalogError) {
+          console.warn('Could not fetch test template for units:', catalogError.message);
+        }
+
         const resultsMetadata = {
           performedBy: {
             id: technicianId,
@@ -320,7 +361,7 @@ class BatchLabTestService {
 
         await test.update({
           results: testResult.results,
-          referenceRange: testResult.referenceRange,
+          referenceRange: enhancedReferenceRange,
           isAbnormal: testResult.isAbnormal || false,
           isCritical: testResult.isCritical || false,
           resultDate: new Date(),
