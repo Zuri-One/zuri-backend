@@ -624,7 +624,7 @@ getLabTestById: async (req, res, next) => {
         {
           model: Patient,
           as: 'patient',
-          attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'dateOfBirth', 'sex', 'telephone1', 'town' ]
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames',  'sex', 'telephone1', 'town', 'dateOfBirth' ]
         },
         {
           model: User,
@@ -720,7 +720,9 @@ getLabTestById: async (req, res, next) => {
           patientNumber: labTest.patient.patientNumber,
           name: `${labTest.patient.surname} ${labTest.patient.otherNames}`,
           sex: labTest.patient.sex,
-          dateOfBirth: labTest.patient.dateOfBirth
+          dateOfBirth: labTest.patient.dateOfBirth,
+          town: labTest.patient.town,
+          telephone1: labTest.patient.telephone1
         } : null,
         
         // Requester information
