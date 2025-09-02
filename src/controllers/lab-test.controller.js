@@ -373,65 +373,151 @@ createLabTest: async (req, res, next) => {
     }
   },
 
-  /**
-   * Get analytics data for lab tests
-   * @route GET /api/v1/lab-test/analytics
-   */
-  getLabAnalytics: async (req, res, next) => {
-    try {
-      const { startDate, endDate } = req.query;
-      const dateRange = {
-        createdAt: {}
-      };
-  
-      if (startDate) {
-        dateRange.createdAt[Op.gte] = new Date(startDate);
-      }
-      if (endDate) {
-        dateRange.createdAt[Op.lte] = new Date(endDate);
-      }
-  
-      // Get total tests
-      const totalTests = await LabTest.count({
-        where: dateRange
+/**
+ * Get analytics data for lab tests (STEP BY STEP DEBUG)
+ * @route GET /api/v1/lab-test/analytics
+ */
+getLabAnalytics: async (req, res, next) => {
+  try {
+    console.log('=== ANALYTICS DEBUG START ===');
+    const { startDate, endDate } = req.query;
+    console.log('Query params:', { startDate, endDate });
+    
+    // Step 1: Test database connection
+    console.log('Step 1: Testing database connection...');
+    await sequelize.authenticate();
+    console.log('✅ Database connection successful');
+    
+    // Step 2: Check if LabTest table exists and has data
+    console.log('Step 2: Checking LabTest table...');
+    const labTestTableInfo = await sequelize.getQueryInterface().describeTable('LabTests');
+    console.log('LabTest table columns:', Object.keys(labTestTableInfo));
+    
+    // Step 3: Test basic LabTest query without filters
+    console.log('Step 3: Testing basic LabTest query...');
+    const totalLabTestsNoFilter = await LabTest.count();
+    console.log('Total lab tests in database:', totalLabTestsNoFilter);
+    
+    if (totalLabTestsNoFilter === 0) {
+      return res.json({
+        success: true,
+        message: 'No lab tests found in database',
+        data: {
+          totalTests: 0,
+          testsByStatus: [],
+          testsByType: [],
+          abnormalResults: 0,
+          criticalResults: 0,
+          averageTurnaroundTime: 0,
+          dailyTestCounts: []
+        }
       });
-  
-      // Get tests by status
-      const testsByStatus = await LabTest.findAll({
+    }
+    
+    // Step 4: Build date range filter carefully
+    console.log('Step 4: Building date range filter...');
+    const dateRange = {};
+    
+    if (startDate || endDate) {
+      dateRange.createdAt = {};
+      
+      if (startDate) {
+        const parsedStartDate = new Date(startDate);
+        console.log('Parsed start date:', parsedStartDate);
+        if (isNaN(parsedStartDate.getTime())) {
+          throw new Error('Invalid start date format');
+        }
+        dateRange.createdAt[Op.gte] = parsedStartDate;
+      }
+      
+      if (endDate) {
+        const parsedEndDate = new Date(endDate);
+        console.log('Parsed end date:', parsedEndDate);
+        if (isNaN(parsedEndDate.getTime())) {
+          throw new Error('Invalid end date format');
+        }
+        dateRange.createdAt[Op.lte] = parsedEndDate;
+      }
+    }
+    
+    console.log('Date range filter:', dateRange);
+    
+    // Step 5: Test filtered count
+    console.log('Step 5: Testing filtered count...');
+    const totalTests = await LabTest.count({
+      where: dateRange
+    });
+    console.log('Total tests with date filter:', totalTests);
+    
+    // Step 6: Test aggregation queries one by one
+    console.log('Step 6: Testing status aggregation...');
+    let testsByStatus = [];
+    try {
+      testsByStatus = await LabTest.findAll({
         where: dateRange,
         attributes: [
           'status',
-          [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+          [sequelize.fn('COUNT', sequelize.col('LabTest.id')), 'count'] // Specify table alias
         ],
-        group: ['status']
+        group: ['status'],
+        raw: true
       });
-  
-      // Get tests by type
-      const testsByType = await LabTest.findAll({
+      console.log('✅ Status aggregation successful:', testsByStatus);
+    } catch (statusError) {
+      console.error('❌ Status aggregation failed:', statusError.message);
+      testsByStatus = [];
+    }
+    
+    console.log('Step 7: Testing test type aggregation...');
+    let testsByType = [];
+    try {
+      testsByType = await LabTest.findAll({
         where: dateRange,
         attributes: [
           'testType',
-          [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+          [sequelize.fn('COUNT', sequelize.col('LabTest.id')), 'count'] // Specify table alias
         ],
-        group: ['testType']
+        group: ['testType'],
+        raw: true
       });
-  
-      // Get abnormal/critical results
-      const abnormalResults = await LabTest.count({
+      console.log('✅ Test type aggregation successful:', testsByType);
+    } catch (typeError) {
+      console.error('❌ Test type aggregation failed:', typeError.message);
+      testsByType = [];
+    }
+    
+    console.log('Step 8: Testing boolean filters...');
+    let abnormalResults = 0;
+    let criticalResults = 0;
+    
+    try {
+      abnormalResults = await LabTest.count({
         where: {
           ...dateRange,
           isAbnormal: true
         }
       });
-  
-      const criticalResults = await LabTest.count({
+      console.log('✅ Abnormal results count:', abnormalResults);
+    } catch (abnormalError) {
+      console.error('❌ Abnormal results query failed:', abnormalError.message);
+    }
+    
+    try {
+      criticalResults = await LabTest.count({
         where: {
           ...dateRange,
           isCritical: true
         }
       });
-  
-      // Get average turnaround time
+      console.log('✅ Critical results count:', criticalResults);
+    } catch (criticalError) {
+      console.error('❌ Critical results query failed:', criticalError.message);
+    }
+    
+    console.log('Step 9: Testing turnaround time calculation...');
+    let averageTurnaroundTime = 0;
+    
+    try {
       const testsWithTurnaround = await LabTest.findAll({
         where: {
           ...dateRange,
@@ -442,40 +528,78 @@ createLabTest: async (req, res, next) => {
         attributes: [
           'sampleCollectionDate',
           'resultDate'
-        ]
+        ],
+        raw: true
       });
-  
-      const averageTurnaroundTime = testsWithTurnaround.reduce((acc, test) => {
-        const turnaround = new Date(test.resultDate) - new Date(test.sampleCollectionDate);
-        return acc + turnaround;
-      }, 0) / (testsWithTurnaround.length || 1);
-  
-      // Get daily test counts
-      const dailyTestCounts = await LabTest.findAll({
+      
+      console.log(`Found ${testsWithTurnaround.length} tests with turnaround data`);
+      
+      if (testsWithTurnaround.length > 0) {
+        const totalTurnaroundTime = testsWithTurnaround.reduce((acc, test) => {
+          const turnaround = new Date(test.resultDate) - new Date(test.sampleCollectionDate);
+          return acc + turnaround;
+        }, 0);
+        
+        averageTurnaroundTime = Math.round(totalTurnaroundTime / (testsWithTurnaround.length * 1000 * 60)); // Convert to minutes
+      }
+      
+      console.log('✅ Average turnaround time calculated:', averageTurnaroundTime, 'minutes');
+    } catch (turnaroundError) {
+      console.error('❌ Turnaround time calculation failed:', turnaroundError.message);
+    }
+    
+    console.log('Step 10: Testing daily counts...');
+    let dailyTestCounts = [];
+    
+    try {
+      dailyTestCounts = await LabTest.findAll({
         where: dateRange,
         attributes: [
-          [sequelize.fn('DATE', sequelize.col('createdAt')), 'date'],
-          [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+          [sequelize.fn('DATE', sequelize.col('LabTest.createdAt')), 'date'], // Specify table alias
+          [sequelize.fn('COUNT', sequelize.col('LabTest.id')), 'count'] // Specify table alias
         ],
-        group: [sequelize.fn('DATE', sequelize.col('createdAt'))]
+        group: [sequelize.fn('DATE', sequelize.col('LabTest.createdAt'))],
+        order: [[sequelize.fn('DATE', sequelize.col('LabTest.createdAt')), 'ASC']],
+        raw: true
       });
-  
-      res.json({
-        success: true,
-        data: {
-          totalTests,
-          testsByStatus,
-          testsByType,
-          abnormalResults,
-          criticalResults,
-          averageTurnaroundTime: Math.round(averageTurnaroundTime / (1000 * 60)), // Convert to minutes
-          dailyTestCounts
-        }
-      });
-    } catch (error) {
-      next(error);
+      console.log('✅ Daily counts calculated:', dailyTestCounts.length, 'days');
+    } catch (dailyError) {
+      console.error('❌ Daily counts query failed:', dailyError.message);
+      dailyTestCounts = [];
     }
-  },
+    
+    // Step 11: Return results
+    console.log('Step 11: Returning results...');
+    const results = {
+      success: true,
+      data: {
+        totalTests,
+        testsByStatus,
+        testsByType,
+        abnormalResults,
+        criticalResults,
+        averageTurnaroundTime,
+        dailyTestCounts
+      }
+    };
+    
+    console.log('Final results:', results);
+    res.json(results);
+    
+  } catch (error) {
+    console.error('=== ANALYTICS ERROR ===');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Error name:', error.name);
+    
+    // Return a more detailed error response
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      step: 'See console logs for detailed step information'
+    });
+  }
+},
 
   /**
  * Get detailed lab test by ID (WITH DEBUG LOGS)
