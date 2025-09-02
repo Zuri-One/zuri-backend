@@ -258,9 +258,9 @@ class User extends Model {
 
     // Signature Information
     signatureUrl: {
-      type: DataTypes.STRING,
+      type: DataTypes.TEXT,
       allowNull: true,
-      comment: 'GCP Storage URL for user signature'
+      comment: 'GCP Storage URL for user signature (can be long signed URL)'
     },
     signatureFileName: {
       type: DataTypes.STRING,

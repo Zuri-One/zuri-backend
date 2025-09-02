@@ -238,7 +238,7 @@ createLabTest: async (req, res, next) => {
           {
             model: User,
             as: 'requestedBy',
-            attributes: ['id', 'surname', 'otherNames']
+            attributes: ['id', 'surname', 'otherNames', 'role']
           },
           {
             model: User,
@@ -500,7 +500,7 @@ getLabTestById: async (req, res, next) => {
         {
           model: Patient,
           as: 'patient',
-          attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'dateOfBirth', 'sex']
+          attributes: ['id', 'patientNumber', 'surname', 'otherNames', 'dateOfBirth', 'sex', 'telephone1', 'town' ]
         },
         {
           model: User,
