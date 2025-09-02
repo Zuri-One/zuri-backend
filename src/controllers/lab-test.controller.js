@@ -375,6 +375,7 @@ createLabTest: async (req, res, next) => {
 
 /**
  * Get analytics data for lab tests (STEP BY STEP DEBUG)
+ * NOTE: This counts ONLY actual lab tests with PENDING status, NOT patients in lab queue
  * @route GET /api/v1/lab-test/analytics
  */
 getLabAnalytics: async (req, res, next) => {
@@ -382,6 +383,7 @@ getLabAnalytics: async (req, res, next) => {
     console.log('=== ANALYTICS DEBUG START ===');
     const { startDate, endDate } = req.query;
     console.log('Query params:', { startDate, endDate });
+    console.log('NOTE: Analytics counts only LabTest records with status=PENDING, not patients in queue');
     
     // Step 1: Test database connection
     console.log('Step 1: Testing database connection...');

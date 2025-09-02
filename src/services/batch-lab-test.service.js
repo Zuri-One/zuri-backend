@@ -131,7 +131,25 @@ class BatchLabTestService {
       order: [['batchMetadata', 'ASC']]
     });
 
-    return tests;
+    // Format results to match individual test format (including units)
+    return tests.map(test => {
+      const formattedTest = test.toJSON();
+      
+      // Format results section to include units (same as individual tests)
+      if (formattedTest.results && formattedTest.status === 'COMPLETED') {
+        formattedTest.results = {
+          data: formattedTest.results,
+          referenceRange: formattedTest.referenceRange,
+          isAbnormal: formattedTest.isAbnormal,
+          isCritical: formattedTest.isCritical,
+          resultDate: formattedTest.resultDate,
+          requiresFollowUp: formattedTest.metadata?.requiresFollowUp || false,
+          notes: formattedTest.notes
+        };
+      }
+      
+      return formattedTest;
+    });
   }
 
   /**
@@ -168,13 +186,29 @@ class BatchLabTestService {
       order: [['batchId', 'ASC'], ['createdAt', 'ASC']]
     });
 
-    // Group by batch ID
+    // Group by batch ID and format results
     const batches = {};
     tests.forEach(test => {
       if (!batches[test.batchId]) {
         batches[test.batchId] = [];
       }
-      batches[test.batchId].push(test);
+      
+      const formattedTest = test.toJSON();
+      
+      // Format results section to include units (same as individual tests)
+      if (formattedTest.results && formattedTest.status === 'COMPLETED') {
+        formattedTest.results = {
+          data: formattedTest.results,
+          referenceRange: formattedTest.referenceRange,
+          isAbnormal: formattedTest.isAbnormal,
+          isCritical: formattedTest.isCritical,
+          resultDate: formattedTest.resultDate,
+          requiresFollowUp: formattedTest.metadata?.requiresFollowUp || false,
+          notes: formattedTest.notes
+        };
+      }
+      
+      batches[test.batchId].push(formattedTest);
     });
 
     return batches;
