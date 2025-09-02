@@ -1,5 +1,5 @@
 const { LabTest, User, Patient, DepartmentQueue } = require('../models');
-const { Op, sequelize } = require('sequelize');
+const { Op, sequelize, fn } = require('sequelize');
 const { generateLabReport } = require('../utils/pdf.util');
 const sendEmail = require('../utils/email.util');
 const WhatsAppService = require('../services/whatsapp.service');
