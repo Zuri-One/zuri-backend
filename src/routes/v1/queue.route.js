@@ -102,7 +102,7 @@ router.get('/department/:departmentId',
  */
 router.put('/:queueId/status', 
   authenticate, 
-  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']), 
+  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'LAB_TECHNICIAN']), 
   queueController.updateQueueStatus
 );
 
