@@ -2017,13 +2017,14 @@ class CCPController {
       const { patientId } = req.params;
       const { startDate, endDate, limit = 20, page = 1 } = req.query;
       
-      log('Fetching CCP patient medical history', { patientId, startDate, endDate });
+      log('🔍 [CCP Medical History] Request received', { patientId, startDate, endDate, limit, page });
       
       const patient = await Patient.findOne({
         where: { id: patientId, isCCPEnrolled: true }
       });
       
       if (!patient) {
+        log('❌ [CCP Medical History] Patient not found', { patientId });
         return res.status(404).json({
           success: false,
           message: 'CCP patient not found'
@@ -2050,7 +2051,7 @@ class CCPController {
         order: [['createdAt', 'DESC']]
       });
       
-      res.json({
+      const response = {
         success: true,
         data: {
           records: records.map(record => ({
@@ -2069,10 +2070,19 @@ class CCPController {
             limit: parseInt(limit)
           }
         }
+      };
+      
+      log('✅ [CCP Medical History] Response sent', { 
+        patientId, 
+        recordsFound: count, 
+        recordsReturned: records.length,
+        response: JSON.stringify(response, null, 2)
       });
       
+      res.json(response);
+      
     } catch (error) {
-      log('Error fetching CCP medical history', { patientId: req.params.patientId, error: error.message });
+      log('❌ [CCP Medical History] Error', { patientId: req.params.patientId, error: error.message, stack: error.stack });
       next(error);
     }
   }
@@ -2083,13 +2093,14 @@ class CCPController {
       const { patientId } = req.params;
       const { startDate, endDate, metric } = req.query;
       
-      log('Fetching CCP vital trends', { patientId, metric });
+      log('🔍 [CCP Vital Trends] Request received', { patientId, startDate, endDate, metric });
       
       const patient = await Patient.findOne({
         where: { id: patientId, isCCPEnrolled: true }
       });
       
       if (!patient) {
+        log('❌ [CCP Vital Trends] Patient not found', { patientId });
         return res.status(404).json({
           success: false,
           message: 'CCP patient not found'
@@ -2114,16 +2125,25 @@ class CCPController {
       // Filter by specific metric if requested
       const filteredTrends = metric ? { [metric]: trends[metric] } : trends;
       
-      res.json({
+      const response = {
         success: true,
         data: {
           trends: filteredTrends,
           totalExaminations: examinations.length
         }
+      };
+      
+      log('✅ [CCP Vital Trends] Response sent', { 
+        patientId, 
+        examinationsFound: examinations.length,
+        trendsCalculated: Object.keys(filteredTrends).length,
+        response: JSON.stringify(response, null, 2)
       });
       
+      res.json(response);
+      
     } catch (error) {
-      log('Error fetching CCP vital trends', { patientId: req.params.patientId, error: error.message });
+      log('❌ [CCP Vital Trends] Error', { patientId: req.params.patientId, error: error.message, stack: error.stack });
       next(error);
     }
   }
@@ -2202,13 +2222,14 @@ class CCPController {
     try {
       const { patientId } = req.params;
       
-      log('Fetching CCP current medications', { patientId });
+      log('🔍 [CCP Medications] Request received', { patientId });
       
       const patient = await Patient.findOne({
         where: { id: patientId, isCCPEnrolled: true }
       });
       
       if (!patient) {
+        log('❌ [CCP Medications] Patient not found', { patientId });
         return res.status(404).json({
           success: false,
           message: 'CCP patient not found'
@@ -2252,7 +2273,7 @@ class CCPController {
         })
       ]);
       
-      res.json({
+      const response = {
         success: true,
         data: {
           activePrescriptions: prescriptions.map(p => ({
@@ -2272,10 +2293,19 @@ class CCPController {
             totalPrice: d.total_price
           }))
         }
+      };
+      
+      log('✅ [CCP Medications] Response sent', { 
+        patientId,
+        activePrescriptions: prescriptions.length,
+        recentDispenses: dispenses.length,
+        response: JSON.stringify(response, null, 2)
       });
       
+      res.json(response);
+      
     } catch (error) {
-      log('Error fetching CCP medications', { patientId: req.params.patientId, error: error.message });
+      log('❌ [CCP Medications] Error', { patientId: req.params.patientId, error: error.message, stack: error.stack });
       next(error);
     }
   }
@@ -2349,13 +2379,14 @@ class CCPController {
     try {
       const { patientId } = req.params;
       
-      log('Fetching CCP follow-up schedule', { patientId });
+      log('🔍 [CCP Follow-up Schedule] Request received', { patientId });
       
       const patient = await Patient.findOne({
         where: { id: patientId, isCCPEnrolled: true }
       });
       
       if (!patient) {
+        log('❌ [CCP Follow-up Schedule] Patient not found', { patientId });
         return res.status(404).json({
           success: false,
           message: 'CCP patient not found'
@@ -2394,7 +2425,7 @@ class CCPController {
         })
       ]);
       
-      res.json({
+      const response = {
         success: true,
         data: {
           upcoming: upcomingFollowups.map(f => ({
@@ -2419,10 +2450,20 @@ class CCPController {
             priority: f.priority
           }))
         }
+      };
+      
+      log('✅ [CCP Follow-up Schedule] Response sent', { 
+        patientId,
+        upcomingCount: upcomingFollowups.length,
+        completedCount: completedFollowups.length,
+        overdueCount: overdueFollowups.length,
+        response: JSON.stringify(response, null, 2)
       });
       
+      res.json(response);
+      
     } catch (error) {
-      log('Error fetching CCP follow-up schedule', { patientId: req.params.patientId, error: error.message });
+      log('❌ [CCP Follow-up Schedule] Error', { patientId: req.params.patientId, error: error.message, stack: error.stack });
       next(error);
     }
   }
@@ -2656,6 +2697,31 @@ class CCPController {
       log('Error fetching overdue CCP followups', { error: error.message });
       next(error);
     }
+  }
+
+  // Additional patient detail endpoints
+  async getPatientVitalTrends(req, res, next) {
+    return this.getCCPVitalTrends(req, res, next);
+  }
+
+  async getPatientFollowUpSchedule(req, res, next) {
+    return this.getCCPFollowUpSchedule(req, res, next);
+  }
+
+  async getPatientMedicalHistory(req, res, next) {
+    return this.getCCPMedicalHistory(req, res, next);
+  }
+
+  async getPatientLabHistory(req, res, next) {
+    return this.getCCPLabHistory(req, res, next);
+  }
+
+  async getPatientMedications(req, res, next) {
+    return this.getCCPCurrentMedications(req, res, next);
+  }
+
+  async getPatientBilling(req, res, next) {
+    return this.getCCPBillingHistory(req, res, next);
   }
 }
 

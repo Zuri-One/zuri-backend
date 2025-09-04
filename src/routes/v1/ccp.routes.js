@@ -96,7 +96,42 @@ router.get('/followups/overdue',
   ccpController.getOverdueCCPFollowups.bind(ccpController)
 );
 
+// Additional patient detail endpoints
+router.get('/patient/:patientId/vital-trends', 
+  authenticate, 
+  authorize(['DOCTOR', 'NURSE', 'ADMIN', 'CCP_COORDINATOR']), 
+  ccpController.getPatientVitalTrends.bind(ccpController)
+);
 
+router.get('/patient/:patientId/follow-up', 
+  authenticate, 
+  authorize(['DOCTOR', 'NURSE', 'ADMIN', 'CCP_COORDINATOR']), 
+  ccpController.getPatientFollowUpSchedule.bind(ccpController)
+);
+
+router.get('/patient/:patientId/medical-history', 
+  authenticate, 
+  authorize(['DOCTOR', 'NURSE', 'ADMIN', 'CCP_COORDINATOR']), 
+  ccpController.getPatientMedicalHistory.bind(ccpController)
+);
+
+router.get('/patient/:patientId/lab-history', 
+  authenticate, 
+  authorize(['DOCTOR', 'NURSE', 'ADMIN', 'CCP_COORDINATOR']), 
+  ccpController.getPatientLabHistory.bind(ccpController)
+);
+
+router.get('/patient/:patientId/medications', 
+  authenticate, 
+  authorize(['DOCTOR', 'NURSE', 'ADMIN', 'CCP_COORDINATOR']), 
+  ccpController.getPatientMedications.bind(ccpController)
+);
+
+router.get('/patient/:patientId/billing', 
+  authenticate, 
+  authorize(['DOCTOR', 'NURSE', 'ADMIN', 'CCP_COORDINATOR']), 
+  ccpController.getPatientBilling.bind(ccpController)
+);
 
 // Import routes (existing functionality)
 router.post('/import', CCPImportController.importCCPData);
