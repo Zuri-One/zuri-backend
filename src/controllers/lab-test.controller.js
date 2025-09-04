@@ -307,6 +307,13 @@ createLabTest: async (req, res, next) => {
    * @route GET /api/v1/lab-test/current-session
    */
   getCurrentSessionResults: async (req, res, next) => {
+    console.log('========= GET CURRENT SESSION RESULTS START =========');
+    console.log('Query params:', req.query);
+    console.log('User making request:', {
+      id: req.user?.id,
+      role: req.user?.role
+    });
+    
     try {
       const { dateFrom, dateTo } = req.query;
       
@@ -320,12 +327,14 @@ createLabTest: async (req, res, next) => {
           const fromDate = new Date(dateFrom);
           fromDate.setHours(0, 0, 0, 0);
           whereClause.createdAt[Op.gte] = fromDate;
+          console.log('📅 Date from:', fromDate);
         }
         
         if (dateTo) {
           const toDate = new Date(dateTo);
           toDate.setHours(23, 59, 59, 999);
           whereClause.createdAt[Op.lte] = toDate;
+          console.log('📅 Date to:', toDate);
         }
       } else {
         // Default to today if no date range is provided
@@ -334,12 +343,15 @@ createLabTest: async (req, res, next) => {
         whereClause.createdAt = {
           [Op.gte]: today
         };
+        console.log('📅 Using today as default:', today);
       }
       
       // Add status filter - make it more flexible
       whereClause.status = {
         [Op.in]: ['COMPLETED', 'PENDING', 'SAMPLE_COLLECTED', 'IN_PROGRESS']
       };
+      
+      console.log('🔍 Where clause:', JSON.stringify(whereClause, null, 2));
   
       const labTests = await LabTest.findAll({
         where: whereClause,
@@ -362,13 +374,96 @@ createLabTest: async (req, res, next) => {
         ],
         order: [['createdAt', 'DESC']]
       });
-  
-      res.json({
-        success: true,
-        count: labTests.length,
-        results: labTests
+      
+      console.log('✅ Lab tests found:', labTests.length);
+      
+      // Process batch tests to add units (same logic as batch service)
+      const processedTests = await Promise.all(labTests.map(async (test) => {
+        const testData = test.toJSON();
+        
+        // If it's a batch test with results but no units, add them
+        if (testData.batchId && testData.results && testData.status === 'COMPLETED' && testData.referenceRange) {
+          console.log(`\n🔧 Processing batch test ${testData.id} for units...`);
+          
+          const hasUnits = Object.values(testData.referenceRange).some(range => range && range.unit);
+          if (!hasUnits) {
+            console.log('- No units found, fetching from catalog...');
+            
+            try {
+              const testDefinition = await labTestCatalogService.getTestById(testData.testType);
+              if (testDefinition && testDefinition.parameters) {
+                console.log('- Test definition found, adding units...');
+                
+                const enhancedReferenceRange = { ...testData.referenceRange };
+                testDefinition.parameters.forEach(param => {
+                  if (enhancedReferenceRange[param.code] && param.unit) {
+                    console.log(`  ✅ Adding unit ${param.unit} to ${param.code}`);
+                    enhancedReferenceRange[param.code].unit = param.unit;
+                  }
+                });
+                
+                testData.referenceRange = enhancedReferenceRange;
+                console.log('- Units added successfully');
+              }
+            } catch (error) {
+              console.warn('- Failed to add units:', error.message);
+            }
+          } else {
+            console.log('- Units already present');
+          }
+        }
+        
+        return testData;
+      }));
+      
+      // Log detailed information about each processed test
+      processedTests.forEach((test, index) => {
+        console.log(`\n📋 Test ${index + 1}:`);
+        console.log('- ID:', test.id);
+        console.log('- Test Type:', test.testType);
+        console.log('- Status:', test.status);
+        console.log('- Batch ID:', test.batchId);
+        console.log('- Is Batch:', !!test.batchId);
+        console.log('- Has Results:', !!test.results);
+        console.log('- Has Reference Range:', !!test.referenceRange);
+        
+        if (test.referenceRange) {
+          console.log('- Reference Range Keys:', Object.keys(test.referenceRange));
+          console.log('- Reference Range Sample:', JSON.stringify(test.referenceRange, null, 2));
+          
+          // Check if any reference range has units
+          const hasUnits = Object.values(test.referenceRange).some(range => range && range.unit);
+          console.log('- Reference Range Has Units:', hasUnits);
+        }
+        
+        if (test.results) {
+          console.log('- Results Type:', typeof test.results);
+          console.log('- Results Keys:', Object.keys(test.results));
+          if (typeof test.results === 'object' && test.results.data) {
+            console.log('- Results has data property:', !!test.results.data);
+            console.log('- Results has referenceRange property:', !!test.results.referenceRange);
+          }
+        }
       });
+      
+      console.log('\n📤 Sending response to frontend');
+      const response = {
+        success: true,
+        count: processedTests.length,
+        results: processedTests
+      };
+      
+      console.log('📤 Response structure:', {
+        success: response.success,
+        count: response.count,
+        resultsCount: response.results.length
+      });
+  
+      res.json(response);
+      console.log('========= GET CURRENT SESSION RESULTS END =========');
     } catch (error) {
+      console.error('❌ Current session results error:', error);
+      console.log('========= GET CURRENT SESSION RESULTS FAILED =========');
       next(error);
     }
   },
@@ -1484,25 +1579,81 @@ collectSample: async (req, res, next) => {
    * @route GET /api/v1/lab-test/batch/:batchId
    */
   getBatchLabTests: async (req, res, next) => {
+    console.log('========= GET BATCH TESTS START =========');
+    console.log('Request params:', req.params);
+    console.log('User making request:', {
+      id: req.user?.id,
+      role: req.user?.role
+    });
+    
     try {
       const { batchId } = req.params;
+      console.log('🔍 Fetching batch tests for batchId:', batchId);
+      
       const tests = await batchLabTestService.getBatchTests(batchId);
+      console.log('✅ Batch tests fetched, count:', tests.length);
       
       if (tests.length === 0) {
+        console.log('❌ No tests found for batch');
         return res.status(404).json({
           success: false,
           message: 'Batch not found'
         });
       }
 
-      res.json({
+      // Log detailed information about each test for debugging
+      tests.forEach((test, index) => {
+        console.log(`\n📋 Test ${index + 1} details:`);
+        console.log('- ID:', test.id);
+        console.log('- Test Type:', test.testType);
+        console.log('- Status:', test.status);
+        console.log('- Has Results:', !!test.results);
+        console.log('- Has Reference Range:', !!test.referenceRange);
+        
+        if (test.referenceRange) {
+          console.log('- Reference Range Keys:', Object.keys(test.referenceRange));
+          console.log('- Reference Range Sample:', JSON.stringify(test.referenceRange, null, 2));
+          
+          // Check if any reference range has units
+          const hasUnits = Object.values(test.referenceRange).some(range => range && range.unit);
+          console.log('- Reference Range Has Units:', hasUnits);
+        }
+        
+        if (test.results) {
+          console.log('- Results Type:', typeof test.results);
+          console.log('- Results Keys:', Object.keys(test.results));
+          console.log('- Results Sample:', JSON.stringify(test.results, null, 2));
+          
+          if (typeof test.results === 'object' && test.results.referenceRange) {
+            console.log('- Results.referenceRange exists:', !!test.results.referenceRange);
+            if (test.results.referenceRange) {
+              const resultsRefRangeHasUnits = Object.values(test.results.referenceRange).some(range => range && range.unit);
+              console.log('- Results.referenceRange has units:', resultsRefRangeHasUnits);
+            }
+          }
+        }
+      });
+
+      console.log('\n📤 Sending response to frontend');
+      const response = {
         success: true,
         batchId,
         totalTests: tests.length,
         tests
+      };
+      
+      console.log('📤 Response structure:', {
+        success: response.success,
+        batchId: response.batchId,
+        totalTests: response.totalTests,
+        testsCount: response.tests.length
       });
+      
+      res.json(response);
+      console.log('========= GET BATCH TESTS END =========');
     } catch (error) {
-      console.error('Get batch tests error:', error);
+      console.error('❌ Get batch tests error:', error);
+      console.log('========= GET BATCH TESTS FAILED =========');
       next(error);
     }
   },

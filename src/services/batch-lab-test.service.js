@@ -136,27 +136,61 @@ class BatchLabTestService {
     
     return Promise.all(tests.map(async (test) => {
       const formattedTest = test.toJSON();
+      console.log(`\n🔍 Processing test ${formattedTest.id} (${formattedTest.testType})`);
+      console.log('- Status:', formattedTest.status);
+      console.log('- Has Results:', !!formattedTest.results);
+      console.log('- Has Reference Range:', !!formattedTest.referenceRange);
       
       // Format results section to include units (same as individual tests)
       if (formattedTest.results && formattedTest.status === 'COMPLETED') {
+        console.log('✅ Test has results and is completed, processing units...');
         const originalResults = formattedTest.results;
         let enhancedReferenceRange = formattedTest.referenceRange;
         
+        console.log('- Original Results:', JSON.stringify(originalResults, null, 2));
+        console.log('- Original Reference Range:', JSON.stringify(enhancedReferenceRange, null, 2));
+        
         // Add units from template if missing
         try {
+          console.log('🔍 Fetching test definition for:', formattedTest.testType);
           const testDefinition = await labTestCatalogService.getTestById(formattedTest.testType);
+          
           if (testDefinition && testDefinition.parameters && enhancedReferenceRange) {
+            console.log('✅ Test definition found with parameters:', testDefinition.parameters.length);
             enhancedReferenceRange = { ...enhancedReferenceRange };
+            
             testDefinition.parameters.forEach(param => {
-              if (enhancedReferenceRange[param.code] && param.unit && !enhancedReferenceRange[param.code].unit) {
-                enhancedReferenceRange[param.code].unit = param.unit;
+              console.log(`  - Checking parameter: ${param.code} (${param.name}) - Unit: ${param.unit}`);
+              
+              if (enhancedReferenceRange[param.code]) {
+                console.log(`    ✅ Found matching reference range for ${param.code}`);
+                console.log(`    - Current range:`, enhancedReferenceRange[param.code]);
+                
+                if (param.unit && !enhancedReferenceRange[param.code].unit) {
+                  console.log(`    ✅ Adding unit ${param.unit} to ${param.code}`);
+                  enhancedReferenceRange[param.code].unit = param.unit;
+                } else if (enhancedReferenceRange[param.code].unit) {
+                  console.log(`    ℹ️ Unit already exists: ${enhancedReferenceRange[param.code].unit}`);
+                } else {
+                  console.log(`    ⚠️ No unit available for parameter ${param.code}`);
+                }
+              } else {
+                console.log(`    ❌ No matching reference range found for parameter ${param.code}`);
               }
             });
+            
+            console.log('- Enhanced Reference Range:', JSON.stringify(enhancedReferenceRange, null, 2));
+          } else {
+            console.log('❌ Test definition not found or missing parameters');
+            console.log('- Test Definition exists:', !!testDefinition);
+            console.log('- Has Parameters:', !!(testDefinition?.parameters));
+            console.log('- Has Reference Range:', !!enhancedReferenceRange);
           }
         } catch (catalogError) {
-          console.warn('Could not fetch test template for units:', catalogError.message);
+          console.warn('❌ Could not fetch test template for units:', catalogError.message);
         }
         
+        console.log('🔄 Formatting results structure...');
         formattedTest.results = {
           data: originalResults,
           referenceRange: enhancedReferenceRange,
@@ -166,6 +200,14 @@ class BatchLabTestService {
           requiresFollowUp: formattedTest.metadata?.requiresFollowUp || false,
           notes: formattedTest.notes
         };
+        
+        // Also update the top-level referenceRange for consistency
+        formattedTest.referenceRange = enhancedReferenceRange;
+        
+        console.log('✅ Final formatted results:', JSON.stringify(formattedTest.results, null, 2));
+        console.log('✅ Final top-level reference range:', JSON.stringify(formattedTest.referenceRange, null, 2));
+      } else {
+        console.log('⏭️ Skipping unit processing - test not completed or no results');
       }
       
       return formattedTest;
@@ -336,19 +378,28 @@ class BatchLabTestService {
 
         // Get test template to merge units into reference range
         let enhancedReferenceRange = testResult.referenceRange;
+        console.log(`🔍 Processing results for test ${test.id} (${test.testType})`);
+        console.log('- Original Reference Range:', JSON.stringify(testResult.referenceRange, null, 2));
+        
         try {
           const testDefinition = await labTestCatalogService.getTestById(test.testType);
           if (testDefinition && testDefinition.parameters) {
+            console.log('✅ Test definition found, merging units...');
             // Merge units from template parameters into reference range
             enhancedReferenceRange = { ...testResult.referenceRange };
             testDefinition.parameters.forEach(param => {
+              console.log(`  - Checking parameter: ${param.code} - Unit: ${param.unit}`);
               if (enhancedReferenceRange[param.code] && param.unit) {
+                console.log(`    ✅ Adding unit ${param.unit} to ${param.code}`);
                 enhancedReferenceRange[param.code].unit = param.unit;
               }
             });
+            console.log('- Enhanced Reference Range:', JSON.stringify(enhancedReferenceRange, null, 2));
+          } else {
+            console.log('❌ Test definition not found or missing parameters');
           }
         } catch (catalogError) {
-          console.warn('Could not fetch test template for units:', catalogError.message);
+          console.warn('❌ Could not fetch test template for units:', catalogError.message);
         }
 
         const resultsMetadata = {
