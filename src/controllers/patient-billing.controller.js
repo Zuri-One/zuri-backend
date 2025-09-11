@@ -482,7 +482,21 @@ class PatientBillingController {
           {
             model: Patient,
             as: 'patient',
-            attributes: ['surname', 'otherNames', 'patientNumber']
+            attributes: [
+              'id',
+              'patientNumber',
+              'surname',
+              'otherNames',
+              'sex',
+              'dateOfBirth',
+              'telephone1',
+              'telephone2',
+              'email',
+              'idType',
+              'idNumber',
+              'paymentScheme',
+              'insuranceInfo'
+            ]
           },
           {
             model: User,
@@ -495,11 +509,29 @@ class PatientBillingController {
         order: [['createdAt', 'DESC']]
       });
 
+      // Enrich each bill's patient with payment details from the bill
+      const enrichedBills = bills.map((bill) => {
+        const b = bill.toJSON();
+        if (b.patient) {
+          b.patient = {
+            ...b.patient,
+            paymentScheme: b.patient.paymentScheme || null,
+            insuranceInfo: b.patient.insuranceInfo || null,
+            payment: {
+              method: b.paymentMethod || null,
+              reference: b.paymentReference || null,
+              paidAt: b.paidAt || null
+            }
+          };
+        }
+        return b;
+      });
+
       res.json({
         success: true,
-        count: bills.length,
+        count: enrichedBills.length,
         total: count,
-        bills
+        bills: enrichedBills
       });
     } catch (error) {
       next(error);
