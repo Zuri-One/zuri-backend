@@ -46,6 +46,7 @@ const models = {
   Supplier: require(path.join(__dirname, 'supplier.model')),
   InventoryReceipt: require(path.join(__dirname, 'inventory-receipt.model')),
   OmaeraMedication: require(path.join(__dirname, 'omaera-medication.model')),
+  PharmacyBill: require(path.join(__dirname, 'pharmacy-bill.model')),
 };
 
 // Enhanced initialization function that supports multiple patterns
@@ -130,6 +131,7 @@ const modelInitializationOrder = [
   'Supplier',
   'InventoryReceipt',
   'OmaeraMedication',
+  'PharmacyBill',
 ];
 
 // Initialize models in order with enhanced error handling
