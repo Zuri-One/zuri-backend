@@ -24,6 +24,7 @@ const examinationRoutes = require('./examination.route');
 const icdRoutes = require('./icd.route'); 
 const labTestCatalogRoutes = require('./lab-test-catalog.route');
 const ccpRoutes = require('./ccp.routes');
+const patientBillingRoutes = require('./patient-billing.route');
 
 
 // New route imports
@@ -56,6 +57,7 @@ router.use('/examinations', examinationRoutes);
 router.use('/icd', icdRoutes); // Mount ICD routes
 router.use('/lab-test-catalog', labTestCatalogRoutes);
 router.use('/ccp', ccpRoutes);
+router.use('/patient-billing', patientBillingRoutes);
 
 // Mount new routes
 // router.use('/progress-notes', progressNoteRoutes);
