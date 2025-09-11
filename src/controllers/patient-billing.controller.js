@@ -557,14 +557,28 @@ class PatientBillingController {
   async getBillDetails(req, res, next) {
     try {
       const { id } = req.params;
-      
+
       const bill = await PharmacyBill.findOne({
         where: { id },
         include: [
           {
             model: Patient,
             as: 'patient',
-            attributes: ['surname', 'otherNames', 'patientNumber', 'telephone1']
+            attributes: [
+              'id',
+              'patientNumber',
+              'surname',
+              'otherNames',
+              'sex',
+              'dateOfBirth',
+              'telephone1',
+              'telephone2',
+              'email',
+              'idType',
+              'idNumber',
+              'paymentScheme',
+              'insuranceInfo'
+            ]
           },
           {
             model: User,
@@ -573,19 +587,33 @@ class PatientBillingController {
           }
         ]
       });
-      
+
       if (!bill) {
         return res.status(404).json({
           success: false,
           message: 'Bill not found'
         });
       }
-      
-      res.json({
+
+      // Enrich patient object with payment details and full scheme/insurance info
+      const b = bill.toJSON();
+      if (b.patient) {
+        b.patient = {
+          ...b.patient,
+          paymentScheme: b.patient.paymentScheme || null,  // { type, provider, policyNumber, memberNumber }
+          insuranceInfo: b.patient.insuranceInfo || null,  // { scheme, provider, membershipNumber, principalMember }
+          payment: {
+            method: b.paymentMethod || null,
+            reference: b.paymentReference || null,
+            paidAt: b.paidAt || null
+          }
+        };
+      }
+
+      return res.json({
         success: true,
-        bill
+        bill: b
       });
-      
     } catch (error) {
       next(error);
     }
