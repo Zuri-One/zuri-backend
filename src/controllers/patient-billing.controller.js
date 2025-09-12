@@ -1,10 +1,20 @@
-const { OmaeraMedication, PharmacyBill, Patient, User } = require('../models');
+const db = require('../models');
 const { Op } = require('sequelize');
+
+// Defensive model resolver to avoid undefined models in some environments (e.g. boot order, partial deploys)
+const getModel = (name) => db[name] || (db.sequelize && db.sequelize.models ? db.sequelize.models[name] : undefined);
 
 class PatientBillingController {
   
   async searchPatients(req, res, next) {
     try {
+      const Patient = getModel('Patient');
+      if (!Patient) {
+        return res.status(500).json({
+          success: false,
+          message: 'Patient model not initialized'
+        });
+      }
       const { search, limit = 20 } = req.query;
       
       if (!search || search.trim().length < 2) {
@@ -51,6 +61,14 @@ class PatientBillingController {
   
   async searchMedications(req, res, next) {
     try {
+      const OmaeraMedication = getModel('OmaeraMedication');
+      if (!OmaeraMedication) {
+        return res.status(500).json({
+          success: false,
+          message: 'OmaeraMedication model not initialized'
+        });
+      }
+
       const {
         search,
         code,
@@ -142,6 +160,13 @@ class PatientBillingController {
   
   async getMedicationById(req, res, next) {
     try {
+      const OmaeraMedication = getModel('OmaeraMedication');
+      if (!OmaeraMedication) {
+        return res.status(500).json({
+          success: false,
+          message: 'OmaeraMedication model not initialized'
+        });
+      }
       const { id } = req.params;
       
       const medication = await OmaeraMedication.findOne({
@@ -167,6 +192,13 @@ class PatientBillingController {
   
   async updateMedicationPrice(req, res, next) {
     try {
+      const OmaeraMedication = getModel('OmaeraMedication');
+      if (!OmaeraMedication) {
+        return res.status(500).json({
+          success: false,
+          message: 'OmaeraMedication model not initialized'
+        });
+      }
       const { id } = req.params;
       const { currentPrice, notes } = req.body;
       
@@ -206,6 +238,17 @@ class PatientBillingController {
   
   async createPharmacyBill(req, res, next) {
     try {
+      const Patient = getModel('Patient');
+      const OmaeraMedication = getModel('OmaeraMedication');
+      const PharmacyBill = getModel('PharmacyBill');
+
+      if (!Patient || !OmaeraMedication || !PharmacyBill) {
+        return res.status(500).json({
+          success: false,
+          message: 'Required models not initialized (Patient/OmaeraMedication/PharmacyBill)'
+        });
+      }
+
       const { patientId, items, notes } = req.body;
 
       if (!patientId || !items || !Array.isArray(items) || items.length === 0) {
@@ -391,6 +434,17 @@ class PatientBillingController {
   
   async getPharmacyBills(req, res, next) {
     try {
+      const PharmacyBill = getModel('PharmacyBill');
+      const Patient = getModel('Patient');
+      const User = getModel('User');
+
+      if (!PharmacyBill || !Patient || !User) {
+        return res.status(500).json({
+          success: false,
+          message: 'Required models not initialized (PharmacyBill/Patient/User)'
+        });
+      }
+
       const {
         patientId,
         status,
@@ -448,6 +502,17 @@ class PatientBillingController {
 
   async getPatientBills(req, res, next) {
     try {
+      const PharmacyBill = getModel('PharmacyBill');
+      const Patient = getModel('Patient');
+      const User = getModel('User');
+
+      if (!PharmacyBill || !Patient || !User) {
+        return res.status(500).json({
+          success: false,
+          message: 'Required models not initialized (PharmacyBill/Patient/User)'
+        });
+      }
+
       const { patientId } = req.params;
       const {
         status,
@@ -540,6 +605,13 @@ class PatientBillingController {
   
   async updateBillStatus(req, res, next) {
     try {
+      const PharmacyBill = getModel('PharmacyBill');
+      if (!PharmacyBill) {
+        return res.status(500).json({
+          success: false,
+          message: 'PharmacyBill model not initialized'
+        });
+      }
       const { id } = req.params;
       const { status, paymentMethod, paymentReference } = req.body;
 
@@ -588,8 +660,17 @@ class PatientBillingController {
   
   async getBillDetails(req, res, next) {
     try {
+      const PharmacyBill = getModel('PharmacyBill');
+      const Patient = getModel('Patient');
+      const User = getModel('User');
+      if (!PharmacyBill || !Patient || !User) {
+        return res.status(500).json({
+          success: false,
+          message: 'Required models not initialized (PharmacyBill/Patient/User)'
+        });
+      }
       const { id } = req.params;
-
+ 
       const bill = await PharmacyBill.findOne({
         where: { id },
         include: [
