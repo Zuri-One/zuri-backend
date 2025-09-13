@@ -1,5 +1,6 @@
 const db = require('../models');
 const { Op } = require('sequelize');
+const labTestCatalogService = require('../services/lab-test-catalog.service');
 
 // Defensive model resolver to avoid undefined models in some environments (e.g. boot order, partial deploys)
 const getModel = (name) => db[name] || (db.sequelize && db.sequelize.models ? db.sequelize.models[name] : undefined);
@@ -274,11 +275,13 @@ class PatientBillingController {
       const billItems = [];
 
       for (const item of items) {
-        // Accept either a medication-backed line OR a custom charge line
+        // Accept either a medication-backed line, a lab test line, OR a custom charge line
         // Medication-backed line:
         //   { medicationId?: uuid, itemCode?: string, quantity: number, unitPriceOverride?: number, notes?: string }
+        // Lab test line:
+        //   { type: 'LAB_TEST', labTestId?: string, testId?: string, itemCode?: string, description?: string, unitPrice?: number, taxRate?: number, quantity: number }
         // Custom line:
-        //   { type: 'CUSTOM', description: string, quantity: number, unitPrice: number, taxRate?: number, itemCode?: string, notes?: string }
+        //   { type: item.type || 'CUSTOM', description: string, quantity: number, unitPrice: number, taxRate?: number, itemCode?: string, notes?: string }
         const quantity = parseInt(item.quantity, 10);
         if (!quantity || quantity <= 0) {
           return res.status(400).json({
@@ -287,8 +290,107 @@ class PatientBillingController {
           });
         }
 
-        // Custom item path
-        if (item.type === 'CUSTOM' || (!item.medicationId && !item.itemCode)) {
+        // LAB TEST path (handle before custom/medication so LAB_TEST with itemCode doesn't get misrouted)
+        if (
+          item.type === 'LAB_TEST' ||
+          item.labTestId ||
+          (item.type === 'LAB' && (item.itemCode || item.testId))
+        ) {
+          const testId = ((item.labTestId || item.testId || item.itemCode) || '').trim();
+          if (!testId) {
+            return res.status(400).json({
+              success: false,
+              message: 'Lab test identifier is required'
+            });
+          }
+
+          const test = await labTestCatalogService.getTestById(testId);
+          if (!test || test.active === false) {
+            return res.status(404).json({
+              success: false,
+              message: `Lab test not found for ${testId}`
+            });
+          }
+
+          // Prefer provided unitPrice; fallback to catalog price
+          const basePrice = item.unitPrice != null
+            ? parseFloat(item.unitPrice)
+            : parseFloat(test.price || 0);
+
+          if (isNaN(basePrice) || basePrice <= 0) {
+            return res.status(400).json({
+              success: false,
+              message: `Invalid unit price for lab test ${testId}`
+            });
+          }
+
+          const taxRate = item.taxRate != null ? parseFloat(item.taxRate) : 0;
+          const lineSubtotal = basePrice * quantity;
+          const lineTax = lineSubtotal * ((isNaN(taxRate) ? 0 : taxRate) / 100);
+          const lineTotal = lineSubtotal + lineTax;
+
+          billItems.push({
+            type: 'LAB_TEST',
+            labTestId: test.id,
+            itemCode: test.id,
+            itemDescription: item.description || test.displayName || test.name,
+            unitPrice: basePrice,
+            quantity,
+            subtotal: lineSubtotal,
+            taxRate: isNaN(taxRate) ? 0 : taxRate,
+            taxAmount: lineTax,
+            total: lineTotal,
+            notes: item.notes || null
+          });
+
+          subtotal += lineSubtotal;
+          totalTax += lineTax;
+          continue;
+        }
+
+        // Generic typed item path (e.g., CONSULTATION, DOCTOR_FEE, NURSING, PROCEDURE, etc.)
+        if (
+          item.type &&
+          !['CUSTOM', 'MEDICATION', 'LAB_TEST', 'LAB'].includes(String(item.type).toUpperCase())
+        ) {
+          const description = (item.description || '').trim();
+          const unitPrice = parseFloat(item.unitPrice);
+          const taxRate = item.taxRate != null ? parseFloat(item.taxRate) : 0;
+
+          if (!description || isNaN(unitPrice) || unitPrice <= 0) {
+            return res.status(400).json({
+              success: false,
+              message: `${item.type} items require description and positive unitPrice`
+            });
+          }
+
+          const lineSubtotal = unitPrice * quantity;
+          const lineTax = lineSubtotal * ((isNaN(taxRate) ? 0 : taxRate) / 100);
+          const lineTotal = lineSubtotal + lineTax;
+
+          billItems.push({
+            type: item.type,
+            itemCode: item.itemCode || null,
+            itemDescription: description,
+            unitPrice,
+            quantity,
+            subtotal: lineSubtotal,
+            taxRate: isNaN(taxRate) ? 0 : taxRate,
+            taxAmount: lineTax,
+            total: lineTotal,
+            notes: item.notes || null
+          });
+
+          subtotal += lineSubtotal;
+          totalTax += lineTax;
+          continue;
+        }
+
+        // Custom item path (default/fallback for arbitrary charges)
+        if (
+          item.type === 'CUSTOM' ||
+          (!item.type && !item.medicationId && (item.unitPrice != null || item.description))
+        ) {
           const description = (item.description || '').trim();
           const unitPrice = parseFloat(item.unitPrice);
           const taxRate = item.taxRate != null ? parseFloat(item.taxRate) : 0;
@@ -305,7 +407,7 @@ class PatientBillingController {
           const lineTotal = lineSubtotal + lineTax;
 
           billItems.push({
-            type: 'CUSTOM',
+            type: item.type || 'CUSTOM',
             itemCode: item.itemCode || null,
             itemDescription: description,
             packSize: null,
@@ -324,58 +426,65 @@ class PatientBillingController {
         }
 
         // Medication-backed path (by medicationId or itemCode)
-        let medication = null;
-        if (item.medicationId) {
-          medication = await OmaeraMedication.findOne({
-            where: { id: item.medicationId, isActive: true }
+        if (
+          String(item.type || '').toUpperCase() === 'MEDICATION' ||
+          item.medicationId ||
+          (item.itemCode && item.unitPrice == null && !item.description)
+        ) {
+          let medication = null;
+          if (item.medicationId) {
+            medication = await OmaeraMedication.findOne({
+              where: { id: item.medicationId, isActive: true }
+            });
+          } else if (item.itemCode) {
+            medication = await OmaeraMedication.findOne({
+              where: { itemCode: item.itemCode, isActive: true }
+            });
+          }
+
+          if (!medication) {
+            return res.status(404).json({
+              success: false,
+              message: `Medication not found for ${item.medicationId || item.itemCode}`
+            });
+          }
+
+          // Allow a per-line override price
+          const basePrice = item.unitPriceOverride != null
+            ? parseFloat(item.unitPriceOverride)
+            : parseFloat(medication.currentPrice);
+
+          if (isNaN(basePrice) || basePrice <= 0) {
+            return res.status(400).json({
+              success: false,
+              message: `Invalid unit price for ${medication.itemCode}`
+            });
+          }
+
+          const taxRate = medication.taxCode != null ? parseFloat(medication.taxCode) : 0;
+          const lineSubtotal = basePrice * quantity;
+          const lineTax = lineSubtotal * ((isNaN(taxRate) ? 0 : taxRate) / 100);
+          const lineTotal = lineSubtotal + lineTax;
+
+          billItems.push({
+            type: 'MEDICATION',
+            medicationId: medication.id,
+            itemCode: medication.itemCode,
+            itemDescription: medication.itemDescription,
+            packSize: medication.packSize,
+            unitPrice: basePrice,
+            quantity,
+            subtotal: lineSubtotal,
+            taxRate: isNaN(taxRate) ? 0 : taxRate,
+            taxAmount: lineTax,
+            total: lineTotal,
+            notes: item.notes || null
           });
-        } else if (item.itemCode) {
-          medication = await OmaeraMedication.findOne({
-            where: { itemCode: item.itemCode, isActive: true }
-          });
+
+          subtotal += lineSubtotal;
+          totalTax += lineTax;
+          continue;
         }
-
-        if (!medication) {
-          return res.status(404).json({
-            success: false,
-            message: `Medication not found for ${item.medicationId || item.itemCode}`
-          });
-        }
-
-        // Allow a per-line override price
-        const basePrice = item.unitPriceOverride != null
-          ? parseFloat(item.unitPriceOverride)
-          : parseFloat(medication.currentPrice);
-
-        if (isNaN(basePrice) || basePrice <= 0) {
-          return res.status(400).json({
-            success: false,
-            message: `Invalid unit price for ${medication.itemCode}`
-          });
-        }
-
-        const taxRate = medication.taxCode != null ? parseFloat(medication.taxCode) : 0;
-        const lineSubtotal = basePrice * quantity;
-        const lineTax = lineSubtotal * ((isNaN(taxRate) ? 0 : taxRate) / 100);
-        const lineTotal = lineSubtotal + lineTax;
-
-        billItems.push({
-          type: 'MEDICATION',
-          medicationId: medication.id,
-          itemCode: medication.itemCode,
-          itemDescription: medication.itemDescription,
-          packSize: medication.packSize,
-          unitPrice: basePrice,
-          quantity,
-          subtotal: lineSubtotal,
-          taxRate: isNaN(taxRate) ? 0 : taxRate,
-          taxAmount: lineTax,
-          total: lineTotal,
-          notes: item.notes || null
-        });
-
-        subtotal += lineSubtotal;
-        totalTax += lineTax;
       }
 
       const totalAmount = subtotal + totalTax;
