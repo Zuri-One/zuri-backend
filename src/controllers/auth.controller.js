@@ -1012,16 +1012,6 @@ exports.registerPatient = async (req, res, next) => {
       }
     }
 
-    // Check for existing telephone number
-    const existingPhone = await Patient.findOne({
-      where: { telephone1 }
-    });
-
-    if (existingPhone) {
-      return res.status(400).json({
-        message: 'Phone number already registered'
-      });
-    }
 
     // Check for existing email only if email is provided
     let hashedPassword = null;

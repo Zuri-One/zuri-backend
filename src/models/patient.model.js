@@ -63,7 +63,6 @@ class Patient extends Model {
     telephone1: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
       comment: 'Required - Primary contact number'
     },
     telephone2: {
@@ -410,8 +409,61 @@ class Patient extends Model {
       timestamps: true,
       hooks: {
         beforeValidate: async (patient) => {
+          // Normalize enums/casing
           if (patient.sex) {
             patient.sex = patient.sex.toUpperCase();
+          }
+
+          // Normalize Kenyan phone numbers to E.164 (+254...)
+          const normalizeKenyanPhone = (input) => {
+            if (!input) return input;
+            let s = String(input).trim();
+
+            // Preserve a single leading '+' if present, strip all other non-digits
+            if (s.startsWith('+')) {
+              s = '+' + s.slice(1).replace(/\D/g, '');
+            } else {
+              s = s.replace(/\D/g, '');
+            }
+
+            // If already in international format with '+'
+            if (s.startsWith('+')) return s;
+
+            // Common Kenyan formats
+            if (s.startsWith('0')) {
+              // 07XXXXXXXX or 01XXXXXXXX -> +2547/1XXXXXXX
+              return '+254' + s.slice(1);
+            }
+            if (s.startsWith('254')) {
+              // 2547XXXXXXXX -> +2547XXXXXXXX
+              return '+' + s;
+            }
+            if (s.startsWith('7') && s.length === 9) {
+              // 7XXXXXXXX -> +2547XXXXXXXX
+              return '+254' + s;
+            }
+            if (s.startsWith('1') && s.length === 9) {
+              // 1XXXXXXXX (e.g. 10/11 prefixes) -> +2541XXXXXXXX
+              return '+254' + s;
+            }
+
+            // Fallback: coerce to Kenyan format if it looks like MSISDN
+            if (/^\d{9,12}$/.test(s)) {
+              if (!s.startsWith('254')) {
+                return '+254' + s.slice(-9);
+              }
+              return '+' + s;
+            }
+
+            // Last resort: return cleaned string with leading +
+            return s.startsWith('+') ? s : '+' + s;
+          };
+
+          if (patient.telephone1) {
+            patient.telephone1 = normalizeKenyanPhone(patient.telephone1);
+          }
+          if (patient.telephone2) {
+            patient.telephone2 = normalizeKenyanPhone(patient.telephone2);
           }
         },
         beforeSave: async (patient) => {
@@ -425,10 +477,6 @@ class Patient extends Model {
         {
           unique: true,
           fields: ['email']
-        },
-        {
-          unique: true,
-          fields: ['telephone1']
         },
         {
           unique: true,
