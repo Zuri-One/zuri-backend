@@ -1147,3 +1147,143 @@ exports.getRegistrationSummary = async (req, res, next) => {
     next(error);
   }
 };
+// Update patient details (personal info, contact, next of kin, etc.)
+exports.updatePatientDetails = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const patient = await Patient.findByPk(id);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient not found'
+      });
+    }
+
+    // Only allow updating of safe fields
+    const allowedFields = [
+      'surname',
+      'otherNames',
+      'email',
+      'dateOfBirth',
+      'sex',
+      'telephone1',
+      'telephone2',
+      'postalAddress',
+      'postalCode',
+      'occupation',
+      'idType',
+      'idNumber',
+      'nationality',
+      'town',
+      'residence',
+      'nextOfKin',
+      'medicalHistory',
+      'insuranceInfo',
+      'registrationNotes',
+      'paymentScheme'
+    ];
+
+    const updateData = {};
+    for (const key of allowedFields) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        updateData[key] = req.body[key];
+      }
+    }
+
+    // Normalize/correct some incoming values prior to model hooks
+    if (typeof updateData.email === 'string' && updateData.email) {
+      updateData.email = updateData.email.toLowerCase();
+    }
+    if (typeof updateData.sex === 'string' && updateData.sex) {
+      updateData.sex = updateData.sex.toUpperCase();
+    }
+
+    // Prevent clearing required phone
+    if (Object.prototype.hasOwnProperty.call(updateData, 'telephone1')) {
+      const t1 = updateData.telephone1;
+      if (t1 === null || t1 === undefined || String(t1).trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: 'telephone1 is required'
+        });
+      }
+    }
+
+    // Next of kin validation/coercion
+    if (Object.prototype.hasOwnProperty.call(updateData, 'nextOfKin')) {
+      const nok = updateData.nextOfKin || {};
+      // Support "phone" alias -> "contact"
+      if (nok && !nok.contact && nok.phone) {
+        nok.contact = nok.phone;
+        delete nok.phone;
+      }
+
+      // If any of the core fields present, they must all be present
+      const anyProvided = !!(nok.name || nok.relationship || nok.contact);
+      const allProvided = !!(nok.name && nok.relationship && nok.contact);
+      if (anyProvided && !allProvided) {
+        return res.status(400).json({
+          success: false,
+          message: 'If nextOfKin data is provided, name, relationship and contact are all required'
+        });
+      }
+      updateData.nextOfKin = nok;
+    }
+
+    // Payment scheme basic validation (model also validates)
+    if (Object.prototype.hasOwnProperty.call(updateData, 'paymentScheme')) {
+      const ps = updateData.paymentScheme || {};
+      if (!ps.type) {
+        return res.status(400).json({
+          success: false,
+          message: 'Payment scheme type is required'
+        });
+      }
+      if (ps.type !== 'CASH' && !ps.provider) {
+        return res.status(400).json({
+          success: false,
+          message: 'Insurance provider is required when payment type is not CASH'
+        });
+      }
+      // Leave membershipNumber optional by design
+      updateData.paymentScheme = {
+        type: ps.type,
+        provider: ps.provider ?? null,
+        policyNumber: ps.policyNumber ?? null,
+        memberNumber: ps.memberNumber ?? ps.membershipNumber ?? null
+      };
+    }
+
+    // Merge JSONB fields to avoid accidental full overwrite if partials provided
+    const mergeObject = (current, incoming) => {
+      if (!incoming || typeof incoming !== 'object') return incoming;
+      return { ...(current || {}), ...incoming };
+    };
+
+    if (Object.prototype.hasOwnProperty.call(updateData, 'medicalHistory')) {
+      updateData.medicalHistory = mergeObject(patient.medicalHistory, updateData.medicalHistory);
+    }
+    if (Object.prototype.hasOwnProperty.call(updateData, 'insuranceInfo')) {
+      updateData.insuranceInfo = mergeObject(patient.insuranceInfo, updateData.insuranceInfo);
+    }
+    if (Object.prototype.hasOwnProperty.call(updateData, 'nextOfKin')) {
+      updateData.nextOfKin = mergeObject(patient.nextOfKin, updateData.nextOfKin);
+    }
+
+    // Apply updates on the instance to ensure hooks run (validation + phone normalization)
+    patient.set(updateData);
+
+    await patient.save();
+
+    // Return safe payload
+    return res.json({
+      success: true,
+      message: 'Patient details updated successfully',
+      patient: patient.toSafeObject ? patient.toSafeObject() : patient
+    });
+  } catch (error) {
+    console.error('Error updating patient details:', error);
+    next(error);
+  }
+};
