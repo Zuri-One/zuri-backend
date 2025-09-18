@@ -5,6 +5,13 @@ const labTestCatalogService = require('../services/lab-test-catalog.service');
 // Defensive model resolver to avoid undefined models in some environments (e.g. boot order, partial deploys)
 const getModel = (name) => db[name] || (db.sequelize && db.sequelize.models ? db.sequelize.models[name] : undefined);
 
+// Simple numeric normalization helper
+function parseMoney(input) {
+  if (input == null) return null;
+  const n = parseFloat(String(input).toString().replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
 class PatientBillingController {
   
   async searchPatients(req, res, next) {
@@ -169,23 +176,107 @@ class PatientBillingController {
         });
       }
       const { id } = req.params;
-      
+
       const medication = await OmaeraMedication.findOne({
         where: { id, isActive: true }
       });
-      
+
       if (!medication) {
         return res.status(404).json({
           success: false,
           message: 'Medication not found'
         });
       }
-      
+
       res.json({
         success: true,
         medication
       });
-      
+
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Add or update an OmaeraMedication entry (for receptionists, doctors, pharmacists, lab staff)
+  async addOrUpdateMedication(req, res, next) {
+    try {
+      const OmaeraMedication = getModel('OmaeraMedication');
+      if (!OmaeraMedication) {
+        return res.status(500).json({
+          success: false,
+          message: 'OmaeraMedication model not initialized'
+        });
+      }
+
+      const {
+        itemCode,
+        itemDescription,
+        packSize,
+        taxCode,
+        currentPrice,
+        originalPrice,
+        notes,
+        isActive
+      } = req.body || {};
+
+      // Basic validation
+      if (!itemCode || !String(itemCode).trim()) {
+        return res.status(400).json({ success: false, message: 'itemCode is required' });
+      }
+      if (!itemDescription || !String(itemDescription).trim()) {
+        return res.status(400).json({ success: false, message: 'itemDescription is required' });
+      }
+
+      const normTax = parseMoney(taxCode ?? 0);
+      const normCurrent = parseMoney(currentPrice);
+      const normOriginal = parseMoney(originalPrice ?? currentPrice);
+
+      if (normCurrent == null || normCurrent <= 0) {
+        return res.status(400).json({ success: false, message: 'currentPrice must be a positive number' });
+      }
+      if (normOriginal == null || normOriginal <= 0) {
+        return res.status(400).json({ success: false, message: 'originalPrice must be a positive number' });
+      }
+
+      const existing = await OmaeraMedication.findOne({ where: { itemCode: String(itemCode).trim() } });
+
+      if (existing) {
+        await existing.update({
+          itemDescription: String(itemDescription).trim(),
+          packSize: packSize ? String(packSize).trim() : null,
+          taxCode: normTax ?? 0,
+          originalPrice: normOriginal,
+          currentPrice: normCurrent,
+          isActive: typeof isActive === 'boolean' ? isActive : true,
+          lastUpdatedBy: req.user?.id || null,
+          notes: notes ? String(notes) : existing.notes
+        });
+
+        return res.status(200).json({
+          success: true,
+          action: 'updated',
+          medication: existing
+        });
+      }
+
+      const created = await OmaeraMedication.create({
+        itemCode: String(itemCode).trim(),
+        itemDescription: String(itemDescription).trim(),
+        packSize: packSize ? String(packSize).trim() : null,
+        taxCode: normTax ?? 0,
+        originalPrice: normOriginal,
+        currentPrice: normCurrent,
+        isActive: typeof isActive === 'boolean' ? isActive : true,
+        lastUpdatedBy: req.user?.id || null,
+        notes: notes ? String(notes) : null
+      });
+
+      return res.status(201).json({
+        success: true,
+        action: 'created',
+        medication: created
+      });
     } catch (error) {
       next(error);
     }

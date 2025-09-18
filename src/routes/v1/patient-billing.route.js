@@ -33,6 +33,13 @@ router.put(
   patientBillingController.updateMedicationPrice
 );
 
+// Add or update medication (allow Pharmacist, Receptionist, Doctor, Lab Technician, Admin)
+router.post(
+  '/medications',
+  authorize(['PHARMACIST', 'RECEPTIONIST', 'DOCTOR', 'LAB_TECHNICIAN', 'ADMIN']),
+  patientBillingController.addOrUpdateMedication
+);
+
 // Pharmacy billing
 router.post(
   '/bills',
