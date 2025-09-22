@@ -51,9 +51,8 @@ class Patient extends Model {
       allowNull: true,
       unique: true,
       validate: {
-        isEmail: true,
         isEmailValid(value) {
-          if (value !== null && value !== undefined && !validator.isEmail(value)) {
+          if (value && value.trim() !== '' && !validator.isEmail(value)) {
             throw new Error('Invalid email format');
           }
         }
