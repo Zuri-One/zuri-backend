@@ -13,31 +13,31 @@ class Patient extends Model {
     // Personal Information
     surname: {
       type: DataTypes.STRING,
-      allowNull: false,
-      comment: 'Required'
+no      allowNull: true,
+      comment: 'Optional for updates'
     },
     otherNames: {
       type: DataTypes.STRING,
-      allowNull: false,
-      comment: 'Required'
+      allowNull: true,
+      comment: 'Optional for updates'
     },
     sex: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       validate: {
         isIn: [['MALE', 'FEMALE', 'OTHER']]
       },
-      comment: 'Required'
+      comment: 'Optional for updates'
     },
     dateOfBirth: {
       type: DataTypes.DATE,
-      allowNull: false,
-      comment: 'Required'
+      allowNull: true,
+      comment: 'Optional for updates'
     },
     nationality: {
       type: DataTypes.STRING,
-      allowNull: false,
-      comment: 'Required'
+      allowNull: true,
+      comment: 'Optional for updates'
     },
     occupation: {
       type: DataTypes.STRING,
@@ -82,13 +82,13 @@ class Patient extends Model {
     },
     town: {
       type: DataTypes.STRING,
-      allowNull: false,
-      comment: 'Required'
+      allowNull: true,
+      comment: 'Optional for updates'
     },
     residence: {
       type: DataTypes.STRING,
-      allowNull: false,
-      comment: 'Required - Area of residence'
+      allowNull: true,
+      comment: 'Optional for updates - Area of residence'
     },
 
     isCCPEnrolled: {
@@ -120,12 +120,12 @@ class Patient extends Model {
     // Identification
     idType: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       validate: {
         isIn: [['NATIONAL_ID', 'BIRTH_CERTIFICATE', 'PASSPORT', 'DRIVING_LICENSE', 
                 'STUDENT_ID', 'MILITARY_ID', 'ALIEN_ID']]
       },
-      comment: 'Required - Type of ID document'
+      comment: 'Optional for updates - Type of ID document'
     },
     idNumber: {
       type: DataTypes.STRING,
@@ -184,25 +184,25 @@ class Patient extends Model {
     isEmergency: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
-      allowNull: false,
-      comment: 'Required - Indicates if this is an emergency case'
+      allowNull: true,
+      comment: 'Optional for updates - Indicates if this is an emergency case'
     },
     isRevisit: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
-      allowNull: false,
-      comment: 'Changes to true after first visit/discharge'
+      allowNull: true,
+      comment: 'Optional for updates - Changes to true after first visit/discharge'
     },
     status: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       defaultValue: 'WAITING',
       validate: {
         isIn: [['WAITING', 'IN_TRIAGE', 'IN_CONSULTATION', 'IN_LABORATORY',
                 'IN_RADIOLOGY', 'IN_PHARMACY', 'IN_PROCEDURE', 'IN_WARD',
                 'IN_SURGERY', 'DISCHARGED', 'REFERRED', 'DID_NOT_WAIT', 'CANCELLED', 'TRANSFERRED']]
       },
-      comment: 'Required - Tracks current stage of patient visit'
+      comment: 'Optional for updates - Tracks current stage of patient visit'
     },
     registrationNotes: {
       type: DataTypes.TEXT,
@@ -213,7 +213,7 @@ class Patient extends Model {
     // Payment Information
     paymentScheme: {
       type: DataTypes.JSONB,
-      allowNull: false,
+      allowNull: true,
       defaultValue: {
         type: 'CASH',
         provider: null,
@@ -222,16 +222,16 @@ class Patient extends Model {
       },
       validate: {
         hasRequiredFields(value) {
-          if (!value.type) {
+          if (value && !value.type) {
             throw new Error('Payment scheme type is required');
           }
           // Member number validation removed to make it optional
-          if (value.type !== 'CASH' && (!value.provider)) {
+          if (value && value.type !== 'CASH' && (!value.provider)) {
             throw new Error('Insurance provider is required for insurance payments');
           }
         }
       },
-      comment: 'Required - Payment scheme details (type and provider for insurance, member number optional)'
+      comment: 'Optional for updates - Payment scheme details (type and provider for insurance, member number optional)'
     },
 
     // Account Status and Security

@@ -1271,10 +1271,14 @@ exports.updatePatientDetails = async (req, res, next) => {
       updateData.nextOfKin = mergeObject(patient.nextOfKin, updateData.nextOfKin);
     }
 
-    // Apply updates on the instance to ensure hooks run (validation + phone normalization)
-    patient.set(updateData);
+    // Use direct update to avoid full model validation on partial updates
+    await Patient.update(updateData, {
+      where: { id },
+      individualHooks: true // This ensures hooks still run for the updated fields
+    });
 
-    await patient.save();
+    // Fetch updated patient
+    await patient.reload();
 
     // Return safe payload
     return res.json({
