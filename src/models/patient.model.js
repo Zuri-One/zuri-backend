@@ -13,7 +13,7 @@ class Patient extends Model {
     // Personal Information
     surname: {
       type: DataTypes.STRING,
-no      allowNull: true,
+       allowNull: true,
       comment: 'Optional for updates'
     },
     otherNames: {
