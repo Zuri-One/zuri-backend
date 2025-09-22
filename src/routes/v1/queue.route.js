@@ -35,7 +35,7 @@ router.post('/consultation/:queueId',
  */
 router.post('/add', 
   authenticate, 
-  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']), 
+  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'PHARMACIST']), 
   queueController.addToQueue
 );
 
