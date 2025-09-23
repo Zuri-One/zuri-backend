@@ -53,7 +53,7 @@ const { authenticate, authorize } = require('../../middleware/auth.middleware');
  *               type: integer
  *             todayCount:
  *               type: integer
- *     
+ *
  *     HealthMetrics:
  *       type: object
  *       properties:
@@ -173,9 +173,10 @@ router.get('/doctors', patientController.searchDoctors);
  *       404:
  *         description: Patient not found
  */
-router.patch('/:id/ccp-enrollment', 
-  authenticate, 
-  // authorize(['ADMIN', 'DOCTOR', 'NURSE']), 
+router.patch(
+  '/:id/ccp-enrollment',
+  authenticate,
+  // authorize(['ADMIN', 'DOCTOR', 'NURSE']),
   patientController.toggleCCPEnrollment
 );
 
@@ -210,9 +211,10 @@ router.patch('/:id/ccp-enrollment',
  *       200:
  *         description: List of CCP enrolled patients retrieved successfully
  */
-router.get('/ccp/patients', 
-  authenticate, 
-  // authorize(['ADMIN', 'DOCTOR', 'NURSE']), 
+router.get(
+  '/ccp/patients',
+  authenticate,
+  // authorize(['ADMIN', 'DOCTOR', 'NURSE']),
   patientController.getCCPPatients
 );
 
@@ -361,12 +363,12 @@ router.get('/health-metrics', patientController.getHealthMetrics);
  *       200:
  *         description: Patient registrations retrieved successfully
  */
-router.get('/registrations', 
-  authenticate, 
-  // authorize(['ADMIN', 'RECEPTIONIST']), 
+router.get(
+  '/registrations',
+  authenticate,
+  // authorize(['ADMIN', 'RECEPTIONIST']),
   patientController.getPatientRegistrations
 );
-
 
 /**
  * @swagger
@@ -389,16 +391,18 @@ router.get('/registrations',
  *       404:
  *         description: Patient not found
  */
-router.get('/details/:identifier', 
-  authenticate, 
-  // authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']), 
+router.get(
+  '/details/:identifier',
+  authenticate,
+  // authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'BILLING_STAFF']),
   patientController.getPatientDetails
 );
 
-
-
-router.patch('/:id/emergency', authenticate, patientController.updateEmergencyStatus);
-
+router.patch(
+  '/:id/emergency',
+  authenticate,
+  patientController.updateEmergencyStatus
+);
 
 /**
  * @swagger
@@ -471,9 +475,10 @@ router.patch('/:id/emergency', authenticate, patientController.updateEmergencySt
  *                         limit:
  *                           type: integer
  */
-router.get('/all', 
-  authenticate, 
-  // authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']), 
+router.get(
+  '/all',
+  authenticate,
+  // authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'BILLING_STAFF']),
   patientController.getAllPatients
 );
 
@@ -590,153 +595,154 @@ router.get('/all',
  *       400:
  *         description: Search term is required
  */
-router.get('/search', 
-  authenticate, 
-  // authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']), 
+router.get(
+  '/search',
+  authenticate,
+  // authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'BILLING_STAFF']),
   patientController.searchPatients
 );
 
 router.post(
-    '/:patientId/request-access',
-    authenticate,
-    // authorize(['DOCTOR']),
-    patientConsentController.requestAccess
-  );
-  
-  router.post(
-    '/consent/response/:token',
-    authenticate,
-    // authorize(['PATIENT']),
-    patientConsentController.handleAccessResponse
-  );
-  
-  router.get(
-    '/:patientId/access-status',
-    authenticate,
-    // authorize(['DOCTOR']),
-    patientConsentController.checkAccessStatus
-  );
+  '/:patientId/request-access',
+  authenticate,
+  // authorize(['DOCTOR']),
+  patientConsentController.requestAccess
+);
 
-  /**
-   * @swagger
-   * /api/v1/patient/{id}:
-   *   patch:
-   *     summary: Update patient details (personal info, contact, next of kin, etc.)
-   *     tags: [Patient Management]
-   *     security:
-   *       - bearerAuth: []
-   *     parameters:
-   *       - in: path
-   *         name: id
-   *         required: true
-   *         schema:
-   *           type: string
-   *         description: Patient ID (UUID)
-   *     requestBody:
-   *       required: true
-   *       content:
-   *         application/json:
-   *           schema:
-   *             type: object
-   *             properties:
-   *               surname:
-   *                 type: string
-   *               otherNames:
-   *                 type: string
-   *               email:
-   *                 type: string
-   *                 format: email
-   *               dateOfBirth:
-   *                 type: string
-   *                 format: date
-   *               sex:
-   *                 type: string
-   *                 enum: [MALE, FEMALE, OTHER]
-   *               telephone1:
-   *                 type: string
-   *                 description: Required; normalized to E.164 (+254...) by server
-   *               telephone2:
-   *                 type: string
-   *               postalAddress:
-   *                 type: string
-   *               postalCode:
-   *                 type: string
-   *               occupation:
-   *                 type: string
-   *               idType:
-   *                 type: string
-   *                 enum: [NATIONAL_ID, BIRTH_CERTIFICATE, PASSPORT, DRIVING_LICENSE, STUDENT_ID, MILITARY_ID, ALIEN_ID]
-   *               idNumber:
-   *                 type: string
-   *               nationality:
-   *                 type: string
-   *               town:
-   *                 type: string
-   *               residence:
-   *                 type: string
-   *               nextOfKin:
-   *                 type: object
-   *                 properties:
-   *                   name:
-   *                     type: string
-   *                   relationship:
-   *                     type: string
-   *                   contact:
-   *                     type: string
-   *                     description: Phone number for next of kin
-   *               medicalHistory:
-   *                 type: object
-   *                 properties:
-   *                   existingConditions:
-   *                     type: array
-   *                     items:
-   *                       type: string
-   *                   allergies:
-   *                     type: array
-   *                     items:
-   *                       type: string
-   *               insuranceInfo:
-   *                 type: object
-   *                 properties:
-   *                   scheme:
-   *                     type: string
-   *                   provider:
-   *                     type: string
-   *                   membershipNumber:
-   *                     type: string
-   *                   principalMember:
-   *                     type: string
-   *               registrationNotes:
-   *                 type: string
-   *               paymentScheme:
-   *                 type: object
-   *                 properties:
-   *                   type:
-   *                     type: string
-   *                     enum: [CASH, INSURANCE]
-   *                   provider:
-   *                     type: string
-   *                   policyNumber:
-   *                     type: string
-   *                   memberNumber:
-   *                     type: string
-   *     responses:
-   *       200:
-   *         description: Patient details updated successfully
-   *       400:
-   *         description: Validation error
-   *       401:
-   *         description: Unauthorized
-   *       403:
-   *         description: Forbidden
-   *       404:
-   *         description: Patient not found
-   */
-  router.patch(
-    '/:id',
-    authenticate,
-    authorize(['ADMIN', 'DOCTOR', 'RECEPTIONIST']),
-    patientController.updatePatientDetails
-  );
+router.post(
+  '/consent/response/:token',
+  authenticate,
+  // authorize(['PATIENT']),
+  patientConsentController.handleAccessResponse
+);
+
+router.get(
+  '/:patientId/access-status',
+  authenticate,
+  // authorize(['DOCTOR']),
+  patientConsentController.checkAccessStatus
+);
+
+/**
+ * @swagger
+ * /api/v1/patient/{id}:
+ *   patch:
+ *     summary: Update patient details (personal info, contact, next of kin, etc.)
+ *     tags: [Patient Management]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Patient ID (UUID)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               surname:
+ *                 type: string
+ *               otherNames:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               dateOfBirth:
+ *                 type: string
+ *                 format: date
+ *               sex:
+ *                 type: string
+ *                 enum: [MALE, FEMALE, OTHER]
+ *               telephone1:
+ *                 type: string
+ *                 description: Required; normalized to E.164 (+254...) by server
+ *               telephone2:
+ *                 type: string
+ *               postalAddress:
+ *                 type: string
+ *               postalCode:
+ *                 type: string
+ *               occupation:
+ *                 type: string
+ *               idType:
+ *                 type: string
+ *                 enum: [NATIONAL_ID, BIRTH_CERTIFICATE, PASSPORT, DRIVING_LICENSE, STUDENT_ID, MILITARY_ID, ALIEN_ID]
+ *               idNumber:
+ *                 type: string
+ *               nationality:
+ *                 type: string
+ *               town:
+ *                 type: string
+ *               residence:
+ *                 type: string
+ *               nextOfKin:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   relationship:
+ *                     type: string
+ *                   contact:
+ *                     type: string
+ *                     description: Phone number for next of kin
+ *               medicalHistory:
+ *                 type: object
+ *                 properties:
+ *                   existingConditions:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *                   allergies:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *               insuranceInfo:
+ *                 type: object
+ *                 properties:
+ *                   scheme:
+ *                     type: string
+ *                   provider:
+ *                     type: string
+ *                   membershipNumber:
+ *                     type: string
+ *                   principalMember:
+ *                     type: string
+ *               registrationNotes:
+ *                 type: string
+ *               paymentScheme:
+ *                 type: object
+ *                 properties:
+ *                   type:
+ *                     type: string
+ *                     enum: [CASH, INSURANCE]
+ *                   provider:
+ *                     type: string
+ *                   policyNumber:
+ *                     type: string
+ *                   memberNumber:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Patient details updated successfully
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ *       404:
+ *         description: Patient not found
+ */
+router.patch(
+  '/:id',
+  authenticate,
+  authorize(['ADMIN', 'DOCTOR', 'RECEPTIONIST', 'BILLING_STAFF']),
+  patientController.updatePatientDetails
+);
 
 module.exports = router;
