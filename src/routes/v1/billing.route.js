@@ -11,13 +11,13 @@ const {
   getBillingHistory,
   getBillingDetails,
   generateBillingReport,
-  getReceipt
+  getReceipt,
 } = require('../../controllers/billing.controller');
 
 const {
   initializePaystack,
   verifyPaystack,
-  paystackWebhook
+  paystackWebhook,
 } = require('../../controllers/paystack.controller');
 
 // Base path: /api/v1/billing
@@ -36,38 +36,44 @@ router.use(authenticate); // Changed from protect to authenticate
 router.get('/patient/:patientId/current', getCurrentBill);
 
 // Add items to bill
-router.post('/add-items', 
-  authorize(['NURSE', 'LAB_TECHNICIAN', 'PHARMACIST']), // Added array syntax for roles
+router.post(
+  '/add-items',
+  authorize(['NURSE', 'LAB_TECHNICIAN', 'PHARMACIST', 'BILLING_STAFF']), // Added array syntax for roles
   addBillingItems
 );
 
 // Finalize payment (reception only)
-router.post('/patient/:patientId/finalize',
-  authorize(['RECEPTIONIST']), // Added array syntax for roles
+router.post(
+  '/patient/:patientId/finalize',
+  authorize(['RECEPTIONIST', 'BILLING_STAFF']), // Added array syntax for roles
   finalizePayment
 );
 
 // Get or regenerate receipt
-router.get('/receipt/:billingId', 
-  authorize(['RECEPTIONIST', 'ADMIN']),
+router.get(
+  '/receipt/:billingId',
+  authorize(['RECEPTIONIST', 'ADMIN', 'BILLING_STAFF']),
   getReceipt
 );
 
 // Billing history and reports
 router.get('/history', getBillingHistory);
 router.get('/details/:id', getBillingDetails);
-router.get('/report', 
-  authorize(['ADMIN', 'FINANCE']),
+router.get(
+  '/report',
+  authorize(['ADMIN', 'FINANCE', 'BILLING_STAFF']),
   generateBillingReport
 );
 
 // Paystack integration
-router.post('/initialize-paystack', 
+router.post(
+  '/initialize-paystack',
   authorize(['RECEPTIONIST']),
   initializePaystack
 );
 
-router.get('/verify-paystack/:reference', 
+router.get(
+  '/verify-paystack/:reference',
   authorize(['RECEPTIONIST']),
   verifyPaystack
 );
