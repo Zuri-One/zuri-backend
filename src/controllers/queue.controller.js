@@ -23,6 +23,8 @@ exports.addToQueue = async (req, res, next) => {
       triageId,
     } = req.body;
 
+    const userRole = req.user.role;
+
     // Check if patient is already in any active queue
     const existingQueue = await DepartmentQueue.findOne({
       where: {
@@ -39,12 +41,24 @@ exports.addToQueue = async (req, res, next) => {
       ],
     });
 
+    // If patient is already in a queue, only ADMIN and RECEPTIONIST can move them
     if (existingQueue) {
-      return res.status(400).json({
-        success: false,
-        message: `Patient is already in ${existingQueue.Department.name} queue`,
-        currentQueue: existingQueue,
-      });
+      if (userRole !== 'ADMIN' && userRole !== 'RECEPTIONIST') {
+        return res.status(400).json({
+          success: false,
+          message: `Patient is already in ${existingQueue.Department.name} queue`,
+          currentQueue: existingQueue,
+        });
+      }
+      
+      // If same department, return error
+      if (existingQueue.departmentId === departmentId) {
+        return res.status(400).json({
+          success: false,
+          message: `Patient is already in ${existingQueue.Department.name} queue`,
+          currentQueue: existingQueue,
+        });
+      }
     }
 
     // Validate patient exists and check their current status
@@ -130,6 +144,24 @@ exports.addToQueue = async (req, res, next) => {
         estimatedWaitTime * (waitingPatients + 1) * (priority / 3)
       );
 
+      // If patient has existing queue and user is ADMIN/RECEPTIONIST, transfer them
+      if (existingQueue && (userRole === 'ADMIN' || userRole === 'RECEPTIONIST')) {
+        // Close existing queue entry
+        await existingQueue.update(
+          {
+            status: 'TRANSFERRED',
+            endTime: new Date(),
+            actualWaitTime: existingQueue.calculateWaitTime ? existingQueue.calculateWaitTime() : Math.floor(
+              (new Date() - new Date(existingQueue.startTime || existingQueue.createdAt)) / (1000 * 60)
+            ),
+            notes: existingQueue.notes
+              ? `${existingQueue.notes}\nTransferred to ${department.name} department`
+              : `Transferred to ${department.name} department`,
+          },
+          { transaction }
+        );
+      }
+
       // Create queue entry
       const queueEntry = await DepartmentQueue.create(
         {
@@ -138,8 +170,10 @@ exports.addToQueue = async (req, res, next) => {
           assignedToId,
           queueNumber,
           priority,
-          notes,
-          source,
+          notes: existingQueue && (userRole === 'ADMIN' || userRole === 'RECEPTIONIST')
+            ? `Transferred from ${existingQueue.Department.name} department. ${notes || ''}`
+            : notes,
+          source: existingQueue && (userRole === 'ADMIN' || userRole === 'RECEPTIONIST') ? 'TRANSFER' : source,
           triageId,
           status: 'WAITING',
           estimatedWaitTime,
@@ -239,13 +273,18 @@ exports.addToQueue = async (req, res, next) => {
         // Don't fail the request if notifications fail
       }
 
+      const message = existingQueue && (userRole === 'ADMIN' || userRole === 'RECEPTIONIST')
+        ? `Successfully transferred patient to ${department.name} queue`
+        : `Successfully added to ${department.name} queue`;
+
       res.status(201).json({
         success: true,
-        message: `Successfully added to ${department.name} queue`,
+        message,
         data: {
           queueEntry: completeQueueEntry,
           estimatedWaitTime,
           position: waitingPatients + 1,
+          wasTransferred: !!(existingQueue && (userRole === 'ADMIN' || userRole === 'RECEPTIONIST')),
         },
       });
     } catch (error) {
