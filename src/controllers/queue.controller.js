@@ -808,9 +808,17 @@ exports.assignDoctor = async (req, res, next) => {
 exports.transferToAnotherDepartment = async (req, res, next) => {
   try {
     const { queueId } = req.params;
-    const { newDepartmentId, reason } = req.body;
+    const { departmentId: newDepartmentId, reason } = req.body;
+    const userRole = req.user.role;
 
-    const queueEntry = await DepartmentQueue.findByPk(queueId, {
+    // Admin can transfer from any queue, others need active queue
+    const whereClause = userRole === 'ADMIN' ? { id: queueId } : {
+      id: queueId,
+      status: { [Op.notIn]: ['COMPLETED', 'CANCELLED'] }
+    };
+
+    const queueEntry = await DepartmentQueue.findOne({
+      where: whereClause,
       include: [{ model: Patient }]
     });
 
