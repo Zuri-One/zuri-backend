@@ -43,14 +43,18 @@ exports.addToQueue = async (req, res, next) => {
 
     // If patient is already in a queue, only ADMIN and RECEPTIONIST can move them
     if (existingQueue) {
-      if (userRole !== 'ADMIN' && userRole !== 'RECEPTIONIST') {
+      if (
+        userRole !== 'ADMIN' &&
+        userRole !== 'RECEPTIONIST' &&
+        userRole !== 'BILLING_STAFF'
+      ) {
         return res.status(400).json({
           success: false,
           message: `Patient is already in ${existingQueue.Department.name} queue`,
           currentQueue: existingQueue,
         });
       }
-      
+
       // If same department, return error
       if (existingQueue.departmentId === departmentId) {
         return res.status(400).json({
@@ -145,15 +149,26 @@ exports.addToQueue = async (req, res, next) => {
       );
 
       // If patient has existing queue and user is ADMIN/RECEPTIONIST, transfer them
-      if (existingQueue && (userRole === 'ADMIN' || userRole === 'RECEPTIONIST')) {
+      if (
+        existingQueue &&
+        (userRole === 'ADMIN' ||
+          userRole === 'RECEPTIONIST' ||
+          userRole === 'BILLING_STAFF')
+      ) {
         // Close existing queue entry
         await existingQueue.update(
           {
             status: 'TRANSFERRED',
             endTime: new Date(),
-            actualWaitTime: existingQueue.calculateWaitTime ? existingQueue.calculateWaitTime() : Math.floor(
-              (new Date() - new Date(existingQueue.startTime || existingQueue.createdAt)) / (1000 * 60)
-            ),
+            actualWaitTime: existingQueue.calculateWaitTime
+              ? existingQueue.calculateWaitTime()
+              : Math.floor(
+                  (new Date() -
+                    new Date(
+                      existingQueue.startTime || existingQueue.createdAt
+                    )) /
+                    (1000 * 60)
+                ),
             notes: existingQueue.notes
               ? `${existingQueue.notes}\nTransferred to ${department.name} department`
               : `Transferred to ${department.name} department`,
@@ -170,10 +185,22 @@ exports.addToQueue = async (req, res, next) => {
           assignedToId,
           queueNumber,
           priority,
-          notes: existingQueue && (userRole === 'ADMIN' || userRole === 'RECEPTIONIST')
-            ? `Transferred from ${existingQueue.Department.name} department. ${notes || ''}`
-            : notes,
-          source: existingQueue && (userRole === 'ADMIN' || userRole === 'RECEPTIONIST') ? 'TRANSFER' : source,
+          notes:
+            existingQueue &&
+            (userRole === 'ADMIN' ||
+              userRole === 'RECEPTIONIST' ||
+              userRole === 'BILLING_STAFF')
+              ? `Transferred from ${
+                  existingQueue.Department.name
+                } department. ${notes || ''}`
+              : notes,
+          source:
+            existingQueue &&
+            (userRole === 'ADMIN' ||
+              userRole === 'RECEPTIONIST' ||
+              userRole === 'BILLING_STAFF')
+              ? 'TRANSFER'
+              : source,
           triageId,
           status: 'WAITING',
           estimatedWaitTime,
@@ -273,9 +300,13 @@ exports.addToQueue = async (req, res, next) => {
         // Don't fail the request if notifications fail
       }
 
-      const message = existingQueue && (userRole === 'ADMIN' || userRole === 'RECEPTIONIST')
-        ? `Successfully transferred patient to ${department.name} queue`
-        : `Successfully added to ${department.name} queue`;
+      const message =
+        existingQueue &&
+        (userRole === 'ADMIN' ||
+          userRole === 'RECEPTIONIST' ||
+          userRole === 'BILLING_STAFF')
+          ? `Successfully transferred patient to ${department.name} queue`
+          : `Successfully added to ${department.name} queue`;
 
       res.status(201).json({
         success: true,
@@ -284,7 +315,12 @@ exports.addToQueue = async (req, res, next) => {
           queueEntry: completeQueueEntry,
           estimatedWaitTime,
           position: waitingPatients + 1,
-          wasTransferred: !!(existingQueue && (userRole === 'ADMIN' || userRole === 'RECEPTIONIST')),
+          wasTransferred: !!(
+            existingQueue &&
+            (userRole === 'ADMIN' ||
+              userRole === 'RECEPTIONIST' ||
+              userRole === 'BILLING_STAFF')
+          ),
         },
       });
     } catch (error) {
@@ -926,7 +962,9 @@ exports.transferToAnotherDepartment = async (req, res, next) => {
 
     // Admin can transfer from any queue, others need active queue
     const whereClause =
-      userRole === 'ADMIN' || userRole === 'RECEPTIONIST'
+      userRole === 'ADMIN' ||
+      userRole === 'RECEPTIONIST' ||
+      userRole === 'BILLING_STAFF'
         ? { id: queueId }
         : {
             id: queueId,

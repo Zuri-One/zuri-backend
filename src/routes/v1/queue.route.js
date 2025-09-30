@@ -35,7 +35,14 @@ router.post(
 router.post(
   '/add',
   authenticate,
-  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'PHARMACIST']),
+  authorize([
+    'ADMIN',
+    'DOCTOR',
+    'NURSE',
+    'RECEPTIONIST',
+    'BILLING_STAFF',
+    'PHARMACIST',
+  ]),
   queueController.addToQueue
 );
 
@@ -51,7 +58,7 @@ router.post(
 router.get(
   '/patient/:patientId/history',
   authenticate,
-  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']),
+  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'BILLING_STAFF']),
   queueController.getPatientQueueHistory
 );
 
@@ -88,7 +95,14 @@ router.post(
 router.get(
   '/department/:departmentId',
   authenticate,
-  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'PHARMACIST']),
+  authorize([
+    'ADMIN',
+    'DOCTOR',
+    'NURSE',
+    'RECEPTIONIST',
+    'BILLING_STAFF',
+    'PHARMACIST',
+  ]),
   queueController.getDepartmentQueue
 );
 
@@ -104,7 +118,14 @@ router.get(
 router.put(
   '/:queueId/status',
   authenticate,
-  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'LAB_TECHNICIAN']),
+  authorize([
+    'ADMIN',
+    'DOCTOR',
+    'NURSE',
+    'RECEPTIONIST',
+    'BILLING_STAFF',
+    'LAB_TECHNICIAN',
+  ]),
   queueController.updateQueueStatus
 );
 
@@ -120,7 +141,7 @@ router.put(
 router.put(
   '/:queueId/assign',
   authenticate,
-  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST']),
+  authorize(['ADMIN', 'DOCTOR', 'NURSE', 'RECEPTIONIST', 'BILLING_STAFF']),
   queueController.assignDoctor
 );
 
@@ -136,7 +157,14 @@ router.put(
 router.post(
   '/:queueId/transfer',
   authenticate,
-  authorize(['ADMIN', 'RECEPTIONIST', 'DOCTOR', 'NURSE', 'PHARMACIST']),
+  authorize([
+    'ADMIN',
+    'RECEPTIONIST',
+    'BILLING_STAFF',
+    'DOCTOR',
+    'NURSE',
+    'PHARMACIST',
+  ]),
   queueController.transferToAnotherDepartment
 );
 
