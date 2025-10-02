@@ -839,6 +839,8 @@ exports.updateQueueStatus = async (req, res, next) => {
     const { queueId } = req.params;
     const { status, notes } = req.body;
 
+
+
     const queueEntry = await DepartmentQueue.findByPk(queueId, {
       include: [{ model: Patient }, { model: Department }],
     });
@@ -899,7 +901,7 @@ exports.updateQueueStatus = async (req, res, next) => {
             status === 'IN_PROGRESS' ? 'IN_CONSULTATION' : patientStatus;
       }
 
-      if (status === 'COMPLETED') patientStatus = 'CONSULTATION_COMPLETE';
+      if (status === 'COMPLETED') patientStatus = 'DISCHARGED';
       if (status === 'TRANSFERRED') patientStatus = 'TRANSFERRED';
 
       await queueEntry.Patient.update({ status: patientStatus });
